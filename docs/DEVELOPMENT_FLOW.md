@@ -65,14 +65,37 @@ git status
 
 ## 確認コマンド
 
-PR前には、必要に応じて以下を確認する。
+PR前には、変更内容に応じて以下を確認する。
+
+### 共通確認
+
+```bash
+git status
+git diff
+git diff --staged
+```
+
+### ドキュメントのみの場合
+
+```bash
+git status
+git diff
+```
+
+### 実装を含む場合
 
 ```bash
 ./vendor/bin/sail php ./vendor/bin/pint --test
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ./vendor/bin/sail npm run build
-git status
+```
+
+### 依存関係を変更した場合
+
+```bash
+git diff composer.json composer.lock
+git diff package.json package-lock.json
 ```
 
 ## 命名規則
