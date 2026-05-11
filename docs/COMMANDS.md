@@ -126,14 +126,22 @@ Controller、Model、FormRequest、Policyなどを作成するときに使用す
 ./vendor/bin/sail artisan migrate:rollback
 ```
 
-ロールバックは、直前のマイグレーションを戻すコマンドです。
+ロールバックは、直前に実行したマイグレーションのバッチを戻すコマンドです。
 
-テーブル削除やカラム削除を含むマイグレーションが戻る場合、既存データに影響する可能性があります。
+注意：`migrate:rollback` は「直前の1ファイルだけ」を戻すとは限らない。
 
-実行前に、以下で対象を確認する。
+同じタイミングで実行された複数のマイグレーションが、まとめて戻る場合がある。
+
+実行前に、以下で状態を確認する。
 
 ```bash
 ./vendor/bin/sail artisan migrate:status
+```
+
+1ステップ分だけ戻したい場合は、必要に応じて以下を検討する。
+
+```bash
+./vendor/bin/sail artisan migrate:rollback --step=1
 ```
 
 ### マイグレーションファイル作成
@@ -212,6 +220,23 @@ Laravelで定義されているルートを確認する。
 
 ```bash
 ./vendor/bin/sail artisan route:list --name=items
+```
+
+### レビュー関連ルートの確認
+
+レビュー投稿、レビュー削除、レビュー返信投稿のルートを確認する。
+
+```bash
+./vendor/bin/sail artisan route:list --name=reviews
+./vendor/bin/sail artisan route:list --name=reviews.replies
+```
+
+### プロフィール関連ルートの確認
+
+プロフィール編集、プロフィール更新、会員退会関連のルートを確認する。
+
+```bash
+./vendor/bin/sail artisan route:list --path=profile
 ```
 
 ### HTTPメソッドで絞り込み
@@ -338,7 +363,7 @@ PHPUnitによるテスト実行コマンドをまとめる。
 単体の処理やサービスクラスなどを確認するUnitテストを作成する。
 
 ```bash
-./vendor/bin/sail artisan make:test RatingServiceTest --unit
+./vendor/bin/sail artisan make:test ReviewRatingCacheServiceTest --unit
 ```
 
 ### テスト実行時の注意点
@@ -373,12 +398,12 @@ Laravel Pintによるコード整形コマンドをまとめる。
 
 ### 対象を指定して確認
 
-特定のファイルやディレクトリだけ確認する。
+特定のファイルやディレクトリだけ、コードスタイルに問題がないか確認する。
 
 ```bash
-./vendor/bin/sail php ./vendor/bin/pint app
-./vendor/bin/sail php ./vendor/bin/pint routes
-./vendor/bin/sail php ./vendor/bin/pint tests
+./vendor/bin/sail php ./vendor/bin/pint app --test
+./vendor/bin/sail php ./vendor/bin/pint routes --test
+./vendor/bin/sail php ./vendor/bin/pint tests --test
 ```
 
 ### 注意点
@@ -406,8 +431,10 @@ PHPStan / Larastanによる静的解析コマンドをまとめる。
 
 PHPコードを実行せずに解析し、型の不整合や潜在的な問題を確認する。
 
+このプロジェクトでは、Sail環境のPHPバージョン・拡張機能に合わせるため、PHPStan / Larastan もSail経由で実行する。
+
 ```bash
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 ### 設定ファイル確認
@@ -442,7 +469,7 @@ PR前には、テストとあわせて静的解析を実行する。
 
 ```bash
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 型エラーや未定義プロパティなどが出た場合は、エラー内容を確認してから修正する。
@@ -609,6 +636,18 @@ Composerパッケージを更新する。
 ./vendor/bin/sail composer validate
 ```
 
+### Composerパッケージの脆弱性確認
+
+Composer依存パッケージに既知の脆弱性がないか確認する。
+
+```bash
+./vendor/bin/sail composer audit
+```
+
+`composer audit` で警告が出た場合は、内容を確認してから対応する。
+
+安易に `composer update` を実行せず、Laravel 10との互換性、`composer.json` / `composer.lock` の差分、影響範囲を確認する。
+
 ### 注意点
 
 `composer update` は依存パッケージのバージョンが変わる可能性があるため、実行前に変更内容を確認する。
@@ -617,7 +656,7 @@ Composerパッケージを更新する。
 
 ```bash
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 `vendor/` はGit管理対象に含めない。
@@ -945,7 +984,7 @@ PHPUnitのテストを実行する。
 PHPStan / Larastanで静的解析を実行する。
 
 ```bash
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 ### フロントエンドビルド
@@ -964,7 +1003,7 @@ PR前には、必要に応じて以下をまとめて確認する。
 git status
 ./vendor/bin/sail php ./vendor/bin/pint --test
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ./vendor/bin/sail npm run build
 ```
 
@@ -1013,7 +1052,7 @@ PR前には、必要に応じて以下を確認する。
 git status
 ./vendor/bin/sail php ./vendor/bin/pint --test
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ./vendor/bin/sail npm run build
 ```
 
