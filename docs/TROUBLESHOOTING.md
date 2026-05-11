@@ -419,7 +419,7 @@ return view('items.index', compact('items'));
 
 ## 26. PHPStan / Larastanでエラーが出る
 
-このプロジェクトでは `./vendor/bin/phpstan analyse` を使う。
+このプロジェクトでは `./vendor/bin/sail php ./vendor/bin/phpstan analyse` を使う。
 
 確認手順：
 
@@ -430,7 +430,7 @@ return view('items.index', compact('items'));
 - テストと合わせて確認する
 
 ```bash
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 ## 27. テストが失敗する
@@ -531,7 +531,7 @@ git diff
 git diff --staged
 ./vendor/bin/sail php ./vendor/bin/pint --test
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ./vendor/bin/sail npm run build
 ```
 
@@ -541,7 +541,7 @@ git diff --staged
 git status
 ./vendor/bin/sail php ./vendor/bin/pint --test
 ./vendor/bin/sail test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ./vendor/bin/sail npm run build
 ```
 
