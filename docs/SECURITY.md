@@ -452,7 +452,7 @@ git status
 git diff
 ./vendor/bin/sail test
 ./vendor/bin/sail php ./vendor/bin/pint --test
-./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
 フロント側の変更がある場合：
