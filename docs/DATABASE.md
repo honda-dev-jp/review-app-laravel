@@ -42,14 +42,14 @@ Laravel Breezeの認証機能をベースに使用する。
 | カラム | 型 | 制約・補足 |
 |---|---|---|
 | `id` | bigint unsigned | 主キー |
-| `name` | varchar | ユーザー名 |
-| `email` | varchar | 一意 |
+| `name` | varchar(255) | ユーザー名 |
+| `email` | varchar(255) | 一意 |
 | `email_verified_at` | timestamp nullable | メール認証を使用する場合に利用 |
-| `password` | varchar | ハッシュ化したパスワード |
-| `role` | varchar | 権限。初期値は `user` |
+| `password` | varchar(255) | ハッシュ化したパスワード |
+| `role` | varchar(20) | 権限。初期値は `user` |
 | `profile` | text nullable | 自己紹介文 |
-| `avatar_path` | varchar nullable | プロフィール画像パス |
-| `remember_token` | varchar nullable | ログイン保持用 |
+| `avatar_path` | varchar(255) nullable | プロフィール画像パス |
+| `remember_token` | varchar(100) nullable | ログイン保持用 |
 | `created_at` | timestamp | 作成日時 |
 | `updated_at` | timestamp | 更新日時 |
 
@@ -61,6 +61,29 @@ Laravel Breezeの認証機能をベースに使用する。
 
 将来の管理者機能に備えて、`role` を初期設計に含める。
 
+## categories テーブル
+
+作品カテゴリを管理する。
+
+| カラム | 型 | 制約・補足 |
+|---|---|---|
+| `id` | bigint unsigned | 主キー |
+| `name` | varchar(50) | カテゴリ名 |
+| `created_at` | timestamp | 作成日時 |
+| `updated_at` | timestamp | 更新日時 |
+
+### 補足
+
+初期移植フェーズでは、カテゴリ検索やカテゴリ管理画面は実装しない。
+
+ただし、`items.category_id` を必須の外部キーとして扱うため、`categories` テーブルは初期設計に含める。
+
+初期データとして、Seederで `未定義` カテゴリを1件登録する。
+
+MVPでは、登録済み作品の `category_id` は原則として `未定義` カテゴリを参照する。
+
+カテゴリ機能を拡張する場合は、後続フェーズでカテゴリ追加・編集・検索・絞り込みを検討する。
+
 ## items テーブル
 
 映画作品情報を管理する。
@@ -69,9 +92,9 @@ Laravel Breezeの認証機能をベースに使用する。
 |---|---|---|
 | `id` | bigint unsigned | 主キー |
 | `category_id` | bigint unsigned | `categories.id` への外部キー |
-| `title` | varchar | 作品タイトル |
+| `title` | varchar(255) | 作品タイトル |
 | `description` | text nullable | 作品説明 |
-| `image_path` | varchar nullable | 作品画像パス |
+| `image_path` | varchar(255) nullable | 作品画像パス |
 | `rating` | decimal(2,1) nullable | 平均評価キャッシュ |
 | `rating_count` | int unsigned | 評価件数キャッシュ |
 | `created_at` | timestamp | 作成日時 |
@@ -81,7 +104,9 @@ Laravel Breezeの認証機能をベースに使用する。
 
 `items.category_id` は `categories.id` に紐づける。
 
-初期移植フェーズでは、カテゴリ管理画面は作成せず、Seederで初期カテゴリを登録する。
+初期移植フェーズでは、カテゴリ検索やカテゴリ管理画面は作成しない。
+
+MVPでは、Seederで登録する `未定義` カテゴリを作品のカテゴリとして使用する。
 
 ### 評価キャッシュ方針
 
@@ -288,6 +313,30 @@ TMDB API連携は後続フェーズで実装する。
 同一ユーザーが同一作品を重複してお気に入り登録できないように、`user_id` と `item_id` の組み合わせを一意にする。
 
 会員退会時は、退会ユーザーのお気に入りデータを削除する方針とする。
+
+### 問い合わせフォーム機能
+
+問い合わせフォーム機能は後続フェーズで検討する。
+
+追加する場合は、`contacts` テーブルを作成し、問い合わせ内容を管理する。
+
+ログインユーザーからの問い合わせは `user_id` に紐づけ、ゲストからの問い合わせは `user_id` を `null` とする方針を検討する。
+
+想定カラム:
+
+| カラム | 概要 |
+|---|---|
+| `id` | 主キー |
+| `user_id` | 問い合わせしたユーザーID。ゲストの場合は `null` |
+| `name` | 問い合わせ者名 |
+| `email` | 返信先メールアドレス |
+| `subject` | 件名 |
+| `body` | 問い合わせ本文 |
+| `status` | 対応状況 |
+| `created_at` | 作成日時 |
+| `updated_at` | 更新日時 |
+
+`status` では、未対応・確認済み・返信済み・対応完了などの状態管理を想定する。
 
 ## 補足
 
