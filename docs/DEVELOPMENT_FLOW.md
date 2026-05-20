@@ -96,7 +96,14 @@ git diff
 ```bash
 git diff composer.json composer.lock
 git diff package.json package-lock.json
+./vendor/bin/sail composer validate
+./vendor/bin/sail composer audit
+./vendor/bin/sail npm audit
 ```
+
+Composer / npm の依存関係を変更した場合は、差分確認、脆弱性確認、テスト、静的解析、ビルド確認を行う。
+
+`composer update`、`npm update`、`npm audit fix` は依存関係が変わる可能性があるため、実行前に影響範囲を確認する。
 
 ## 命名規則
 
