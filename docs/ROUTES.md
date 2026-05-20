@@ -138,7 +138,17 @@ Laravel Breezeの認証ルートを使用する。
 
 ## 後続フェーズで検討するルート
 
+### お問い合わせ機能
+
+| HTTPメソッド | URL | ルート名 | 概要 |
+|---|---|---|---|
+| GET | `/contact` | `contacts.create` | お問い合わせフォームを表示する |
+| POST | `/contact` | `contacts.store` | お問い合わせ内容を送信する |
+| GET | `/contact/thanks` | `contacts.thanks` | お問い合わせ送信完了画面を表示する |
+
 ### 管理者機能
+
+管理者機能は、`auth` ミドルウェアに加えて管理者権限確認用のmiddlewareで保護する。
 
 | HTTPメソッド | URL | ルート名 | 概要 |
 |---|---|---|---|
@@ -148,6 +158,8 @@ Laravel Breezeの認証ルートを使用する。
 | GET | `/admin/items/{item}/edit` | `admin.items.edit` | 作品編集画面を表示する |
 | PATCH | `/admin/items/{item}` | `admin.items.update` | 作品更新処理を行う |
 | DELETE | `/admin/items/{item}` | `admin.items.destroy` | 作品削除処理を行う |
+| GET | `/admin/contacts` | `admin.contacts.index` | 問い合わせ一覧を表示する |
+| GET | `/admin/contacts/{contact}` | `admin.contacts.show` | 問い合わせ詳細を表示する |
 
 ### 外部API連携
 
