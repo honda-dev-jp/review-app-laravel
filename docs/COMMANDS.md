@@ -228,7 +228,7 @@ Laravelで定義されているルートを確認する。
 
 ```bash
 ./vendor/bin/sail artisan route:list --name=reviews
-./vendor/bin/sail artisan route:list --name=reviews.replies
+./vendor/bin/sail artisan route:list --name=reviews.comments
 ```
 
 ### プロフィール関連ルートの確認
