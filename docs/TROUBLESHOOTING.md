@@ -186,7 +186,7 @@ grep APP_KEY .env
 - `.env` の `DB_DATABASE` が想定通りか確認する
 - 接続先DBを間違えていないか確認する
 - テーブル名の単数形・複数形を間違えていないか確認する
-- `reviews`、`review_comments` など、DB設計と実装名が一致しているか確認する
+- `reviews`、`review_comments`、`contacts` など、DB設計と実装名が一致しているか確認する
 
 ```bash
 ./vendor/bin/sail artisan migrate:status
@@ -205,6 +205,7 @@ grep APP_KEY .env
 - 実行前に接続先DBを確認する
 - テーブル削除・カラム削除を伴う場合は特に注意する
 - `reviews.user_id` や `review_comments.user_id` の nullable 方針など、DB設計とマイグレーション内容が一致しているか確認する
+- 後続フェーズでお問い合わせフォームを実装する場合は、`contacts.user_id` の nullable 方針とマイグレーション内容が一致しているか確認する
 
 ```bash
 ./vendor/bin/sail artisan migrate:status
@@ -405,7 +406,45 @@ return view('items.index', compact('items'));
 - 退会ユーザーを「匿名」と表示する場合も、本文表示はエスケープする
 - 詳細は `docs/SECURITY.md` を参照する
 
-## 25. Pintが動かない・コマンドが違う
+## 25. お問い合わせフォームで詰まった（後続フェーズ）
+
+確認手順：
+
+- お問い合わせフォームは初期移植フェーズでは実装しない方針になっているか確認する
+- 後続フェーズで実装する場合は、`GET /contact`、`POST /contact`、`GET /contact/thanks` のルートが存在するか確認する
+- ルート名が `contacts.create`、`contacts.store`、`contacts.thanks` と一致しているか確認する
+- ゲスト・会員のどちらからも送信できる方針になっているか確認する
+- ログインユーザーからの問い合わせは `contacts.user_id` に紐づけ、ゲストからの問い合わせは `null` とする方針になっているか確認する
+- フォームに `@csrf` があるか確認する
+- `name`、`email`、`subject`、`body` のname属性がControllerやForm Requestと一致しているか確認する
+- バリデーションで必須、文字数上限、メールアドレス形式を確認しているか確認する
+- 送信後は二重送信防止のため、完了画面へリダイレクトする方針になっているか確認する
+- スパム対策や個人情報の取り扱いは `docs/SECURITY.md` と照合する
+
+```bash
+./vendor/bin/sail artisan route:list --name=contacts
+./vendor/bin/sail artisan migrate:status
+```
+
+## 26. お問い合わせ管理で詰まった（後続フェーズ）
+
+確認手順：
+
+- お問い合わせ管理は初期移植フェーズでは実装しない方針になっているか確認する
+- 後続フェーズで実装する場合は、`GET /admin/contacts`、`GET /admin/contacts/{contact}` のルートが存在するか確認する
+- ルート名が `admin.contacts.index`、`admin.contacts.show` と一致しているか確認する
+- 管理者画面は `auth` middleware と管理者権限確認用middlewareで保護する方針になっているか確認する
+- 一般会員やゲストが問い合わせ管理画面へアクセスできないことを確認する
+- 問い合わせ一覧・詳細画面で、問い合わせ者名、メールアドレス、件名、本文をBladeの `{{ }}` でエスケープしているか確認する
+- `contacts.status` の許可値が想定範囲内になっているか確認する
+- 対応状況を更新する場合は、許可された値のみ保存する方針になっているか確認する
+
+```bash
+./vendor/bin/sail artisan route:list --name=admin.contacts
+./vendor/bin/sail artisan migrate:status
+```
+
+## 27. Pintが動かない・コマンドが違う
 
 このプロジェクトでは `./vendor/bin/sail pint --test` は使わない。
 
@@ -417,7 +456,7 @@ return view('items.index', compact('items'));
 ./vendor/bin/sail php ./vendor/bin/pint
 ```
 
-## 26. PHPStan / Larastanでエラーが出る
+## 28. PHPStan / Larastanでエラーが出る
 
 このプロジェクトでは `./vendor/bin/sail php ./vendor/bin/phpstan analyse` を使う。
 
@@ -433,7 +472,7 @@ return view('items.index', compact('items'));
 ./vendor/bin/sail php ./vendor/bin/phpstan analyse
 ```
 
-## 27. テストが失敗する
+## 29. テストが失敗する
 
 確認手順：
 
@@ -449,7 +488,7 @@ return view('items.index', compact('items'));
 ./vendor/bin/sail test --filter test_example
 ```
 
-## 28. npm / Viteビルドで失敗する
+## 30. npm / Viteビルドで失敗する
 
 確認手順：
 
@@ -465,7 +504,7 @@ return view('items.index', compact('items'));
 ./vendor/bin/sail npm audit
 ```
 
-## 29. キャッシュが原因で変更が反映されない
+## 31. キャッシュが原因で変更が反映されない
 
 確認手順：
 
@@ -483,7 +522,7 @@ return view('items.index', compact('items'));
 ./vendor/bin/sail artisan view:clear
 ```
 
-## 30. Gitで関係ないファイルが混ざった
+## 32. Gitで関係ないファイルが混ざった
 
 確認手順：
 
@@ -501,7 +540,7 @@ git restore --staged ファイル名
 git restore ファイル名
 ```
 
-## 31. 未追跡ファイルのdiffが出ない
+## 33. 未追跡ファイルのdiffが出ない
 
 確認手順：
 
@@ -516,7 +555,7 @@ git diff -- docs/TROUBLESHOOTING.md
 git add docs/TROUBLESHOOTING.md
 ```
 
-## 32. コミット前に確認すること
+## 34. コミット前に確認すること
 
 - 現在のブランチが正しいか確認する
 - 関係ない変更が含まれていないか確認する
@@ -535,7 +574,7 @@ git diff --staged
 ./vendor/bin/sail npm run build
 ```
 
-## 33. PR前確認
+## 35. PR前確認
 
 ```bash
 git status
@@ -550,7 +589,7 @@ git status
 - ドキュメントのみのPRでは、差分確認とリンク確認を行う
 - 実装を含むPRでは、Pint、テスト、静的解析、ビルドを確認する
 
-## 34. 解決しない場合
+## 36. 解決しない場合
 
 以下を整理してから相談する。
 
@@ -570,7 +609,7 @@ git status
 - `git status` の結果
 - 関連するログ
 
-## 35. 関連ドキュメント
+## 37. 関連ドキュメント
 
 - `docs/COMMANDS.md`
 - `docs/DEVELOPMENT_FLOW.md`
