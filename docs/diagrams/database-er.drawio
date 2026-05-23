@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net">
   <diagram name="ページ1" id="oK4q9ygz11ycJc53jSVm">
-    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1030" dy="623" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -472,7 +472,7 @@
         <mxCell id="Q8vbwcxx8VyzVfylaDMl-109" parent="Q8vbwcxx8VyzVfylaDMl-99" style="shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;strokeColor=#000000;top=0;left=0;right=0;bottom=0;" value="" vertex="1">
           <mxGeometry height="30" width="280" y="120" as="geometry" />
         </mxCell>
-        <mxCell id="Q8vbwcxx8VyzVfylaDMl-110" parent="Q8vbwcxx8VyzVfylaDMl-109" style="shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;strokeColor=#000000;top=0;left=0;bottom=0;right=0;fontStyle=1" value="FK" vertex="1">
+        <mxCell id="Q8vbwcxx8VyzVfylaDMl-110" parent="Q8vbwcxx8VyzVfylaDMl-109" style="shape=partialRectangle;overflow=hidden;connectable=0;fillColor=none;strokeColor=#000000;top=0;left=0;bottom=0;right=0;fontStyle=1" value="" vertex="1">
           <mxGeometry height="30" width="30" as="geometry">
             <mxRectangle height="30" width="30" as="alternateBounds" />
           </mxGeometry>
@@ -527,8 +527,8 @@
         <mxCell id="Q8vbwcxx8VyzVfylaDMl-122" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;div&gt;1ユーザー1作品につきレビュー1件&lt;/div&gt;&lt;div&gt;unique(user_id, item_id)&lt;/div&gt;" vertex="1">
           <mxGeometry height="30" width="280" x="60" y="673" as="geometry" />
         </mxCell>
-        <mxCell id="Q8vbwcxx8VyzVfylaDMl-123" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;div&gt;点線：将来拡張用&lt;/div&gt;&lt;div&gt;parent_id は初期移植フェーズでは未使用&lt;/div&gt;" vertex="1">
-          <mxGeometry height="30" width="280" x="60" y="1004" as="geometry" />
+        <mxCell id="Q8vbwcxx8VyzVfylaDMl-123" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;" value="&lt;div&gt;点線：将来拡張用&lt;/div&gt;&lt;div&gt;parent_id は初期移植フェーズでは未使用&lt;/div&gt;&lt;div&gt;初期移植フェーズではFK制約なし&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="280" x="60" y="1010" as="geometry" />
         </mxCell>
         <mxCell id="Q8vbwcxx8VyzVfylaDMl-124" edge="1" parent="1" source="Q8vbwcxx8VyzVfylaDMl-36" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;startArrow=ERone;startFill=0;endArrow=ERzeroToMany;endFill=0;strokeWidth=2;startSize=8;endSize=8;" target="Q8vbwcxx8VyzVfylaDMl-52">
           <mxGeometry relative="1" as="geometry">
@@ -579,7 +579,7 @@
           <mxGeometry height="170" width="380" x="420" y="920" as="geometry" />
         </mxCell>
         <mxCell id="Q8vbwcxx8VyzVfylaDMl-131" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=15;" value="&lt;div&gt;インデックス設計&lt;/div&gt;&lt;div&gt;----------------&lt;/div&gt;&lt;div&gt;- reviews(item_id, created_at)&lt;/div&gt;&lt;div&gt;&amp;nbsp; 作品詳細画面でレビューを取得するため&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;- review_comments(review_id, created_at)&lt;/div&gt;&lt;div&gt;&amp;nbsp; レビューに紐づく返信コメントを取得するため&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;- review_comments(parent_id)&lt;/div&gt;&lt;div&gt;&amp;nbsp; 将来の階層返信に備えるため&lt;/div&gt;" vertex="1">
-          <mxGeometry height="170" width="380" x="10" y="1080" as="geometry" />
+          <mxGeometry height="170" width="380" x="40" y="1100" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
