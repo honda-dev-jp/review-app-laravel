@@ -18,3 +18,8 @@ yarn-error.log
 /.idea
 /.vscode
 _ide_helper.php
+
+# AI / agent local files
+.codex/
+.agentx/
+.agents/
