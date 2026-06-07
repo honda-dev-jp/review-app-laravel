@@ -9,7 +9,8 @@ class ItemController extends Controller
     public function index()
     {
         $items = Item::with('category')
-            ->orderBy('id', 'desc')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate(10);
 
         return view('items.index', compact('items'));
@@ -17,7 +18,21 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
-        $item->load('category');
+        $item->load([
+            'category',
+            'reviews' => function ($query) {
+                $query->with([
+                    'user',
+                    'comments' => function ($query) {
+                        $query->with('user')
+                            ->orderBy('created_at')
+                            ->orderBy('id');
+                    },
+                ])
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id');
+            },
+        ]);
 
         return view('items.show', compact('item'));
     }
