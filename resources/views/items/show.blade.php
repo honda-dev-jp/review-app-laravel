@@ -116,14 +116,74 @@
             </div>
         </section>
 
-        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-center shadow-sm">
+        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm">
             <h3 class="text-lg font-bold text-slate-900">
                 レビュー表示
             </h3>
+            @forelse ($item->reviews as $review)
+                <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="font-semibold text-slate-900">
+                            {{ $review->user?->name ?? '匿名' }}
+                        </div>
 
-            <p class="mt-2 text-sm leading-7 text-slate-500">
-                レビュー一覧とレビュー返信は、後続フェーズで実装予定です。
-            </p>
+                        <div class="text-sm text-slate-500">
+                            {{ $review->created_at->format('Y/m/d') }}
+                        </div>
+                    </div>
+
+                    <div class="mt-1 flex items-center gap-1 text-sm">
+                        <span class="text-amber-400">
+                            @for ($star = 1; $star <= 5; $star++)
+                                @if ($star <= $review->rating)
+                                    ★
+                                @else
+                                    ☆
+                                @endif
+                            @endfor
+                        </span>
+
+                        <span class="font-medium text-slate-700">
+                            {{ number_format($review->rating, 1) }}
+                        </span>
+                    </div>
+
+                    <div class="mt-2 text-sm leading-7 text-slate-700">
+                        <span class="font-semibold text-slate-900">レビュー本文：</span>
+                        {{ $review->body }}
+                    </div>
+
+                    @if ($review->comments->isNotEmpty())
+                        <div class="mt-4 rounded-2xl border-l-4 border-l-sky-300 bg-sky-50/60 p-4">
+                            <p class="text-sm font-semibold text-slate-700">
+                                返信コメント
+                            </p>
+
+                            @foreach ($review->comments as $comment)
+                                <div class="mt-3 rounded-xl bg-white p-3 text-sm">
+                                    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="font-semibold text-slate-800">
+                                            {{ $comment->user?->name ?? '匿名' }}
+                                        </div>
+
+                                        <div class="text-xs text-slate-500">
+                                            {{ $comment->created_at->format('Y/m/d') }}
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-2 text-sm leading-6 text-slate-700">
+                                        {{ $comment->body }}
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            @empty
+                <div>
+                    まだレビューはありません。
+                </div>
+            @endforelse
         </section>
     </div>
 </x-app-layout>

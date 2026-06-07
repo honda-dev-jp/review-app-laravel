@@ -16,6 +16,8 @@ class ReviewComment extends Model
      */
     protected $fillable = [
         'review_id',
+        'user_id',
+        'parent_id',
         'body',
     ];
 
