@@ -183,6 +183,49 @@ git status
 ./vendor/bin/sail npm run build
 ```
 
+### Laravel公開前の開発用エンドポイント確認
+
+Laravel版を `review-laravel.honda-dev.com` で公開する前に、開発・デバッグ用途のエンドポイントや設定ファイルが外部から参照できないことを確認する。
+
+現時点では Laravel Telescope は導入していないことを確認済み。
+
+ローカル環境では、2026年6月時点で以下を確認済み。
+
+- `composer.json` / `composer.lock` に `laravel/telescope` が含まれていないこと
+- `./vendor/bin/sail composer show laravel/telescope` で `Package "laravel/telescope" not found` となること
+
+本番公開前にも、ローカル環境で改めて以下を確認する。
+
+```bash
+grep -n "telescope" composer.json composer.lock
+./vendor/bin/sail composer show laravel/telescope
+```
+
+ローカル環境での期待結果は以下とする。
+
+- `grep -n "telescope" composer.json composer.lock` は出力されないこと
+- `./vendor/bin/sail composer show laravel/telescope` は `Package "laravel/telescope" not found` となること
+
+本番公開前の環境設定として、以下を確認する。
+
+- `APP_ENV=production` であること
+- `APP_DEBUG=false` であること
+- Vite開発サーバーを本番環境で使用していないこと
+
+XServer上でComposer確認を行う場合は、Sailを使用せず、Laravel本体ディレクトリで以下を確認する。
+
+```bash
+composer show laravel/telescope
+```
+
+この場合も、`Package "laravel/telescope" not found` となることを確認する。
+
+Laravel Telescope は開発・デバッグ用途のツールであり、初期移植フェーズでは導入しない。
+
+将来導入する場合も、本番環境では原則無効化する。
+
+やむを得ず本番環境で利用する場合は、認証・認可・IP制限などのアクセス制御を必須とし、誰でも閲覧できる状態にしない。
+
 ---
 
 ## 7. Composer依存関係
@@ -289,6 +332,20 @@ public/build
 - `npm audit fix` は自動で依存関係を変更する可能性があるため、実行前に内容を確認する
 - `npm audit fix --force` は破壊的なメジャー更新を含む可能性があるため、安易に実行しない
 - 脆弱性対応で依存関係を更新した場合は、ビルドとテストを確認する
+
+### Vite開発用URLの公開防止
+
+本番環境では Vite 開発サーバーを使用しない。
+
+本番反映では、ローカル環境で `npm run build` により生成した成果物を使用する。
+
+デプロイ後は、以下のような開発用URLが外部から参照できないことを確認する。
+
+```text
+https://review-laravel.honda-dev.com/@vite/env
+```
+
+期待する状態は、200 OKで内容が表示されることではなく、403 / 404 / リダイレクト等により開発用情報が表示されないことである。
 
 ### 未検証
 
@@ -545,6 +602,27 @@ php artisan view:cache
 - Laravelログ確認
 - `storage` / `bootstrap/cache` の書き込み確認
 
+### 開発用エンドポイント・機密ファイルの公開確認
+
+実デプロイ後、以下のURLへブラウザまたはHTTPクライアントでアクセスし、機密情報や開発用画面が表示されないことを確認する。
+
+```text
+https://review-laravel.honda-dev.com/.env
+https://review-laravel.honda-dev.com/.git/config
+https://review-laravel.honda-dev.com/telescope
+https://review-laravel.honda-dev.com/@vite/env
+```
+
+期待する状態は、200 OKで内容が表示されることではなく、403 / 404 / リダイレクト等により機密情報や開発用情報が表示されないことである。
+
+特に以下を確認する。
+
+- `.env` の内容が表示されないこと
+- `.git/config` の内容が表示されないこと
+- Laravel Telescope の画面が誰でも閲覧できる状態になっていないこと
+- Vite開発用URLである `/@vite/env` が外部から参照できないこと
+- エラー発生時にも詳細エラー画面が外部へ表示されないこと
+
 ---
 
 ## 17. 危険操作として保留する項目
@@ -605,6 +683,9 @@ php artisan view:cache
 - お問い合わせ内容を保存する場合の本番DBマイグレーション方針
 - お問い合わせフォームのスパム対策
 - お問い合わせフォームで扱う個人情報の保護方針
+- アクセスログ上で確認された開発用エンドポイント探索への対策確認
+- `/telescope`、`/@vite/env`、`/.env`、`/.git/config` などが外部から閲覧できないことの公開前・公開後確認
+- 将来 Laravel Telescope を導入する場合の本番無効化・アクセス制御方針
 
 ---
 
