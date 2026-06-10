@@ -137,5 +137,7 @@
     "per page": "毎ページ",
     "results": "件",
     "to": "から",
-    "Showing": "表示中："
+    "Showing": "表示中：",
+    "Self Introduction": "自己紹介",
+    "Please enter within 1000 characters.": "1000文字以内で入力してください。"
 }
