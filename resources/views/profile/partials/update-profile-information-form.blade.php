@@ -47,6 +47,21 @@
             @endif
         </div>
 
+        <div>
+            <x-input-label for="profile" :value="__('Self Introduction')" />
+            <textarea
+                id="profile"
+                name="profile"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                rows="5"
+                maxlength="1000"
+            >{{ old('profile', $user->profile) }}</textarea>
+            <p class="mt-1 text-sm text-gray-500">
+                {{ __('Please enter within 1000 characters.') }}
+            </p>
+            <x-input-error class="mt-2" :messages="$errors->get('profile')" />
+        </div>
+
         <div class="flex items-center gap-4">
             <x-primary-button>{{ __('Save') }}</x-primary-button>
 
