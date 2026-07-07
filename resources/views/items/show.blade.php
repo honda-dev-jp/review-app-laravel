@@ -20,6 +20,12 @@
             </a>
         </div>
 
+        @if (session('status'))
+            <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                {{ session('status') }}
+            </div>
+        @endif
+
         <section class="grid min-w-0 gap-8 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:grid-rows-[auto_1fr] md:items-start">
             <div class="min-w-0 md:col-start-1 md:row-start-1">
                 <div class="mx-auto w-full max-w-[280px] md:mx-0">
@@ -76,13 +82,13 @@
                                 <div class="h-2 min-w-0 overflow-hidden rounded-full bg-slate-200">
                                     <div class="h-full w-0 rounded-full bg-amber-400"></div>
                                 </div>
-                                <span class="text-right">0%</span>
+                                <span class="text-right">-%</span>
                             </div>
                         @endforeach
                     </div>
 
                     <p class="mt-3 break-words text-xs leading-6 text-slate-500">
-                        星ごとの評価分布は、レビュー表示機能の実装後に集計して表示予定です。
+                        星ごとの評価分布は、後続PRで集計方法を整理して表示予定です。
                     </p>
                 </div>
             </div>
@@ -114,6 +120,90 @@
                     @endif
                 </div>
             </div>
+        </section>
+
+        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm">
+            <h3 class="text-lg font-bold text-slate-900">
+                レビュー投稿
+            </h3>
+
+            @auth
+                @php
+                    $myReview = $item->reviews->firstWhere('user_id', auth()->id());
+                @endphp
+
+                @if ($myReview)
+                    <p class="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        この作品にはすでにレビューを投稿しています。
+                    </p>
+                @else
+                    <form method="POST" action="{{ route('reviews.store', $item) }}" class="mt-5 space-y-5">
+                        @csrf
+
+                        <div>
+                            <label for="rating" class="block text-sm font-bold text-slate-900">
+                                評価
+                            </label>
+
+                            <select
+                                id="rating"
+                                name="rating"
+                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            >
+                                <option value="">評価を選択してください</option>
+                                @foreach ([5, 4, 3, 2, 1] as $star)
+                                    <option value="{{ $star }}" @selected((string) old('rating') === (string) $star)>
+                                        {{ $star }}つ星
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            @error('rating')
+                                <p class="mt-2 text-sm font-semibold text-red-600">
+                                    {{ $message }}
+                                </p>
+                            @enderror
+                        </div>
+
+                        <div>
+                            <label for="body" class="block text-sm font-bold text-slate-900">
+                                レビュー本文
+                            </label>
+
+                            <textarea
+                                id="body"
+                                name="body"
+                                rows="5"
+                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="作品の感想を入力してください"
+                            >{{ old('body') }}</textarea>
+
+                            @error('body')
+                                <p class="mt-2 text-sm font-semibold text-red-600">
+                                    {{ $message }}
+                                </p>
+                            @enderror
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button
+                                type="submit"
+                                class="inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                            >
+                                レビューを投稿する
+                            </button>
+                        </div>
+                    </form>
+                @endif
+            @else
+                <div class="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    レビューを投稿するには
+                    <a href="{{ route('login') }}" class="font-semibold text-blue-600 hover:text-blue-700">
+                        ログイン
+                    </a>
+                    が必要です。
+                </div>
+            @endauth
         </section>
 
         <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm">
