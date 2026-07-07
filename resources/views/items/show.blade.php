@@ -45,8 +45,20 @@
                         </p>
 
                         <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                            <p class="text-lg text-amber-400">
-                                ★★★★★
+                            @php
+                                $roundedRating = is_null($item->rating)
+                                    ? 0
+                                    : (int) round((float) $item->rating);
+                            @endphp
+
+                            <p class="text-lg">
+                                @for ($star = 1; $star <= 5; $star++)
+                                    @if ($star <= $roundedRating)
+                                        <span class="text-amber-400">★</span>
+                                    @else
+                                        <span class="text-slate-300">☆</span>
+                                    @endif
+                                @endfor
                             </p>
 
                             <p class="break-words text-2xl font-bold text-slate-900">

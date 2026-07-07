@@ -24,8 +24,8 @@
                     </h2>
 
                     <p class="mt-3 text-sm leading-7 text-slate-500">
-                        作品カードを選択すると、作品詳細・あらすじを確認できます。
-                        レビュー表示や投稿機能は後続フェーズで実装予定です。
+                        作品カードを選択すると、作品詳細・あらすじ・レビューを確認できます。
+                        ログインするとレビュー投稿もできます。
                     </p>
                 </div>
 
@@ -77,8 +77,20 @@
                                     </h3>
 
                                     <div class="mt-2 flex items-center gap-2">
-                                        <p class="text-sm text-amber-400">
-                                            ★★★★★
+                                        @php
+                                            $roundedRating = is_null($item->rating)
+                                                ? 0
+                                                : (int) round((float) $item->rating);
+                                        @endphp
+
+                                        <p class="text-sm">
+                                            @for ($star = 1; $star <= 5; $star++)
+                                                @if ($star <= $roundedRating)
+                                                    <span class="text-amber-400">★</span>
+                                                @else
+                                                    <span class="text-slate-300">☆</span>
+                                                @endif
+                                            @endfor
                                         </p>
 
                                         <p class="text-xs font-semibold text-slate-700">
