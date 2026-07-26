@@ -15,6 +15,10 @@
                 </x-nav-link>
 
                 @auth
+                    <x-nav-link :href="route('reviews.mine')" :active="request()->routeIs('reviews.mine')">
+                        本人レビュー一覧
+                    </x-nav-link>
+
                     <x-nav-link :href="route('profile.edit')" :active="request()->routeIs('profile.edit')">
                         プロフィール編集
                     </x-nav-link>
@@ -64,6 +68,13 @@
                         class="absolute right-0 top-14 z-50 w-56 overflow-hidden rounded-3xl border border-slate-200 bg-white p-2 shadow-xl"
                         style="display: none;"
                     >
+                        <a
+                            href="{{ route('reviews.mine') }}"
+                            class="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
+                        >
+                            本人レビュー一覧
+                        </a>
+
                         <a
                             href="{{ route('profile.edit') }}"
                             class="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
@@ -153,6 +164,14 @@
             @endguest
 
             @auth
+                <a
+                    href="{{ route('reviews.mine') }}"
+                    class="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
+                    @click="mobileMenuOpen = false"
+                >
+                    本人レビュー一覧
+                </a>
+
                 <a
                     href="{{ route('profile.edit') }}"
                     class="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
