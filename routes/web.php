@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReviewCommentController;
 use App\Http\Controllers\ReviewController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,9 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/items/{item}/reviews', [ReviewController::class, 'store'])
         ->name('reviews.store');
+
+    Route::post('/reviews/{review}/comments', [ReviewCommentController::class, 'store'])
+        ->name('reviews.comments.store');
 
     Route::delete('/reviews/{review}', [ReviewController::class, 'destroy'])
         ->name('reviews.destroy');

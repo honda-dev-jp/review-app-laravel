@@ -329,7 +329,7 @@ class ReviewMineTest extends TestCase
             ->assertSee('削除導線確認作品')
             ->assertSee('作品詳細画面に表示されるレビューです。')
             ->assertDontSee('レビューを削除する')
-            ->assertDontSee(route('reviews.destroy', $review), false);
+            ->assertDontSee('action="'.route('reviews.destroy', $review).'"', false);
     }
 
     /**
