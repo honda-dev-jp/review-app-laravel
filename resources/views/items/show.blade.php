@@ -149,6 +149,8 @@
                         この作品にはすでにレビューを投稿しています。
                     </p>
                 @else
+
+                    {{-- ==================== レビュー投稿フォーム：開始 ==================== --}}
                     <form method="POST" action="{{ route('reviews.store', $item) }}" class="mt-5 space-y-5">
                         @csrf
 
@@ -182,14 +184,16 @@
                                 レビュー本文
                             </label>
 
+                            {{-- 返信投稿の入力値が通常レビュー投稿フォームへ表示されないように分離する。 --}}
                             <textarea
                                 id="body"
                                 name="body"
                                 rows="5"
                                 class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 placeholder="作品の感想を入力してください"
-                            >{{ old('body') }}</textarea>
+                            >{{ old('form_review_id') === null ? old('body') : '' }}</textarea>
 
+                            {{-- 通常レビュー投稿のデフォルトエラーバッグだけを表示する。 --}}
                             @error('body')
                                 <p class="mt-2 text-sm font-semibold text-red-600">
                                     {{ $message }}
@@ -206,6 +210,8 @@
                             </button>
                         </div>
                     </form>
+                    {{-- ==================== レビュー投稿フォーム：終了 ==================== --}}
+
                 @endif
             @else
                 <div class="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -222,7 +228,10 @@
             <h3 class="text-lg font-bold text-slate-900">
                 レビュー表示
             </h3>
+
+            {{-- ==================== レビュー一覧：開始 ==================== --}}
             @forelse ($item->reviews as $review)
+                {{-- ---------- レビュー1件：開始 ---------- --}}
                 <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div class="font-semibold text-slate-900">
@@ -255,6 +264,7 @@
                         {{ $review->body }}
                     </div>
 
+                    {{-- ---------- 返信コメント一覧：開始 ---------- --}}
                     @if ($review->comments->isNotEmpty())
                         <div class="mt-4 rounded-2xl border-l-4 border-l-sky-300 bg-sky-50/60 p-4">
                             <p class="text-sm font-semibold text-slate-700">
@@ -280,12 +290,88 @@
                             @endforeach
                         </div>
                     @endif
+                    {{-- ---------- 返信コメント一覧：終了 ---------- --}}
+
+                    @auth
+                        {{-- ---------- 返信投稿フォーム：開始 ---------- --}}
+                        <form
+                            method="POST"
+                            action="{{ route('reviews.comments.store', $review) }}"
+                            class="mt-4 space-y-3"
+                        >
+                            @csrf
+
+                            {{-- バリデーション失敗時に、入力値とエラーを元の返信フォームだけへ戻すための識別用ID。 --}}
+                            {{-- 投稿先レビューの決定には使用せず、投稿先はルートの{review}から取得する。 --}}
+                            <input
+                                type="hidden"
+                                name="form_review_id"
+                                value="{{ $review->id }}"
+                            >
+
+                            <div>
+                                <label
+                                    for="comment-body-{{ $review->id }}"
+                                    class="block text-sm font-bold text-slate-900"
+                                >
+                                    返信コメント
+                                </label>
+
+                                {{-- 送信元の返信フォームにだけ、バリデーション失敗前の本文を戻す。 --}}
+                                <textarea
+                                    id="comment-body-{{ $review->id }}"
+                                    name="body"
+                                    rows="4"
+                                    class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    placeholder="レビューへの返信を入力してください"
+                                >{{ (string) old('form_review_id') === (string) $review->id ? old('body') : '' }}</textarea>
+
+                                {{-- 返信投稿専用のエラーバッグから、送信元フォームにだけエラーを表示する。 --}}
+                                @if (
+                                    (string) old('form_review_id') === (string) $review->id
+                                    && $errors->reviewComment->has('body')
+                                )
+                                    <p class="mt-2 text-sm font-semibold text-red-600">
+                                        {{ $errors->reviewComment->first('body') }}
+                                    </p>
+                                @endif
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button
+                                    type="submit"
+                                    class="inline-flex items-center rounded-full bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                                >
+                                    返信を投稿する
+                                </button>
+                            </div>
+                        </form>
+                        {{-- ---------- 返信投稿フォーム：終了 ---------- --}}
+
+                    @else
+                        {{-- ---------- 返信投稿：未ログイン案内 ---------- --}}
+                        <div class="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
+                            返信するには
+                            <a
+                                href="{{ route('login') }}"
+                                class="font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                                ログイン
+                            </a>
+                            が必要です。
+                        </div>
+                    @endauth
+
                 </div>
+                {{-- ---------- レビュー1件：終了 ---------- --}}
+
             @empty
                 <div>
                     まだレビューはありません。
                 </div>
             @endforelse
+            {{-- ==================== レビュー一覧：終了 ==================== --}}
+
         </section>
     </div>
 </x-app-layout>
