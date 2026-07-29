@@ -191,11 +191,18 @@
                                 rows="5"
                                 class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 placeholder="作品の感想を入力してください"
+                                @error('body')
+                                    aria-invalid="true"
+                                    aria-describedby="review-body-error"
+                                @enderror
                             >{{ old('form_review_id') === null ? old('body') : '' }}</textarea>
 
                             {{-- 通常レビュー投稿のデフォルトエラーバッグだけを表示する。 --}}
                             @error('body')
-                                <p class="mt-2 text-sm font-semibold text-red-600">
+                                <p
+                                    id="review-body-error"
+                                    class="mt-2 text-sm font-semibold text-red-600"
+                                >
                                     {{ $message }}
                                 </p>
                             @enderror
@@ -324,6 +331,13 @@
                                     rows="4"
                                     class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                     placeholder="レビューへの返信を入力してください"
+                                    @if (
+                                        (string) old('form_review_id') === (string) $review->id
+                                        && $errors->reviewComment->has('body')
+                                    )
+                                        aria-invalid="true"
+                                        aria-describedby="comment-body-error-{{ $review->id }}"
+                                    @endif
                                 >{{ (string) old('form_review_id') === (string) $review->id ? old('body') : '' }}</textarea>
 
                                 {{-- 返信投稿専用のエラーバッグから、送信元フォームにだけエラーを表示する。 --}}
@@ -331,7 +345,10 @@
                                     (string) old('form_review_id') === (string) $review->id
                                     && $errors->reviewComment->has('body')
                                 )
-                                    <p class="mt-2 text-sm font-semibold text-red-600">
+                                    <p
+                                        id="comment-body-error-{{ $review->id }}"
+                                        class="mt-2 text-sm font-semibold text-red-600"
+                                    >
                                         {{ $errors->reviewComment->first('body') }}
                                     </p>
                                 @endif

@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Review;
 use App\Models\User;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -112,6 +115,79 @@ class ReviewCommentStoreTest extends TestCase
         $response->assertSessionHasErrors(['body'], null, 'reviewComment');
 
         $this->assertDatabaseCount('review_comments', 0);
+    }
+
+    /**
+     * 返信本文エラーと入力欄の関係を支援技術へ伝え、
+     * 複数の返信フォームでは送信元だけがエラー状態になることを保証する。
+     */
+    public function test_review_comment_body_validation_error_has_accessible_aria_attributes_only_on_source_form(): void
+    {
+        $user = User::factory()->create();
+        $review = Review::factory()->create();
+        $otherReview = Review::factory()->create([
+            'item_id' => $review->item_id,
+        ]);
+
+        // エラーがない通常表示では、入力欄にエラー用ARIA属性が付かないことを確認する。
+        $normalResponse = $this
+            ->actingAs($user)
+            ->get(route('items.show', $review->item_id));
+
+        $normalResponse->assertOk();
+
+        $normalHtml = $normalResponse->getContent();
+        $this->assertIsString($normalHtml);
+
+        $normalXPath = $this->createXPath($normalHtml);
+        $normalSourceTextarea = $this->getSingleElementById($normalXPath, 'comment-body-'.$review->id);
+        $normalOtherTextarea = $this->getSingleElementById($normalXPath, 'comment-body-'.$otherReview->id);
+
+        $this->assertSame('textarea', $normalSourceTextarea->tagName);
+        $this->assertFalse($normalSourceTextarea->hasAttribute('aria-invalid'));
+        $this->assertFalse($normalSourceTextarea->hasAttribute('aria-describedby'));
+        $this->assertSame('textarea', $normalOtherTextarea->tagName);
+        $this->assertFalse($normalOtherTextarea->hasAttribute('aria-invalid'));
+        $this->assertFalse($normalOtherTextarea->hasAttribute('aria-describedby'));
+
+        $response = $this
+            ->actingAs($user)
+            ->followingRedirects()
+            ->post(route('reviews.comments.store', $review), [
+                'body' => '',
+                'form_review_id' => $review->id,
+            ]);
+
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertIsString($html);
+
+        // 文字列の出現順だけでは対象textareaへの付与を保証できないため、DOM要素の属性を直接確認する。
+        $xpath = $this->createXPath($html);
+        $sourceTextarea = $this->getSingleElementById($xpath, 'comment-body-'.$review->id);
+        $otherTextarea = $this->getSingleElementById($xpath, 'comment-body-'.$otherReview->id);
+        $errorElement = $this->getSingleElementById($xpath, 'comment-body-error-'.$review->id);
+
+        $this->assertSame('textarea', $sourceTextarea->tagName);
+        $this->assertSame('true', $sourceTextarea->getAttribute('aria-invalid'));
+        $this->assertSame(
+            'comment-body-error-'.$review->id,
+            $sourceTextarea->getAttribute('aria-describedby')
+        );
+        $this->assertSame('返信本文を入力してください。', trim($errorElement->textContent));
+
+        $this->assertSame('textarea', $otherTextarea->tagName);
+        $this->assertFalse($otherTextarea->hasAttribute('aria-invalid'));
+        $this->assertFalse($otherTextarea->hasAttribute('aria-describedby'));
+
+        $otherErrorElements = $xpath->query('//*[@id="comment-body-error-'.$otherReview->id.'"]');
+        $this->assertNotFalse($otherErrorElements);
+        $this->assertCount(0, $otherErrorElements);
+
+        $invalidElements = $xpath->query('//*[@aria-invalid="true"]');
+        $this->assertNotFalse($invalidElements);
+        $this->assertCount(1, $invalidElements);
     }
 
     /**
@@ -224,5 +300,35 @@ class ReviewCommentStoreTest extends TestCase
         $response
             ->assertOk()
             ->assertSee('作品詳細に表示される返信です。');
+    }
+
+    private function createXPath(string $html): DOMXPath
+    {
+        // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+
+        try {
+            $document = new DOMDocument;
+            $this->assertTrue($document->loadHTML($html, LIBXML_NONET));
+
+            return new DOMXPath($document);
+        } finally {
+            // 後続テストへ影響させないよう、解析エラーを消去して元の設定へ戻す。
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+        }
+    }
+
+    private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
+    {
+        $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+        $this->assertNotFalse($elements);
+        $this->assertCount(1, $elements);
+
+        $element = $elements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $element);
+
+        return $element;
     }
 }

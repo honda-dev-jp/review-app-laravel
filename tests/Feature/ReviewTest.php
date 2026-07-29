@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Item;
 use App\Models\Review;
 use App\Models\User;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -100,6 +103,60 @@ class ReviewTest extends TestCase
         $response->assertSessionHasErrors(['rating', 'body']);
 
         $this->assertDatabaseCount('reviews', 0);
+    }
+
+    /**
+     * レビュー本文エラーと入力欄の関係を支援技術へ伝え、
+     * 正常表示時には誤ったエラー状態を示さないことを保証する。
+     */
+    public function test_review_body_validation_error_has_accessible_aria_attributes(): void
+    {
+        $user = User::factory()->create();
+        $item = Item::factory()->create();
+
+        // エラーがない通常表示では、入力欄にエラー用ARIA属性が付かないことを確認する。
+        $normalResponse = $this
+            ->actingAs($user)
+            ->get(route('items.show', $item));
+
+        $normalResponse->assertOk();
+
+        $normalHtml = $normalResponse->getContent();
+        $this->assertIsString($normalHtml);
+
+        $normalXPath = $this->createXPath($normalHtml);
+        $normalTextarea = $this->getSingleElementById($normalXPath, 'body');
+
+        $this->assertSame('textarea', $normalTextarea->tagName);
+        $this->assertFalse($normalTextarea->hasAttribute('aria-invalid'));
+        $this->assertFalse($normalTextarea->hasAttribute('aria-describedby'));
+
+        $normalErrorElements = $normalXPath->query('//*[@id="review-body-error"]');
+        $this->assertNotFalse($normalErrorElements);
+        $this->assertCount(0, $normalErrorElements);
+
+        $response = $this
+            ->actingAs($user)
+            ->followingRedirects()
+            ->post(route('reviews.store', $item), [
+                'rating' => 5,
+                'body' => '',
+            ]);
+
+        $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertIsString($html);
+
+        // 文字列の出現順だけでは対象textareaへの付与を保証できないため、DOM要素の属性を直接確認する。
+        $xpath = $this->createXPath($html);
+        $textarea = $this->getSingleElementById($xpath, 'body');
+        $errorElement = $this->getSingleElementById($xpath, 'review-body-error');
+
+        $this->assertSame('textarea', $textarea->tagName);
+        $this->assertSame('true', $textarea->getAttribute('aria-invalid'));
+        $this->assertSame('review-body-error', $textarea->getAttribute('aria-describedby'));
+        $this->assertSame('レビュー本文を入力してください。', trim($errorElement->textContent));
     }
 
     /**
@@ -299,5 +356,35 @@ class ReviewTest extends TestCase
             'user_id' => $review->user_id,
             'item_id' => $review->item_id,
         ]);
+    }
+
+    private function createXPath(string $html): DOMXPath
+    {
+        // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+
+        try {
+            $document = new DOMDocument;
+            $this->assertTrue($document->loadHTML($html, LIBXML_NONET));
+
+            return new DOMXPath($document);
+        } finally {
+            // 後続テストへ影響させないよう、解析エラーを消去して元の設定へ戻す。
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+        }
+    }
+
+    private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
+    {
+        $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+        $this->assertNotFalse($elements);
+        $this->assertCount(1, $elements);
+
+        $element = $elements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $element);
+
+        return $element;
     }
 }
