@@ -12,6 +12,8 @@
 
     <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <section class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+
+            {{-- ==================== 作品一覧ヘッダー：開始 ==================== --}}
             <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <div class="mb-3 inline-flex items-center gap-2 rounded-2xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700">
@@ -46,8 +48,10 @@
                     @endif
                 </div>
             </div>
+            {{-- ==================== 作品一覧ヘッダー：終了 ==================== --}}
 
             @if ($items->isEmpty())
+                {{-- ==================== 作品未登録表示：開始 ==================== --}}
                 <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
                     <p class="text-base font-semibold text-slate-700">
                         作品はまだ登録されていません。
@@ -56,9 +60,14 @@
                         作品データが追加されると、ここに一覧表示されます。
                     </p>
                 </div>
+                {{-- ==================== 作品未登録表示：終了 ==================== --}}
+
             @else
+                {{-- ==================== 作品一覧：開始 ==================== --}}
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     @foreach ($items as $item)
+
+                        {{-- ---------- 作品1件：開始 ---------- --}}
                         <article class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg">
                             <a href="{{ route('items.show', $item) }}" class="block">
                                 <div class="aspect-[4/5] overflow-hidden bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-50">
@@ -108,12 +117,17 @@
                                 </div>
                             </a>
                         </article>
+                        {{-- ---------- 作品1件：終了 ---------- --}}
+
                     @endforeach
                 </div>
+                {{-- ==================== 作品一覧：終了 ==================== --}}
 
+                {{-- ==================== ページネーション：開始 ==================== --}}
                 <div class="mt-8">
                     {{ $items->links('vendor.pagination.movie') }}
                 </div>
+                {{-- ==================== ページネーション：終了 ==================== --}}
             @endif
         </section>
     </div>
