@@ -48,8 +48,7 @@ Laravel Breezeの認証ルートを使用する。
 |---|---|---|---|---|---|
 | GET | `/profile` | `profile.edit` | `ProfileController@edit` | 必要 | プロフィール編集画面を表示する |
 | PATCH | `/profile` | `profile.update` | `ProfileController@update` | 必要 | プロフィール更新処理を行う |
-| GET | `/profile/delete` | `profile.delete` | `ProfileController@delete` | 必要 | 会員退会確認画面を表示する |
-| DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | 会員退会処理を行う |
+| DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | プロフィール編集画面の確認モーダルから会員退会処理を行う |
 | GET | `/my-reviews` | `reviews.mine` | `ReviewController@mine` | 必要 | 本人のレビュー一覧を表示する |
 
 ### レビュー機能
@@ -101,7 +100,6 @@ Laravel Breezeの認証ルートを使用する。
 
 - プロフィール編集
 - プロフィール更新
-- 会員退会確認
 - 会員退会
 - 本人のレビュー一覧表示
 - レビュー・評価投稿
@@ -133,7 +131,7 @@ Laravel Breezeの認証ルートを使用する。
 | `ItemController` | 作品一覧、作品詳細表示 |
 | `ReviewController` | レビュー・評価投稿、本人レビュー一覧、レビュー削除 |
 | `ReviewCommentController` | レビュー返信投稿 |
-| `ProfileController` | プロフィール編集、更新、退会確認、退会 |
+| `ProfileController` | プロフィール編集、更新、退会 |
 | Breeze標準Controller | 会員登録、ログイン、ログアウト |
 
 ## 後続フェーズで検討するルート

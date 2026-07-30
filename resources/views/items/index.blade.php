@@ -11,6 +11,15 @@
     </x-slot>
 
     <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+
+        {{-- ==================== フラッシュメッセージ：開始 ==================== --}}
+        @if (session('status'))
+            <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                {{ session('status') }}
+            </div>
+        @endif
+        {{-- ==================== フラッシュメッセージ：終了 ==================== --}}
+
         <section class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
 
             {{-- ==================== 作品一覧ヘッダー：開始 ==================== --}}
