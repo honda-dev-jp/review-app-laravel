@@ -111,6 +111,8 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravel 10へ�
 
 - [開発フロー](docs/DEVELOPMENT_FLOW.md)
 - [実装計画](docs/IMPLEMENTATION_PLAN.md)
+- [Claude Code実装前検証運用手順](docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
+- [Claude Codeレビュー運用手順](docs/CLAUDE_CODE_REVIEW.md)
 - [要件定義](docs/REQUIREMENTS.md)
 - [機能一覧](docs/FEATURES.md)
 - [画面遷移](docs/SCREEN_TRANSITIONS.md)
