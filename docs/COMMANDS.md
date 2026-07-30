@@ -10,6 +10,13 @@
 
 Sailのエイリアスを設定している場合は、`./vendor/bin/sail` を `sail` に読み替えて実行できる。
 
+このドキュメントは、人間がローカル開発環境で実行するコマンドを整理したものです。ここに掲載されたコマンドが、Claude Codeで実行可能であることを意味しません。
+
+Claude Codeで許可する確認系コマンドと禁止する変更系コマンドは、次の運用手順に従います。
+
+- [Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
+- [Claude Codeレビュー運用手順](CLAUDE_CODE_REVIEW.md)
+
 ## Sailエイリアス設定
 
 Laravel Sailは、通常 `./vendor/bin/sail` で実行する。

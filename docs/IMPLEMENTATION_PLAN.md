@@ -510,6 +510,8 @@ git diff --staged
 - `README.md`
 - `docs/DEVELOPMENT_FLOW.md`
 - `docs/COMMANDS.md`
+- `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md`
+- `docs/CLAUDE_CODE_REVIEW.md`
 - `docs/REQUIREMENTS.md`
 - `docs/FEATURES.md`
 - `docs/SCREEN_TRANSITIONS.md`

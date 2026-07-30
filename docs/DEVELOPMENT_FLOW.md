@@ -23,6 +23,8 @@ Issueは、以下の用途で使用する。
 
 作業内容が明確な場合は、必要に応じてIssueを作成または確認してから作業ブランチを作成する。
 
+実装前に設計方針、Issueの受け入れ条件、関連ドキュメントとの整合性を確認する場合は、[Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)に従う。
+
 ```bash
 git switch main
 git pull origin main
@@ -61,16 +63,18 @@ git commit -m "fix: レビュー削除時の認可チェックを修正"
 ## Pull Requestの流れ
 
 1. 必要に応じてIssueを作成する
-2. 作業ブランチで変更する
-3. コミットする
-4. GitHubへpushする
-5. GitHubでPull Requestを作成する
-6. Pull Requestに関連Issueを紐づける
-7. 差分を確認する
-8. mainへマージする
-9. 不要になったリモートブランチを削除する
-10. ローカルmainを最新化する
-11. 不要になったローカルブランチを削除する
+2. Claude Codeで実装前検証を行う場合は、[Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)に従う
+3. 作業ブランチで変更する
+4. Claude CodeでPR差分レビューを行う場合は、[Claude Codeレビュー運用手順](CLAUDE_CODE_REVIEW.md)に従う
+5. コミットする
+6. GitHubへpushする
+7. GitHubでPull Requestを作成する
+8. Pull Requestに関連Issueを紐づける
+9. 差分を確認する
+10. mainへマージする
+11. 不要になったリモートブランチを削除する
+12. ローカルmainを最新化する
+13. 不要になったローカルブランチを削除する
 
 ## PRマージ後の流れ
 
@@ -83,6 +87,8 @@ git status
 ```
 
 ## 確認コマンド
+
+Claude Codeで実行を許可する確認系コマンドは、この一覧とは異なる。Claude Codeへ依頼する場合は、実装前検証またはレビュー運用手順で定義した許可コマンドに従う。
 
 PR前には、変更内容に応じて以下を確認する。
 

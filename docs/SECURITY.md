@@ -490,7 +490,28 @@ git diff
 
 ---
 
-## 21. 今後検討する項目
+## 21. Claude Codeの安全運用
+
+Claude Codeは、実装前検証およびPR差分レビューの読み取り専用用途に限定する。
+
+`.env`、`.env.example`以外の`.env.*`、`bootstrap/cache/`、ログ、セッション、生成済みView、秘密情報、認証情報は参照させない。秘密情報を含まない`.env.example`だけは、人間がファイル名を確認した場合に限り設定例として参照できる。
+
+ファイル編集、Git変更操作、変更系Artisanコマンド、Composer、npm、通常のPint、buildは実行させない。
+
+`.claude/settings.json`では、すべてのBashをAsk、恒久Allowを0件とし、編集、サブエージェント、外部通信に関係する主要ツールをdenyする。`gh issue view`と`gh issue list`も毎回確認対象とする。ただし、BashのdenyパターンとRead/Editのdenyは、別表記、ラッパー、スクリプト、任意のサブプロセスによる間接操作まで完全には防がない。settingsはベストエフォートの補助線とし、承認画面での人間の判断を最終境界とする。
+
+承認ダイアログでは原則として`Yes`（今回のみ許可）を選び、`Yes, and don't ask again`（表示バージョンによっては`Yes, don't ask again`）は使用しない。対象限定テスト、PHPStan、`--test`付きPintも実行のたびに承認する。恒久Allowは個別の承認画面から追加せず、プロジェクト管理下の`.claude/settings.json`で管理し、現時点では0件を維持する。具体的な確認手順は、下記の用途別運用手順を正本とする。
+
+auto memoryは無効にする。セッション開始時、再開時、終了前に、`/status`でcwd、Setting sources、設定エラーの有無を、ステータスバーまたはConfig画面でManual modeを、`/permissions`でAllow 0件、AskのBash、有効なDenyと各ルールの保存元を確認する。
+
+詳細は次を参照する。
+
+- [Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
+- [Claude Codeレビュー運用手順](CLAUDE_CODE_REVIEW.md)
+
+---
+
+## 22. 今後検討する項目
 
 以下は初期移植フェーズでは必須にしないが、後続フェーズで検討する。
 
