@@ -32,7 +32,7 @@ class Item extends Model
     }
 
     /**
-     * @return HasMany<Review, Item>
+     * @return HasMany<Review>
      */
     public function reviews(): HasMany
     {

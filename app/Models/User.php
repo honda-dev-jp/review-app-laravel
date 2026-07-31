@@ -46,7 +46,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * @return HasMany<Review, User>
+     * @return HasMany<Review>
      */
     public function reviews(): HasMany
     {
@@ -54,7 +54,7 @@ class User extends Authenticatable
     }
 
     /**
-     * @return HasMany<ReviewComment, User>
+     * @return HasMany<ReviewComment>
      */
     public function reviewComments(): HasMany
     {
