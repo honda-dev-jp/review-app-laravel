@@ -20,7 +20,7 @@
                     </x-nav-link>
 
                     <x-nav-link :href="route('profile.edit')" :active="request()->routeIs('profile.edit')">
-                        プロフィール編集
+                        アカウント
                     </x-nav-link>
                 @endauth
             </div>
@@ -79,7 +79,7 @@
                             href="{{ route('profile.edit') }}"
                             class="block rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
                         >
-                            プロフィール編集
+                            アカウント
                         </a>
 
                         <div class="my-2 border-t border-slate-100"></div>
@@ -177,7 +177,7 @@
                     class="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
                     @click="mobileMenuOpen = false"
                 >
-                    プロフィール編集
+                    アカウント
                 </a>
 
                 <form method="POST" action="{{ route('logout') }}">

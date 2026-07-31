@@ -238,9 +238,9 @@ Laravelで定義されているルートを確認する。
 ./vendor/bin/sail artisan route:list --name=reviews.comments
 ```
 
-### プロフィール関連ルートの確認
+### アカウント関連ルートの確認
 
-プロフィール編集、プロフィール更新、会員退会関連のルートを確認する。
+アカウント画面表示、アカウント情報更新、会員退会関連のルートを確認する。
 
 ```bash
 ./vendor/bin/sail artisan route:list --path=profile

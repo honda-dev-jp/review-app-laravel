@@ -46,9 +46,9 @@ Laravel Breezeの認証ルートを使用する。
 
 | HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
 |---|---|---|---|---|---|
-| GET | `/profile` | `profile.edit` | `ProfileController@edit` | 必要 | プロフィール編集画面を表示する |
-| PATCH | `/profile` | `profile.update` | `ProfileController@update` | 必要 | プロフィール更新処理を行う |
-| DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | プロフィール編集画面の確認モーダルから会員退会処理を行う |
+| GET | `/profile` | `profile.edit` | `ProfileController@edit` | 必要 | アカウント画面を表示する |
+| PATCH | `/profile` | `profile.update` | `ProfileController@update` | 必要 | アカウント情報更新処理を行う |
+| DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | アカウント画面の確認モーダルから会員退会処理を行う |
 | GET | `/my-reviews` | `reviews.mine` | `ReviewController@mine` | 必要 | 本人のレビュー一覧を表示する |
 
 ### レビュー機能
@@ -98,8 +98,8 @@ Laravel Breezeの認証ルートを使用する。
 
 以下は `auth` ミドルウェアで保護する。
 
-- プロフィール編集
-- プロフィール更新
+- アカウント画面表示
+- アカウント情報更新
 - 会員退会
 - 本人のレビュー一覧表示
 - レビュー・評価投稿
@@ -116,7 +116,7 @@ Laravel Breezeの認証ルートを使用する。
 | レビュー・評価投稿 | 会員のみ投稿可能。1ユーザーにつき1作品1件まで |
 | レビュー削除 | 自分が投稿したレビューのみ削除可能 |
 | レビュー返信投稿 | 会員のみ投稿可能 |
-| プロフィール編集 | 自分のプロフィールのみ編集可能 |
+| アカウント情報の編集 | 自分のプロフィールのみ編集可能 |
 | 会員退会 | 自分のアカウントのみ退会可能 |
 | 本人のレビュー一覧表示 | 自分のレビューのみ表示 |
 
@@ -131,7 +131,7 @@ Laravel Breezeの認証ルートを使用する。
 | `ItemController` | 作品一覧、作品詳細表示 |
 | `ReviewController` | レビュー・評価投稿、本人レビュー一覧、レビュー削除 |
 | `ReviewCommentController` | レビュー返信投稿 |
-| `ProfileController` | プロフィール編集、更新、退会 |
+| `ProfileController` | アカウント画面表示、アカウント情報更新、退会 |
 | Breeze標準Controller | 会員登録、ログイン、ログアウト |
 
 ## 後続フェーズで検討するルート
