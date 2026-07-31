@@ -16,7 +16,7 @@ class ProfileTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * プロフィール編集画面を表示できることを確認する。
+     * アカウント画面を統一された表示名称で表示できることを確認する。
      */
     public function test_profile_page_is_displayed(): void
     {
@@ -26,7 +26,21 @@ class ProfileTest extends TestCase
             ->actingAs($user)
             ->get('/profile');
 
-        $response->assertOk();
+        $xpath = $this->createXPath($response->getContent());
+        $accountHeadings = $xpath->query('//h2[normalize-space(.)="アカウント"]');
+        $accountNavigationLinks = $xpath->query(sprintf(
+            '//a[@href="%s" and normalize-space(.)="アカウント"]',
+            route('profile.edit')
+        ));
+
+        $this->assertNotFalse($accountHeadings);
+        $this->assertCount(1, $accountHeadings);
+        $this->assertNotFalse($accountNavigationLinks);
+        $this->assertCount(3, $accountNavigationLinks);
+
+        $response
+            ->assertOk()
+            ->assertDontSeeText('プロフィール編集');
     }
 
     /**
@@ -55,7 +69,7 @@ class ProfileTest extends TestCase
     }
 
     /**
-     * プロフィール編集画面から自己紹介を更新できることを確認する。
+     * アカウント画面から自己紹介を更新できることを確認する。
      */
     public function test_profile_can_be_updated(): void
     {
@@ -149,7 +163,7 @@ class ProfileTest extends TestCase
     }
 
     /**
-     * プロフィール編集画面に退会フォームが表示されることを確認する。
+     * アカウント画面に退会フォームが表示されることを確認する。
      */
     public function test_delete_account_form_is_displayed_on_profile_page(): void
     {

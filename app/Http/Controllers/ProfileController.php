@@ -12,7 +12,7 @@ use Illuminate\View\View;
 class ProfileController extends Controller
 {
     /**
-     * プロフィール編集画面を表示する。
+     * アカウント画面を表示する。
      */
     public function edit(Request $request): View
     {
