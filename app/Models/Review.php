@@ -38,7 +38,7 @@ class Review extends Model
     }
 
     /**
-     * @return HasMany<ReviewComment, Review>
+     * @return HasMany<ReviewComment>
      */
     public function comments(): HasMany
     {
