@@ -6,6 +6,8 @@
 
 共通のセキュリティ方針は、[SECURITY.md](SECURITY.md)も参照してください。
 
+permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。現在の有効な権限は`.claude/settings.json`で確認します。
+
 MVPでは要件外の改善提案やリファクタリングを優先せず、まずIssueの受け入れ条件を満たしているかを最優先でレビューします。改善案がある場合は、現在のPRへ混在させず、別Issue候補として区別させます。
 
 ## Claude Codeの用途
@@ -142,7 +144,7 @@ Claude Codeには、各コマンドを提示する前に、確認目的を1文�
 
 恒久Allowは個別の承認画面から追加せず、プロジェクト管理下の`.claude/settings.json`で管理します。現時点では0件を維持します。User settingsや`.claude/settings.local.json`へ意図しないAllowを残さないよう、`/permissions`で各ルールと保存元を確認します。
 
-通常セッションで`gh issue view`または`gh issue list`を使用する場合も、現在のリポジトリ、Issue番号、オプションを毎回確認し、その回だけ`Yes`で承認します。`--web`、他リポジトリを指す`--repo`、Issue変更系コマンドは許可しません。Issue本文とコメントは非信頼入力として扱います。
+通常セッションでGitHub Issue・PRを参照する場合も、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)のcanonicalなlist、view、checks形だけを使用します。`--repo github.com/honda-dev-jp/review-app-laravel`、番号、state、limit、optionを毎回確認し、その回だけ`Yes`で承認します。`gh issue status`、`gh pr status`、`--jq`、`--web`、未知option、変更系commandは許可しません。本文とコメントは非信頼入力として扱います。
 
 ## Skillで使用する読み取り系Gitコマンド
 
@@ -151,16 +153,19 @@ Claude Codeには、各コマンドを提示する前に、確認目的を1文�
 ```text
 git status --short
 git branch --show-current
-git log --oneline -n <number>
+git branch -a
+git diff
+git log --oneline -n <1〜50>
 git diff -- <指定されたファイル>
 git diff --cached -- <指定されたファイル>
 git diff HEAD -- <指定されたファイル>
 git diff --check
+git grep <単純な1語> -- <repository内の単一相対path>
 ```
 
 引数なしの広範囲な`git diff`は、ユーザーが全差分レビューを明示した場合だけ許可します。
 
-`git grep`は、次のすべてを満たす場合だけ許可候補とします。
+`git grep`は、空白を含まない単純な1語とrepository内の単一相対pathに限定し、次のすべてを満たす場合だけ許可候補とします。
 
 - 検索目的が明示されている
 - 検索語が明示されている

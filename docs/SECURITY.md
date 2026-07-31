@@ -494,11 +494,13 @@ git diff
 
 Claude Codeは、実装前検証およびPR差分レビューの読み取り専用用途に限定する。
 
+Claude Codeのpermissions、PreToolUse Hook、非信頼入力、秘密情報保護の詳細は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照する。設計には未実装の段階を含むため、現在有効な設定は`.claude/settings.json`で確認する。
+
 `.env`、`.env.example`以外の`.env.*`、`bootstrap/cache/`、ログ、セッション、生成済みView、秘密情報、認証情報は参照させない。秘密情報を含まない`.env.example`だけは、人間がファイル名を確認した場合に限り設定例として参照できる。
 
 ファイル編集、Git変更操作、変更系Artisanコマンド、Composer、npm、通常のPint、buildは実行させない。
 
-`.claude/settings.json`では、すべてのBashをAsk、恒久Allowを0件とし、編集、サブエージェント、外部通信に関係する主要ツールをdenyする。`gh issue view`と`gh issue list`も毎回確認対象とする。ただし、BashのdenyパターンとRead/Editのdenyは、別表記、ラッパー、スクリプト、任意のサブプロセスによる間接操作まで完全には防がない。settingsはベストエフォートの補助線とし、承認画面での人間の判断を最終境界とする。
+`.claude/settings.json`では、すべてのBashをAsk、恒久Allowを0件とし、編集、サブエージェント、外部通信に関係する主要ツールをdenyする。設計書でAsk候補とするGitHub Issue・PR参照も毎回確認対象とする。ただし、BashのdenyパターンとRead/Editのdenyは、別表記、ラッパー、スクリプト、任意のサブプロセスによる間接操作まで完全には防がない。settingsはベストエフォートの補助線とし、承認画面での人間の判断を最終境界とする。
 
 承認ダイアログでは原則として`Yes`（今回のみ許可）を選び、`Yes, and don't ask again`（表示バージョンによっては`Yes, don't ask again`）は使用しない。対象限定テスト、PHPStan、`--test`付きPintも実行のたびに承認する。恒久Allowは個別の承認画面から追加せず、プロジェクト管理下の`.claude/settings.json`で管理し、現時点では0件を維持する。具体的な確認手順は、下記の用途別運用手順を正本とする。
 

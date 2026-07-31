@@ -8,6 +8,8 @@ PR差分のレビューには、[Claude Codeレビュー運用手順](CLAUDE_COD
 
 共通のセキュリティ方針は、[SECURITY.md](SECURITY.md)も参照してください。
 
+permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。現在の有効な権限は`.claude/settings.json`で確認します。
+
 ## Skillの目的
 
 - Skill名: `/pre-implementation-review`
@@ -173,16 +175,16 @@ tests/Unit/
 これらも恒久Allowではありません。Bash承認画面でコマンド全体を毎回確認し、その回だけ`Yes`で承認します。
 
 ```text
-gh issue view <Issue番号>
-gh issue view <Issue番号> --comments
-gh issue list
-gh issue list --state open --limit 100
+gh issue view <Issue番号> --repo github.com/honda-dev-jp/review-app-laravel
+gh issue view <Issue番号> --repo github.com/honda-dev-jp/review-app-laravel --comments
+gh issue view <Issue番号> --repo github.com/honda-dev-jp/review-app-laravel --json number,title,state,body,comments,labels,url
+gh issue list --state <open|closed|all> --limit <1〜100> --repo github.com/honda-dev-jp/review-app-laravel
 ```
 
-`--repo`を使用する場合は、現在のリポジトリだけを指定します。
+`--repo`は必須で、現在のリポジトリだけを指定します。
 
 ```text
---repo honda-dev-jp/review-app-laravel
+--repo github.com/honda-dev-jp/review-app-laravel
 ```
 
 他リポジトリの参照と`--web`は許可しません。
@@ -226,14 +228,17 @@ Bash確認画面が表示された場合は、次を満たすか人間が確認�
 ```text
 git status --short
 git branch --show-current
-git log --oneline -n <number>
+git branch -a
+git diff
+git log --oneline -n <1〜50>
 git diff -- <指定されたファイル>
 git diff --cached -- <指定されたファイル>
 git diff HEAD -- <指定されたファイル>
-git grep <検索語> -- <指定された対象パス>
+git diff --check
+git grep <単純な1語> -- <repository内の単一相対path>
 ```
 
-`git grep`は、検索目的、検索語、対象パスが明示され、参照許可範囲内で禁止対象を含まず、別コマンドへ連結されていない場合だけ許可します。
+`git log`の件数は1〜50、`git grep`は空白を含まない単純な1語とrepository内の単一相対pathに限定します。追加option、複数path、秘密情報path、別コマンドへの連結は許可しません。
 
 `.claude/settings.json`では、bareの`Bash`をAskにしています。読み取り専用のGitHub Issue参照や、Claude Code組み込みの読み取り専用コマンドを含め、すべてのBashで確認画面が表示されることを期待動作とします。恒久Allowは0件です。
 
