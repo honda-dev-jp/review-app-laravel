@@ -7,6 +7,8 @@ disable-model-invocation: true
 
 # PR差分レビューSkill
 
+permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を参照します。設計には未実装の段階も含まれるため、現在の有効な権限は`.claude/settings.json`に従います。
+
 このSkillは、Claude Codeで指定されたPR差分だけを安全にレビューするための手順です。修正は行わず、レビュー結果だけを出します。
 
 ## 基本方針
@@ -64,16 +66,21 @@ Bash実行時に確認画面が表示された場合は、人間の承認を待�
 ```text
 git status --short
 git branch --show-current
-git log --oneline -n <number>
+git branch -a
+git diff
+git log --oneline -n <1〜50>
 git diff -- <指定されたファイル>
 git diff --cached -- <指定されたファイル>
 git diff HEAD -- <指定されたファイル>
 git diff --check
+git grep <単純な1語> -- <repository内の単一相対path>
 ```
 
 引数なしの広範囲な `git diff` は、ユーザーがレビュー範囲として全差分を明示した場合だけ使用できます。
 
-`git grep` は、検索目的、検索語、対象パスがユーザーに明示され、対象がレビュー範囲内で禁止対象を含まない場合だけ許可候補にします。実行前に目的・検索語・対象パスを説明し、パイプや別コマンドへ連結しません。
+`git grep`は空白を含まない単純な1語とrepository内の単一相対pathに限定します。検索目的と対象が明示され、レビュー範囲内で禁止対象を含まない場合だけ使用し、追加option、複数path、パイプ、別commandへの連結を行いません。
+
+GitHub Issue・PRを参照する場合は、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`のcanonicalなlist、view、checks形だけを使用します。repositoryは`github.com/honda-dev-jp/review-app-laravel`へ固定し、status、`--jq`、`--web`、未知option、変更系commandを使用しません。
 
 ## staged / unstaged / untracked の確認
 
