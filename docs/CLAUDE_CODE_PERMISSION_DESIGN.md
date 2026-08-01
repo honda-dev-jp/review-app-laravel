@@ -69,14 +69,15 @@ Claude Codeにはアプリケーション実装、ファイル修正、Git変更
 ### 4.2 公式仕様からの主要な前提
 
 - permissionルールはdeny、ask、allowの順で評価され、詳細なルールであっても上位分類の広いルールを上書きしない。
-- bare `Bash`のaskはすべてのBashに一致するため、個別のBash allowより先にaskとなる。
-- bare `WebFetch`のdenyはすべてのWebFetchに一致するため、ドメイン単位allowより先にdenyとなる。
-- Claude Codeには組み込みの読み取り専用Bash判定があり、明示的なaskまたはdenyがなければ確認なしで実行されるコマンドがある。
+- bare `Bash`のaskはBashのpermission rule評価ではすべてのBashに一致し、個別のBash allowより先に評価される。一方、Claude Codeには全permission modeで確認なしに実行される組み込みread-only commandがある。Issue #52の実機確認では、bare `Bash` askが設定されていても`pwd`は確認画面なしで実行されたため、bare `Bash` askが組み込みread-only判定を常に上書きするとは仮定しない。Hookのdenyは引き続き拒否に使用するが、Hookがaskへ分類したread-only commandすべてに人間承認が残るとは扱わない。
+- bare `WebFetch`はすべてのWebFetch呼び出しに一致する。denyへ置くとtool自体がClaudeのcontextから除外され、askへ置くとすべての呼び出しが毎回の確認対象になる。
 - 複合Bashはサブコマンド単位で評価される。すべての構成要素が許可される場合、複合形も許可され得る。
-- PreToolUse Hookの`permissionDecision`には公式上`allow`、`ask`、`deny`、`defer`が存在する。本プロジェクトの初期版では`ask`と`deny`だけを使用し、`allow`と`defer`は使用しない。Hookのallowはpermissionのaskやdenyを上書きしない。
+- PreToolUse Hookの`permissionDecision`には公式上`allow`、`ask`、`deny`、`defer`が存在する。本プロジェクトの初期版では`ask`と`deny`だけを使用し、`allow`と`defer`は使用しない。PreToolUseはpermission promptより先に実行されるが、Hook decisionはpermission ruleを迂回しない。permissionsのdenyはHookのaskやallowより優先し、permission ruleのask評価へ到達した呼び出しはHookがaskまたはallowを返しても確認を表示する。ただし、組み込みread-only Bashがpermission promptへ到達せず実行された実測結果は本節のbare Bash Askに関する記述および§22のとおりである。exit code 2のblocking Hookはpermissionsのallowより優先する。
 - PreToolUse Hookのexit code 2は実行を拒否する。Hookの起動失敗、異常終了、timeout時の最終挙動は一律に自動denyと仮定せず、実装時点の公式仕様と使い捨て環境で確認する。
 - Hook自身はWebFetchのredirectを追跡できない。Claude Codeがredirect先を別のWebFetch呼び出しとして扱う場合に限り、その新しい入力へ同じHook判定を適用できる。実際の挙動は実機確認事項とする。
 - 現行のPreToolUse入力では、Bashの`tool_input`に`command`、任意の`description`、`timeout`、`run_in_background`があり、WebFetchの`tool_input`には`url`と`prompt`がある。WebFetchには`run_in_background`が定義されていない。
+- denyとaskでは`Bash(run_in_background:true)`のように、tool入力のtop-level scalar parameterを完全一致で制御できる。初期Hookのdenyに加えてpermissionsにも同ruleを置き、Hook障害時の防御を重ねる。
+- permission ruleとHook matcherはUI上の表示名ではなくcanonical tool名へ一致する。未知のtool名をdenyまたはaskへ指定すると起動警告が出るため、推測でtool名を追加せず、Tools referenceと起動警告を照合する。
 - ReadとEditのdenyは組み込みツールと認識可能な一部Bash操作へ適用されるが、任意のサブプロセスによる間接アクセスをOSレベルで完全には防がない。
 
 ## 5. 脅威モデル
@@ -167,10 +168,10 @@ Plan modeはsource fileの編集を抑止する補助策だが、ReadやBashの�
 | 判定 | 意味 | このプロジェクトでの用途 |
 |---|---|---|
 | deny | ツール呼び出しを拒否する | 編集、Agent、WebSearch、変更系Git・gh、秘密情報 |
-| ask | 実行前に人間へ確認する | 可変引数、対象限定テスト、未登録の安全候補 |
+| ask | 該当toolを使用するたびに人間へ確認する | bare `Bash`、bare `WebFetch`、canonicalな確認候補 |
 | allow | 確認なしで実行できる | 初期版では使用しない |
 
-評価順はdeny、ask、allowである。たとえばbare `Bash`をaskへ残したまま`Bash(git status --short)`をallowしても、bare askが先に一致するため確認は省略されない。
+評価順はdeny、ask、allowである。permission rule評価がaskへ到達する場合、たとえばbare `Bash`をaskへ残したまま`Bash(git status --short)`をallowしても、bare askが先に一致するため確認は省略されない。ただし、Claude Codeの組み込みread-only Bashはbare `Bash` askがあってもpermission promptへ到達せず、確認画面なしで実行される場合がある。詳細は§4.2および§22を参照する。
 
 ### 8.2 設定スコープ
 
@@ -184,6 +185,8 @@ Plan modeはsource fileの編集を抑止する補助策だが、ReadやBashの�
 
 permissionは複数スコープのルールを合わせて評価し、いずれかのスコープでdenyに一致すれば他のallowでは解除できない。Projectのallowはworkspace trust受諾後に適用される。
 
+Claude Code 2.1.211以降、`.claude/settings.local.json`はsubdirectoryから起動した場合もGit repository rootから読み込まれる。一方、同ファイルに書いた`/path` ruleの基準はrepository rootではなく元のcwdである。また、個人が作成したlocal settingsはworkspace trustの対象外となる場合があるため、ファイルの有無だけでなく`/status`と`/permissions`で実際の設定元と有効ruleを確認する。
+
 ### 8.3 正本と恒久許可
 
 - Project共通のallowルールは`.claude/settings.json`で一元管理する。
@@ -191,14 +194,17 @@ permissionは複数スコープのルールを合わせて評価し、いずれ�
 - User、Local、Managed settingsも有効な権限へ影響するため、`.claude/settings.json`だけを見て安全と判断しない。
 - `/permissions`と`/status`で、実際の設定ソースと有効なルールを確認する。
 
-### 8.4 現行設定からの変更前提
+### 8.4 現行設定と段階的な実装状態
 
-現行設定はbare `Bash`をask、bare `WebFetch`をdeny、allowを空配列としている。変更は次の2段階で行い、Hook導入とpermissions変更を別PRとする。
+Issue #51ではPreToolUse Hook、45件の回帰test、Hook README、関連文書を追加し、bare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持した。
 
-1. Issue #51ではPreToolUse Hook、回帰test、Hook README、関連文書を追加する。permissionsは変更せず、bare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持する。
-2. Issue #51の実装、回帰test、コードレビュー、Hook単体の実機検証が完了した後、Issue #52でpermissionsを変更する。bare `Bash` askを維持し、Git・GitHub CLI・WebFetchの自動allowを0件のまま、定義した安全候補をaskとしてHookとpermissionsを統合検証する。bare `WebFetch` denyはWebFetchのask運用に必要な範囲だけ変更する。
+Issue #52ではbare `WebFetch`だけをdenyからaskへ移し、現行設定を次の状態とした。
 
-WebFetchの実通信を伴う統合検証はIssue #52で行う。WebSearch deny、Agent deny、Edit・Write・NotebookEdit denyは両段階で維持し、Hookの検証前にbare askまたはbare denyを外さない。
+- Allow：0件
+- Ask：bare `Bash`、bare `WebFetch`、`Read(/.env.*)`、`Read(/**/.env.*)`
+- Deny：bare `WebFetch`以外の既存ruleを維持し、WebSearch、Agent、Edit、Write、NotebookEditを引き続きdeny。公式仕様で直接表現できる`Bash(run_in_background:true)`と、既存のIssue変更系denyに欠けていたgh PR変更系denyを追加
+
+Git・GitHub CLI・WebFetchの自動allowは0件を維持する。Issue #52の人間による実機確認では、設定ソースとHook登録、代表hostのWebFetch、未登録subdomainの拒否、bare `WebFetch` denyへのフォールバックとaskへの再適用まで確認済みである。確認済みの具体的な結果は§20に記録する。§20に列挙したその他の境界条件は、個別の確認結果が記録されるまで未確認として扱う。
 
 ## 9. PreToolUse Hook
 
@@ -243,7 +249,7 @@ matcher対象は次の2ツールだけとする。
 | ask | 操作自体は許可候補だが、対象パス、Issue番号、PR番号、query等を人間が確認する必要がある場合 |
 | deny | 禁止操作、危険記号、対象外host、秘密情報らしき値、解析不能、未知の入力の場合 |
 
-Hookの`allow`はpermissionのaskやdenyを上書きできない。Hookの`deny`はallowルールより優先して実行を止める。
+PreToolUse Hookはpermission promptより先に実行されるが、Hook decisionはpermission ruleを迂回しない。permissionsのdenyはHookのaskやallowより優先し、permission ruleのask評価へ到達した呼び出しはHookがaskまたはallowを返しても確認を表示する。ただし、組み込みread-only Bashでは確認画面へ到達しない実測結果がある。exit code 2のblocking Hookはpermissionsのallowより優先する。本プロジェクトの初期Hookはexit code 2を使用せず、exit code 0の構造化JSONでdenyを返すため、将来permissionsへallowを追加する場合も、その構造化denyがallowを上書きすると仮定しない。現時点ではAllow 0件を維持する。
 
 Hookは正常な判定時、exit code 0でstdoutへ次の形の判定JSONだけを返す。`permissionDecisionReason`には固定された短い理由を使用する。
 
@@ -257,7 +263,7 @@ Hookは正常な判定時、exit code 0でstdoutへ次の形の判定JSONだけ�
 }
 ```
 
-exit code 2はPreToolUseをブロックする。この場合、stdoutのJSONは無視され、stderrが拒否理由として扱われる。通常のpolicy判定と捕捉済みの内部例外は、構造化されたdeny JSONをexit code 0で返す。exit code 2は、判定JSONを返せないプロセスレベルのfail-safe経路として使用する。exit code 1やその他の異常終了をdenyの代用にしない。
+exit code 2はPreToolUseをブロックし、stderrがClaudeへ拒否理由として返される。初期実装ではこの経路を使用せず、通常のpolicy判定、入力不正、捕捉済みの内部例外を、固定理由を持つ構造化deny JSONとしてexit code 0で返す。起動失敗、捕捉不能な異常終了、timeoutはHook自身から制御できず、一律に自動denyされると仮定しない。
 
 ### 9.5 登録方法
 
@@ -326,7 +332,7 @@ PythonによるHook実装は小さな権限判定器に限定し、アプリケ�
 
 ### 9.7 失敗時の扱い
 
-malformed JSON、必須field不足、型不正、未知の`tool_name`、`tool_input`内の未知field、Bashの`run_in_background: true`、捕捉済みの予期しない内部例外はaskへ逃がさずdenyする。内部例外時は入力内容を含めず、固定された短い理由のdeny JSONだけを返す。exit code 2を使用する経路でも、stderrには入力内容を含めず固定理由だけを出力する。
+malformed JSON、必須field不足、型不正、未知の`tool_name`、`tool_input`内の未知field、Bashの`run_in_background: true`、捕捉済みの予期しない内部例外はaskへ逃がさずdenyする。内部例外時は入力内容を含めず、固定された短い理由のdeny JSONだけを返す。初期実装ではexit code 2の別経路を持たない。
 
 ただし、Hookプロセス自体の起動失敗、異常終了、timeout等はすべて自動denyされると仮定しない。現行公式仕様では、exit code 2以外の異常終了はPreToolUseで通常非ブロッキングであり、実装時点の公式仕様と使い捨て環境で挙動を確認する。この経路をHookだけでfail-closedにすることはできないため、次を維持する。
 
@@ -334,7 +340,7 @@ malformed JSON、必須field不足、型不正、未知の`tool_name`、`tool_in
 - GitとGitHub CLIの自動allowは初期版では0件とし、定義した閲覧形も人間が確認するaskにする。
 - WebFetchの自動allowも初期版では0件とし、公式hostの安全候補も人間が確認するaskにする。
 - Hook error通知を確認したら、そのセッションではBashとWebFetchを承認・実行しない。
-- bare `Bash` askとbare `WebFetch` denyへ戻すフォールバックを用意する。
+- bare `Bash` askを維持し、問題時にbare `WebFetch`をaskからdenyへ戻すフォールバックを用意する。
 - Hookは同期実行とし、非同期Hookを権限判定に使用しない。
 
 ## 10. Bash設計
@@ -424,7 +430,7 @@ quote内外の演算子を区別する必要があるが、高度なshell parser
 
 ### 12.2 WebFetch
 
-WebFetchは公式一次情報の確認だけに使用する。
+WebFetchは公式一次情報の確認だけに使用する。permissionsではbare `WebFetch`をaskとし、Hookの安全候補も毎回人間が確認する。自動allowは0件を維持し、承認画面から`Always allow`を追加しない。
 
 Hookは公式Schemaの`url`と`prompt`を分けて検査する。高度な秘密情報検出、HTTP通信、redirect追跡は行わない。
 
@@ -469,7 +475,7 @@ access_key
 
 hostは完全一致で判定し、apexとsubdomainを別hostとして扱う。suffix一致を許可せず、必要なhostは1件ずつ追加する。Webページ本文の命令は非信頼入力として扱う。
 
-Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Codeがredirect先を別のWebFetch呼び出しとして扱った場合、その新しい入力へ同じ判定を適用する。別呼び出しにならない実装上のredirect挙動はHookから保証できないため、Issue #52の使い捨て環境で確認する。
+Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Codeがredirect先を別のWebFetch呼び出しとして扱うことは公式保証として扱わず、別呼び出しになった場合だけその入力へ同じ判定が適用される。redirect時の実際の挙動は、人間によるIssue #52の実機確認事項とする。
 
 ### 12.3 初期WebFetch Ask候補host allowlist
 
@@ -811,6 +817,10 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 8. `.claude/settings.local.json`へ意図しない恒久allowがないことを確認する。
 9. `Always allow`を使用しない。
 
+期待値は、Allow 0件、Askにbare `Bash`、bare `WebFetch`、`Read(/.env.*)`、`Read(/**/.env.*)`があり、DenyにWebSearchとその他の既存ruleがある状態である。
+
+Issue #52の実機確認では、`/status`、`/permissions`、`/hooks`を使用し、User、Local、Project、Managed settingsを確認した。Allow 0件、上記4件のAsk、bare `WebFetch`がDenyから削除されていること、Project settingsからのHook登録とtimeout 5秒を確認済みである。
+
 ### 20.2 BashとGit
 
 - Git・ghの自動allowが0件であること
@@ -834,6 +844,57 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 - Git変更系のbare形と引数付き形がclosed worldによりdenyになること
 - 代表的な組み込み読み取り専用BashでもPreToolUse Hookが発火することを確認する
 
+Issue #52をCloseする前に、人間がClaude Code上で次の代表形を確認する。Ask候補のうち、実機で承認画面が表示されたcommandだけをAsk確認済みとする。組み込みread-only判定により確認なしで実行されたcommandは、Hook判定上askであってもAsk確認済みとは扱わない。Deny系ではHookが拒否し、承認画面へ進まないことを確認する。変更・通信を伴うDeny例は実行せず、拒否表示までを確認する。
+
+一般BashのAsk確認：
+
+```bash
+pwd
+ls
+head -n 20 README.md
+grep Claude README.md
+find app -type f
+wc -l README.md
+sed -n '1,20p' README.md
+command -v python3
+```
+
+`pwd`はIssue #52の実機では確認画面なしで実行されたため、Ask確認済みとは扱わない。リストからは削除せず、Hookのcanonicalなask候補と実際の承認画面の差を示す実測結果として残す。
+
+一般BashのDeny確認：
+
+```bash
+ls -a
+cat README.md
+pwd | wc -l
+echo "$HOME"
+python3 -c "print(1)"
+```
+
+GitのAsk確認：
+
+```bash
+git status --short
+git branch --show-current
+git diff
+git diff --check
+git log --oneline -n 5
+```
+
+`git status --short`はIssue #52の実機でBashの承認画面が表示されたため、Ask確認済みである。未登録commandはHookでDenyされ、承認画面へ進まないことも確認済みである。その他のAsk候補は、個別の結果が記録されるまで確認済みとは扱わない。
+
+GitのDeny確認：
+
+```bash
+git status
+git show
+git fetch
+git add README.md
+git diff -- :(top)README.md
+```
+
+`git fetch`と`git add README.md`は実行してはならず、HookのDeny表示までを確認する。この一覧は代表的な統合確認であり、§20.2の全境界条件を確認済みとみなすものではない。
+
 ### 20.3 GitHub CLI
 
 - state・limit・repoを固定順で指定したissue/pr listがaskになること
@@ -851,6 +912,30 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 
 remote変更系は本番repositoryへ実行しない。deny直前までの判定をtest repositoryまたは認証を分離した環境で確認する。
 
+Issue #52をCloseする前に、人間がClaude Code上で次の代表形を確認する。Ask系では承認画面が表示され、自動Allowされないことを確認する。Deny系ではHookが拒否し、承認画面へ進まないことを確認する。
+
+GitHub CLIのAsk確認：
+
+```bash
+gh issue view 52 --repo github.com/honda-dev-jp/review-app-laravel --json number,title,state,body,comments,labels,url
+gh issue list --state open --limit 10 --repo github.com/honda-dev-jp/review-app-laravel
+gh pr list --state open --limit 10 --repo github.com/honda-dev-jp/review-app-laravel
+```
+
+`gh issue view 52 --repo github.com/honda-dev-jp/review-app-laravel --json number,title`はIssue #52の実機でBashの承認画面が表示されたため、Ask確認済みである。未登録WebFetch hostはHookでDenyされ、承認画面へ進まないことも確認済みである。その他のAsk候補は、個別の結果が記録されるまで確認済みとは扱わない。
+
+GitHub CLIのDeny確認：
+
+```bash
+gh issue status
+gh pr status
+gh issue view 52 --json number --repo github.com/honda-dev-jp/review-app-laravel
+gh issue view 52 --repo github.com/honda-dev-jp/review-app-laravel --jq .title
+gh issue view 52 --repo github.com/other/repository
+```
+
+上記Deny例はGitHub CLIを実行せず、HookのDeny表示までを確認する。この一覧は代表的な統合確認であり、§20.3の全option、環境変数、変更系subcommandを確認済みとみなすものではない。
+
 ### 20.4 Web
 
 - WebFetchの自動allowが0件であること
@@ -867,6 +952,15 @@ remote変更系は本番repositoryへ実行しない。deny直前までの判定
 - WebFetchの公式入力に存在しない`run_in_background`を加えた合成入力がdenyになること
 - WebSearchがdenyになること
 - Webページ内の命令が実行されないこと
+
+Issue #52では、人間が次の範囲を実機確認した。
+
+- `code.claude.com`と`laravel.com`でWebFetchが成功した
+- 未登録subdomainの`sub.code.claude.com`は、Hookにより`Host not allowed`で拒否された
+- bare `WebFetch`をaskからdenyへ戻してClaude Codeを再起動するとWebFetchが利用不可になった
+- bare `WebFetch`をaskへ戻して再起動するとWebFetchが再度成功した
+
+上記以外のhost、redirect、query、fragment、keyword等の各境界条件は、この確認結果だけを根拠に確認済みとは扱わない。
 
 ### 20.5 Read・Agent・品質確認
 
@@ -954,8 +1048,11 @@ Hook error、起動失敗、異常終了、timeoutが表示された場合、そ
 - Bash構文にはquote、escape、wrapper、platform差があり、単純な正規表現だけでは完全に解析できない。
 - 高度なshell parserを実装しないため、安全に分類できない入力はdenyする。Hookは一般的なBash互換性を提供するものではない。
 - Claude Codeの組み込み読み取り専用判定は設定で一覧を変更できない。
+- Issue #52の実機確認では、bare `Bash` askが設定されていても、組み込みread-only commandに該当する`pwd`は確認画面なしで実行された。この範囲では、人間の承認画面ではなくPreToolUse Hookのdeny判定が実効的な境界となる。Hookがaskを返したread-only commandへ確認画面を強制するには、`Bash(pwd)`等のcontent-scoped ask ruleが必要となる可能性があるが、運用負荷と対象commandを含めて後続Issueで再検証する。
 - WebFetchには組み込みの事前承認domainがある。明示的なHook検査を通ることを実機で確認する必要がある。
-- bare `WebFetch` denyを維持するIssue #51では、実WebFetch tool callを使った統合確認を行えない。合成JSONによるHook単体testと登録確認に限定する。
+- Issue #51ではbare `WebFetch` denyのため、合成JSONによるHook単体testと登録確認に限定した。Issue #52では`code.claude.com`と`laravel.com`のWebFetch成功、および未登録subdomainの`sub.code.claude.com`が`Host not allowed`で拒否されることを人間が確認した。組み込み事前承認domainとの関係やredirect等、今回結果が記録されていない挙動は未確認である。
+- 公式はpermissionsとsandboxを多層防御として併用する構成を案内しているが、本環境ではsandboxを有効にするとClaude Codeが正常動作しないため、Issue #52では導入しない。sandboxはBashと子プロセスへOSレベルのfile・network制約を提供するため、未導入の間は任意subprocessをpermissions、Hook、人間承認だけで完全に封じられない。Laravel Sail環境と両立する隔離環境での再評価は後続Issueとする。
+- sandboxを後続Issueで再評価する場合、`autoAllowBashIfSandboxed`の既定値は`true`であり、sandbox内のBashはbare `Bash` askがあっても確認なしで実行され得る。本プロジェクトの毎回承認方針を維持するには、同設定を含むsandboxとbare `Bash` askの関係を隔離環境で再検証する。
 - Read denyは任意のサブプロセスによる間接Readを完全には防がない。
 - `GH_REPO`と`GH_HOST`の継承状態はClaude Codeの起動環境に依存するため実機確認が必要である。
 - Gitの表示系コマンドでも内部cache、pager、helper、外部diff等の副作用を完全には排除できない。
@@ -985,7 +1082,7 @@ WSL hostで`command -v python3`と`python3 --version`を確認し、公式Schema
 
 ### 23.2 第2段階：Issue #52 / permissions変更・統合検証PR
 
-第2PRでは、第1PRのHookと回帰testが正常であることを確認した後、次を適用する。
+第2PRでは、第1PRのHookと回帰testを前提として、bare `WebFetch`をdenyからaskへ移した。次の設定変更は反映済みであり、統合検証項目は人間が確認する。
 
 - bare `Bash` askの維持
 - Git・GitHub CLIのcanonicalなask
@@ -993,18 +1090,18 @@ WSL hostで`command -v python3`と`python3 --version`を確認し、公式Schema
 - path限定Git diff 3形のask
 - 可変GitHub CLI ask
 - WebFetchのAsk候補host allowlistと自動allow 0件
-- bare `WebFetch` denyのAsk運用に必要な範囲での変更
+- bare `WebFetch`のdenyからaskへの移動
 - Hookとpermissionsを組み合わせた統合検証
 - 代表的な複数hostだけを対象とする実WebFetch通信の使い捨て環境での確認
 - 実機検証結果に基づく関連文書更新
 
-第2PRをmergeする前に、`/status`、`/permissions`、`/hooks`と設計書の実機検証計画を使用して、期待どおりのallow、ask、denyになることを確認する。
+人間が`/status`、`/permissions`、`/hooks`を使用し、設定ソース、Allow 0件、bare `Bash`とbare `WebFetch`を含むAsk、Hook登録、timeout 5秒を確認済みである。代表hostのWebFetch、未登録subdomainの拒否、bare `WebFetch` denyへのフォールバックとaskへの再適用も確認済みである。設計書§20のうち、結果が個別に記録されていない検証項目は未確認のまま残す。
 
 問題発生時に片方だけrevertできるよう、Hook導入とpermissions変更を同一PRへまとめない。
 
 ## 24. 関連ドキュメントの更新対象
 
-Issue #50の後続作業では、実装結果に合わせて次を更新する。
+Issue #50の実装結果に合わせて、次の文書を同期する。
 
 | ファイル | 更新内容 |
 |---|---|
@@ -1018,7 +1115,7 @@ Issue #50の後続作業では、実装結果に合わせて次を更新する�
 | `docs/COMMANDS.md` | 人間用コマンドとClaude用権限の区別 |
 | `docs/DEVELOPMENT_FLOW.md` | 権限設計書への参照 |
 
-後続更新では、現行のbare `Bash` askを維持し、bare `WebFetch` denyだけを第2段階のAsk運用に必要な範囲で変更する。Git・gh・WebFetchの初期自動allowは0件のまま、canonicalなGit・ghとWebFetchのAsk候補host allowlistをHook前提の運用へ反映する。
+Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからaskへ移した。Git・gh・WebFetchの自動allowは0件のまま、canonicalなGit・ghとWebFetchのAsk候補host allowlistをHook前提の運用へ反映した。設定ソース、Hook、代表host、未登録subdomain拒否、フォールバックの確認済み結果は§20に記録し、結果が記録されていない検証項目は未確認のまま残す。
 
 恒久許可については、次の表現へ統一する。
 
@@ -1031,11 +1128,14 @@ Issue #50の後続作業では、実装結果に合わせて次を更新する�
 ### Anthropic
 
 - [Configure permissions](https://code.claude.com/docs/en/permissions)
-- [Claude Code settings](https://code.claude.com/docs/en/configuration)
+- [Claude Code settings](https://code.claude.com/docs/en/settings)
+- [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing)
+- [Interactive mode](https://code.claude.com/docs/en/interactive-mode)
 - [Choose a permission mode](https://code.claude.com/docs/en/permission-modes)
 - [Hooks reference](https://code.claude.com/docs/en/hooks)
 - [Automate actions with hooks](https://code.claude.com/docs/en/hooks-guide)
 - [Tools reference](https://code.claude.com/docs/en/tools-reference)
+- [Claude Code CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)（WebFetch allowlist外のため、人間または別の公式取得手段で確認する）
 - [Security](https://code.claude.com/docs/en/security)
 - [Create custom subagents](https://code.claude.com/docs/en/sub-agents)
 - [Claude Code changelog](https://code.claude.com/docs/en/changelog)
@@ -1080,12 +1180,15 @@ Issue #50の後続作業では、実装結果に合わせて次を更新する�
 | 2026-08-01 | 最新Issue #50・#51・#52へ同期。bare `Bash` askの維持、WebFetch自動allow 0件、変更系一般Bashのdeny、代表hostだけの実WebFetch検証を反映し、関連文書への導線を整理 |
 | 2026-08-01 | 一般Bashの小規模closed world、Git/gh canonical形、Hookのcommand文字列、Python 3.10以上、`.claude/hooks/tests/`、既存Skill回帰確認へ最終同期 |
 | 2026-08-01 | gh viewの`--repo`先行、回帰testの人間実行と4つの実行時期、Issue #51段階を考慮したフォールバックへ同期 |
+| 2026-08-01 | Issue #52でbare `WebFetch`をdenyからaskへ移動。Allow 0件とbare `Bash` askを維持し、公式一次情報WebFetchの毎回承認、人間向け統合検証計画、フォールバックを文書へ同期 |
+| 2026-08-01 | 公式permissions仕様へ再同期。`Bash(run_in_background:true)`とgh PR変更系denyをpermissionsへ追加し、canonical tool名、local settingsの現行挙動、sandbox未導入の制約、Issue #52の実WebFetch確認結果を追記 |
+| 2026-08-01 | Issue #52の実機確認結果を同期。設定ソース、Hook、Allow 0件とAsk、代表2host、未登録subdomain拒否、WebFetchのdenyフォールバックとaskへの再適用を記録 |
 
 ## 27. 決定事項と実装前提
 
 Issue #50・#51・#52の設計事項は次のとおり確定した。
 
-1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、permissionsは変更しない。Issue #52でpermissionsを変更して統合検証する。
+1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、Issue #52でbare `WebFetch`をdenyからaskへ移した。人間が設定ソース、Hook、代表hostの実WebFetch、未登録subdomain拒否、フォールバックと再適用を確認済みである。その他の実機検証は、個別の結果が記録されるまで確認済みとは扱わない。
 2. Hook matcherは`Bash`と`WebFetch`だけとし、公式例に沿う`command`文字列、timeout 5秒で同期実行する。
 3. HookはPython 3.10以上の標準ライブラリだけで実装し、stdin入力以外のfile読取、transcript読取、HTTP通信、redirect追跡、subprocess、Git、gh、ログ保存を行わない。`GH_REPO`・`GH_HOST`の存在確認はgh判定時だけ行う。
 4. malformed JSON、必須field不足、型不正、未知tool、未知の`tool_input` field、Bashの`run_in_background: true`、Hook内部例外はdenyする。既知の任意top-level fieldは存在だけでdenyしない。
@@ -1097,6 +1200,6 @@ Issue #50・#51・#52の設計事項は次のとおり確定した。
 10. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
 11. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、pager対策、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
 
-Issue #51では現行のbare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持する。Issue #52でもbare `Bash` askとGit・GitHub CLI・WebFetchの自動allow 0件を維持し、bare `WebFetch` denyだけをAsk運用に必要な範囲で変更する。
+Issue #51ではbare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持した。Issue #52ではbare `Bash` askとGit・GitHub CLI・WebFetchの自動allow 0件を維持し、bare `WebFetch`だけをdenyからaskへ移した。Hookを通過したWebFetchもpermissionsのaskにより毎回人間が確認する。
 
 実機検証でClaude Codeの現行仕様と異なる挙動が確認された場合は、安全側へ戻し、設計書、Hook、permissions、回帰testを同じ変更単位で更新する。
