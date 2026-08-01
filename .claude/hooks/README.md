@@ -46,6 +46,8 @@ Project settingsの`.claude/settings.json`に同期command Hookとして登録�
 
 `$CLAUDE_PROJECT_DIR`の展開、script起動、stdin受信、timeout時の挙動は、Claude Codeの実機で人間が確認します。
 
+現在のProject settingsはbare `Bash`とbare `WebFetch`をAsk、Allowを0件としています。PreToolUse HookがAskを返した入力のうち、Claude Codeの組み込みread-only判定に該当しないものは、permissionsのAskにより人間の承認画面へ進みます。Issue #52の実機では`pwd`が確認画面なしで実行されたため、HookがAskを返したすべてのBashで承認画面が残るとは仮定しません。HookがDenyを返した入力は、組み込みread-only commandであっても承認画面へ進まず拒否されます。HookのAskやAllowはpermissionsのAskやDenyを迂回しません。
+
 ## 入出力
 
 command HookはstdinからJSONを1件受け取り、stdoutへ判定JSONを1件だけ返します。初期版は`permissionDecision`の`ask`と`deny`だけを使用し、正常な構造化判定はexit code 0で返します。
@@ -126,7 +128,7 @@ pathを受け取るcommandへ設計書§15の共通規則を適用します。`.
 
 設計書の公式14 hostと完全一致する`https` URLだけをAsk候補にします。明示port、userinfo、許可外host、suffix偽装host、URL側の秘密情報らしきkeywordはDenyします。percent decodeは1回だけ行います。Hook自身はHTTP通信もredirect追跡も行いません。
 
-Issue #51では合成JSONによる単体テストだけを行います。実WebFetch通信はIssue #52で人間が確認します。
+Issue #51では合成JSONによる単体テストだけを行いました。Issue #52ではbare `WebFetch` Askへの設定変更後に、`code.claude.com`と`laravel.com`でWebFetchが成功し、未登録subdomainの`sub.code.claude.com`が`Host not allowed`で拒否されることを人間が確認済みです。`/status`、`/permissions`、`/hooks`による設定ソースとHook登録、timeout 5秒の確認、およびbare `WebFetch` denyへのフォールバックとaskへの再適用も完了しています。その他の境界条件は、個別の結果が記録されるまで確認済みとは扱いません。
 
 ## 固定permissionDecisionReason
 
@@ -182,7 +184,7 @@ python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
 
 ## 異常時
 
-Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認しません。Claude Codeを終了し、設計書「フォールバック」の手順でsettings、Hook登録、bare `Bash` Ask、bare `WebFetch` Denyを確認してから再開します。
+Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認しません。Claude Codeを終了し、設計書「フォールバック」の手順に従ってbare `WebFetch`をAskからDenyへ戻し、settings、Hook登録、bare `Bash` Ask、復元したbare `WebFetch` Denyを確認してから再開します。Hook本体、回帰テスト、README、Hook登録はこのフォールバックでは戻しません。
 
 すべてのBashまたはWebFetchが`Malformed input`または`Unsupported field`でDenyされる場合は、Claude CodeのSchema変更を疑います。Hook登録を無効化して安全側へ戻したうえで、最新の公式Schemaと`COMMON_REQUIRED_FIELDS`、`COMMON_OPTIONAL_FIELDS`、tool固有fieldを突き合わせます。未知fieldを許可する方向へ先にHookを緩めません。
 

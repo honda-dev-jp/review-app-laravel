@@ -25,7 +25,7 @@ Issueは、以下の用途で使用する。
 
 実装前に設計方針、Issueの受け入れ条件、関連ドキュメントとの整合性を確認する場合は、[Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)に従う。
 
-Claude CodeのpermissionsとPreToolUse Hookの詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照する。設計には未実装の段階も含まれるため、実際の運用は各手順と現在の設定に従う。
+Claude CodeのpermissionsとPreToolUse Hookの詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照する。Issue #51のHookとIssue #52のpermissions変更、およびIssue #52で完了した実機確認結果は設計書§20へ反映済みである。実際の運用は各手順と現在の`.claude/settings.json`に従う。
 
 ```bash
 git switch main
