@@ -8,7 +8,7 @@ PR差分のレビューには、[Claude Codeレビュー運用手順](CLAUDE_COD
 
 共通のセキュリティ方針は、[SECURITY.md](SECURITY.md)も参照してください。
 
-permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。現在の有効な権限は`.claude/settings.json`で確認します。
+permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。設計にはIssue #52で実施する未実装のpermissions変更も含まれます。Hookの実装と異常時対応は[Hook README](../.claude/hooks/README.md)を参照し、現在の有効な権限とHook登録は`.claude/settings.json`で確認します。
 
 ## Skillの目的
 
@@ -225,6 +225,10 @@ Bash確認画面が表示された場合は、次を満たすか人間が確認�
 
 必要な場合だけ、次の読み取り系Gitコマンドを許可候補にします。実装前検証では差分がないこともあるため、差分確認は必須ではありません。
 
+一般Bash（`ls`、`head`、`grep`、`find`等）は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md) §10.2のcanonical形だけを使用します。
+
+Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認せず、[Hook README](../.claude/hooks/README.md)の異常時手順に従います。
+
 ```text
 git status --short
 git branch --show-current
@@ -240,7 +244,7 @@ git grep <単純な1語> -- <repository内の単一相対path>
 
 `git log`の件数は1〜50、`git grep`は空白を含まない単純な1語とrepository内の単一相対pathに限定します。追加option、複数path、秘密情報path、別コマンドへの連結は許可しません。
 
-`.claude/settings.json`では、bareの`Bash`をAskにしています。読み取り専用のGitHub Issue参照や、Claude Code組み込みの読み取り専用コマンドを含め、すべてのBashで確認画面が表示されることを期待動作とします。恒久Allowは0件です。
+`.claude/settings.json`ではbareの`Bash`をAskにしています。PreToolUse Hookを通過したcanonicalなBashで確認画面が表示され、非canonical形や禁止形はその前にDenyされることを期待動作とします。恒久Allowは0件です。
 
 現行Claude Codeのサブエージェント用ツールは`Agent`です。実装前検証では不要なため、`.claude/settings.json`でdenyし、Skillからも使用させません。
 
@@ -255,7 +259,7 @@ git grep <単純な1語> -- <repository内の単一相対path>
 
 BashのdenyパターンとRead/Editのdenyは、別表記、ラッパー、スクリプト、任意のサブプロセスによる間接操作まで完全には防ぎません。settingsをベストエフォートの補助線として扱い、確認画面での人間の拒否を最終境界とします。
 
-セッション開始時、再開時、終了前に`/status`と`/permissions`を確認します。`/status`ではcwd、Setting sources、設定エラーの有無を確認し、ステータスバーまたはConfig画面ではpermission modeがManualであることを確認します。`/permissions`では有効なAllow、Ask、Denyと保存元を確認し、Git管理外の`.claude/settings.local.json`などへ意図しない設定が保存されていないことを確認します。
+セッション開始時、再開時、終了前に`/status`、`/permissions`、`/hooks`を確認します。`/status`ではcwd、Setting sources、設定エラーの有無を確認し、ステータスバーまたはConfig画面ではpermission modeがManualであることを確認します。`/permissions`では有効なAllow、Ask、Denyと保存元を確認し、Git管理外の`.claude/settings.local.json`などへ意図しない設定が保存されていないことを確認します。`/hooks`では`Bash|WebFetch`のPreToolUse Hook、command、timeout、設定元を確認します。
 
 plan modeでSkillを起動すること自体は禁止しません。ただし、計画を承認して編集へ移行せず、レビュー結果、計画、メモをプロジェクトファイルへ保存させません。結果はチャットへ直接出力させます。
 
@@ -560,9 +564,10 @@ GitHub Issue #<Issue番号>の実装準備状況
 2. `/status`でcwd、Setting sources、設定エラーの有無を確認する
 3. ステータスバーまたはConfig画面でpermission modeがManualであることを確認する
 4. `/permissions`でAllowが0件、AskにBashがあること、有効なDenyと各ルールの保存元を確認する
-5. `/pre-implementation-review`を再度呼び出す
-6. モード、検証対象、参照許可範囲、検証論点を改めて指定する
-7. 実行していない確認を実行済みとして扱わない
+5. `/hooks`で`Bash|WebFetch`のPreToolUse Hook、command、timeout、設定元を確認する
+6. `/pre-implementation-review`を再度呼び出す
+7. モード、検証対象、参照許可範囲、検証論点を改めて指定する
+8. 実行していない確認を実行済みとして扱わない
 
 ## トラブル時の対応
 

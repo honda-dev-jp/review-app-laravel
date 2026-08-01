@@ -26,3 +26,7 @@ _ide_helper.php
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Python cache
+__pycache__/
+*.py[cod]

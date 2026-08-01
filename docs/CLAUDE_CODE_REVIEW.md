@@ -6,7 +6,7 @@
 
 共通のセキュリティ方針は、[SECURITY.md](SECURITY.md)も参照してください。
 
-permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。現在の有効な権限は`.claude/settings.json`で確認します。
+permissionsとPreToolUse Hookの段階的な詳細設計は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照してください。設計にはIssue #52で実施する未実装のpermissions変更も含まれます。Hookの実装と異常時対応は[Hook README](../.claude/hooks/README.md)を参照し、現在の有効な権限とHook登録は`.claude/settings.json`で確認します。
 
 MVPでは要件外の改善提案やリファクタリングを優先せず、まずIssueの受け入れ条件を満たしているかを最優先でレビューします。改善案がある場合は、現在のPRへ混在させず、別Issue候補として区別させます。
 
@@ -31,7 +31,7 @@ MVPでは要件外の改善提案やリファクタリングを優先せず、�
 | ファイル | 役割 |
 | --- | --- |
 | `CLAUDE.md` | Claude Code向けのプロジェクト運用ガイドです。読み取り専用の用途、参照禁止対象、変更禁止、確認系コマンド、Laravelレビュー観点を定義します。 |
-| `.claude/settings.json` | Claude Codeのプロジェクト権限設定です。すべてのBashをAsk、恒久Allowを0件とし、ファイル編集、サブエージェント、一部の外部・変更系ツールをdenyします。Bashの個別denyはベストエフォートの補助線です。 |
+| `.claude/settings.json` | Claude Codeのプロジェクト権限とHook登録です。すべてのBashをAsk、恒久Allowを0件とし、ファイル編集、サブエージェント、一部の外部・変更系ツールをdenyします。Bashの個別denyとPreToolUse Hookはベストエフォートの補助線です。 |
 | `AGENTS.md` | AIエージェント共通のプロジェクト制約です。秘密情報、Laravel標準機能、既存docsの事前確認、Git運用などを定義します。 |
 | `.gitignore` | `.env`、ローカル設定、生成物などをGit管理対象から外すための防御線です。Claude Codeに読ませてよい対象一覧ではありません。 |
 | `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md` | 設計、Issue分割、実装準備状況を検証するための運用手順です。 |
@@ -42,7 +42,7 @@ MVPでは要件外の改善提案やリファクタリングを優先せず、�
 
 Claude Codeへ渡すレビュー対象、許可するBash、対象限定テスト、参照ファイルは、人間が毎回確認します。
 
-セッション開始時、再開時、設定変更後、終了前は、`/status`でcwd、Setting sources、設定エラーの有無を確認します。ステータスバーまたはConfig画面ではpermission modeがManualであることを確認し、`/permissions`ではAllowが0件、AskにBashがあること、有効なDenyと各ルールの保存元を確認します。
+セッション開始時、再開時、設定変更後、終了前は、`/status`でcwd、Setting sources、設定エラーの有無を確認します。ステータスバーまたはConfig画面ではpermission modeがManualであることを確認し、`/permissions`ではAllowが0件、AskにBashがあること、有効なDenyと各ルールの保存元を確認します。`/hooks`では`Bash|WebFetch`のPreToolUse Hook、command、timeout、設定元を確認します。
 
 ## Skillの使い分け
 
@@ -109,7 +109,11 @@ PR差分レビューでは、プロンプトだけで手順を毎回再現する
 
 ## Bash確認ルール
 
-`.claude/settings.json`ではbareの`Bash`をAskにしているため、読み取り専用のGitHub Issue参照や、Claude Code組み込みの読み取り専用コマンドを含め、すべてのBashで確認画面が表示されることを期待動作とします。1回につき1コマンドを原則として、人間がコマンド全体を確認します。
+`.claude/settings.json`ではbareの`Bash`をAskにしています。PreToolUse Hookを通過したcanonicalなBashで確認画面が表示され、非canonical形や禁止形はその前にDenyされることを期待動作とします。1回につき1コマンドを原則として、人間がコマンド全体を確認します。
+
+一般Bash（`ls`、`head`、`grep`、`find`等）は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md) §10.2のcanonical形だけを使用します。
+
+Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認せず、[Hook README](../.claude/hooks/README.md)の異常時手順に従います。
 
 Claude Codeには、各コマンドを提示する前に、確認目的を1文で説明させます。
 
@@ -349,7 +353,7 @@ composer remove
 
 Sail経由も同様です。
 
-`.claude/settings.json`では、`./vendor/bin/sail`形式と`sail`エイリアス形式の代表的な変更系コマンドをdenyします。別表記を完全には防げないため、すべてのBash承認画面でコマンド全体を確認します。
+`.claude/settings.json`では、`./vendor/bin/sail`形式と`sail`エイリアス形式の代表的な変更系コマンドをdenyします。別表記を完全には防げないため、Hookを通過して確認画面へ進んだBashもコマンド全体を確認します。
 
 ### npm
 
@@ -365,7 +369,7 @@ npm run build
 
 Sail経由も同様です。
 
-`.claude/settings.json`では、`./vendor/bin/sail`形式と`sail`エイリアス形式の代表的な変更系コマンドをdenyします。別表記を完全には防げないため、すべてのBash承認画面でコマンド全体を確認します。
+`.claude/settings.json`では、`./vendor/bin/sail`形式と`sail`エイリアス形式の代表的な変更系コマンドをdenyします。別表記を完全には防げないため、Hookを通過して確認画面へ進んだBashもコマンド全体を確認します。
 
 ### ファイル変更を伴うその他の操作
 
@@ -777,9 +781,10 @@ plan modeで`/pr-diff-review`を起動すること自体は禁止しません。
 2. `/status`でcwd、Setting sources、設定エラーの有無を確認する
 3. ステータスバーまたはConfig画面でpermission modeがManualであることを確認する
 4. `/permissions`でAllowが0件、AskにBashがあること、有効なDenyと各ルールの保存元を確認する
-5. `/pr-diff-review`を再度呼び出す
-6. レビュー対象と許可する確認系コマンドを再指定する
-7. 実行していない確認を実行済みとして扱わない
+5. `/hooks`で`Bash|WebFetch`のPreToolUse Hook、command、timeout、設定元を確認する
+6. `/pr-diff-review`を再度呼び出す
+7. レビュー対象と許可する確認系コマンドを再指定する
+8. 実行していない確認を実行済みとして扱わない
 
 ## レビュー終了時の確認
 
