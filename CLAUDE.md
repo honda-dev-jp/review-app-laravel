@@ -8,7 +8,7 @@
 
 Claude Codeは、このリポジトリで **読み取り専用のセカンドオピニオン** として使用してください。
 
-Claude CodeのpermissionsとPreToolUse Hookの詳細設計は、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を正本とします。設計には未実装の段階も含まれるため、現在の有効な権限は`.claude/settings.json`で確認してください。
+Claude CodeのpermissionsとPreToolUse Hookの詳細設計は、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を正本とします。Hookの実装と異常時対応は`.claude/hooks/README.md`を参照し、現在の有効な権限とHook登録は`.claude/settings.json`で確認してください。設計にはIssue #52で実施する未実装のpermissions変更も含まれます。
 
 主な目的は、Codexとは別のモデルによる検証を行い、設計・実装・テスト・ドキュメントの見落としを減らすことです。また、特定のAIサービスに障害が発生した場合でも、レビュー作業を継続できる状態を目指します。
 
@@ -26,7 +26,7 @@ Claude Codeは、次の **読み取り専用の検証用途** に限定して使
 - 実装修正は行わないでください。
 - ファイル編集、作成、削除は行わないでください。
 - commit、branch作成、push、merge、rebase、tag作成などのGit変更操作は行わないでください。
-- 外部通信は、通常セッションでの読み取り専用GitHub Issue参照を除いて行わないでください。
+- 外部通信は、通常セッションでの読み取り専用GitHub Issue・PR参照を除いて行わないでください。
 - PR差分レビューでは `/pr-diff-review`、実装前検証では `/pre-implementation-review` を人間が明示して使います。
 - 作業前に README、AGENTS.md、関連docsと、ユーザーが指定した参照範囲を確認してください。
 - 参照範囲を確認し、検証対象を説明してから指摘してください。
@@ -171,7 +171,9 @@ Bash確認画面が表示された場合は、次の条件を維持してくだ�
 - 禁止対象を参照しない
 - ユーザーが指定した検証範囲を超えない
 
-現行の`.claude/settings.json`ではbareの`Bash`をAskにしています。Issue #51でHookを登録すると、permissions配列を変更しなくてもBash・WebFetchの実効判定は変わります。登録後は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`のcanonicalなAsk形だけを使用し、未登録形はDenyとします。settingsとHookはベストエフォートの補助線であり、承認画面での人間の判断を最終境界とします。
+現行の`.claude/settings.json`ではbareの`Bash`をAskにし、`Bash|WebFetch`を対象とするPreToolUse Hookを登録しています。Hookはpermissions配列を変更しなくても実効判定へ影響し、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`のcanonicalなAsk形だけを確認画面へ進め、未登録形をDenyします。一般Bash（`ls`、`head`、`grep`、`find`等）も設計書§10.2のcanonical形だけを使用してください。settingsとHookはベストエフォートの補助線であり、承認画面での人間の判断を最終境界とします。
+
+Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認せず、`.claude/hooks/README.md`の異常時手順に従ってください。
 
 `Read`や`Edit`のdenyも、任意のBashサブプロセスによる間接アクセスまで完全には防ぎません。確認画面では、コマンドが禁止対象を読まないこと、ファイルやGit、DB、キャッシュ、設定、プロセス状態を変更しないことを人間が確認してください。
 
@@ -365,6 +367,7 @@ PR差分や変更内容を確認するときは、以下を優先してくださ
 - `/status`でcwd、読み込まれたSetting sources、設定エラーの有無を確認する
 - ステータスバーまたはConfig画面で、現在のpermission modeがManualであることを確認する
 - `/permissions`で有効なAllow、Ask、Denyと保存元を確認する
+- `/hooks`で`Bash|WebFetch`のPreToolUse Hook、command、timeout、設定元を確認する
 - `/pre-implementation-review`または`/pr-diff-review`を再度呼び出す
 - 検証対象と参照許可範囲を人間が改めて指定する
 - 実行していない確認を実行済みとして扱わない

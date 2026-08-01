@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # PR差分レビューSkill
 
-permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を参照します。設計には未実装の段階も含まれるため、現在の有効な権限は`.claude/settings.json`に従います。
+permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を参照します。設計にはIssue #52で実施する未実装のpermissions変更も含まれます。Hookの実装と異常時対応は`.claude/hooks/README.md`を参照し、現在の有効な権限とHook登録は`.claude/settings.json`に従います。
 
 このSkillは、Claude Codeで指定されたPR差分だけを安全にレビューするための手順です。修正は行わず、レビュー結果だけを出します。
 
@@ -23,15 +23,17 @@ permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESI
 - 動的シェル埋め込みは使用しません。
 - Skillが自動実行される構成にしません。
 - サブエージェントを使用しません。
-- `allowed-tools` は設定しません。すべてのBashはAskです。承認ダイアログでは`CLAUDE.md`の運用に従い、その回だけ`Yes`で承認を受けます。権限設定とSkill本文はベストエフォートの補助線とし、人間の判断を最終境界にします。
+- `allowed-tools` は設定しません。permissionsではbareのBashをAskとし、PreToolUse Hookを通過したcanonical形だけを確認画面へ進めます。承認ダイアログでは`CLAUDE.md`の運用に従い、その回だけ`Yes`で承認を受けます。権限設定、Hook、Skill本文はベストエフォートの補助線とし、人間の判断を最終境界にします。
+- Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認せず、`.claude/hooks/README.md`の異常時手順に従います。
 - Bashは原則として1回の確認につき1コマンドにし、各コマンドの前に確認目的を短く説明します。
+- 一般Bash（`ls`、`head`、`grep`、`find`等）は、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md` §10.2のcanonical形だけを使用します。
 - `|`、`|&`、`;`、`&&`、`||`、`&`、改行で複数処理を連結しません。
 - 複合コマンドが必要に見える場合も、ユーザーへ提示する前に単一コマンドへ分割します。
 - Bash経由でもファイルを作成・更新・削除しません。
 - レビュー成果物として、プロジェクト内にmemory、plan、メモファイルを作成しません。
 - `cat >`、`cat >>`、`tee`、`>`、`>>`、ヒアドキュメント `<<` は使用しません。
 - Read専用レビューの結果はチャットへ直接出力します。
-- Bash denyは別表記、ラッパー、スクリプト、間接操作を完全には防がないベストエフォートの防御です。すべてのBash承認画面で、人間が書き込み、外部通信、禁止対象参照、複合コマンドを最終的に拒否します。承認する場合は原則として`Yes`（今回のみ許可）を使用し、`Yes, and don't ask again`は使用しません。恒久Allowは承認画面から追加せず、現時点では0件を維持します。
+- Bash denyとPreToolUse Hookは、別表記、ラッパー、間接操作を完全には防がないベストエフォートの防御です。Hookを通過して確認画面へ進んだBashも、人間が書き込み、外部通信、禁止対象参照、複合コマンドを最終的に拒否します。承認する場合は原則として`Yes`（今回のみ許可）を使用し、`Yes, and don't ask again`は使用しません。恒久Allowは承認画面から追加せず、現時点では0件を維持します。
 
 ## 読まない対象
 

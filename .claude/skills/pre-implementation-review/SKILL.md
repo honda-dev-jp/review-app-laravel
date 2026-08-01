@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # 実装前検証Skill
 
-permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を参照します。設計には未実装の段階も含まれるため、現在の有効な権限は`.claude/settings.json`に従います。
+permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESIGN.md`を参照します。設計にはIssue #52で実施する未実装のpermissions変更も含まれます。Hookの実装と異常時対応は`.claude/hooks/README.md`を参照し、現在の有効な権限とHook登録は`.claude/settings.json`に従います。
 
 このSkillは、Claude Codeで実装前の設計、Issue分割案、実装準備状況を読み取り専用で検証するための手順です。実装やIssue本文の確定は行わず、検証結果だけをチャットへ直接出力します。
 
@@ -41,7 +41,8 @@ permissionsとPreToolUse Hookの詳細設計は`docs/CLAUDE_CODE_PERMISSION_DESI
 - Claude Codeの判定を最終決定として扱いません。最終判断は人間が行います。
 - Skillが自動実行される構成にしません。
 - サブエージェントを使用しません。
-- `allowed-tools` は設定しません。すべてのBashはAskです。承認ダイアログでは`CLAUDE.md`の運用に従い、その回だけ`Yes`で承認を受けます。権限設定とSkill本文はベストエフォートの補助線とし、人間の判断を最終境界にします。
+- `allowed-tools` は設定しません。permissionsではbareのBashをAskとし、PreToolUse Hookを通過したcanonical形だけを確認画面へ進めます。承認ダイアログでは`CLAUDE.md`の運用に従い、その回だけ`Yes`で承認を受けます。権限設定、Hook、Skill本文はベストエフォートの補助線とし、人間の判断を最終境界にします。
+- Hook error、起動失敗、異常終了、timeoutが表示された場合は、そのセッションで追加のBashとWebFetchを承認せず、`.claude/hooks/README.md`の異常時手順に従います。
 
 ## 読まない対象
 
@@ -94,6 +95,7 @@ gh issue list --state <open|closed|all> --limit <1〜100> --repo github.com/hond
 - Bashは1回の確認につき1コマンドとし、各コマンドの前に確認目的を1文で説明します。
 - `|`、`|&`、`;`、`&&`、`||`、`&`、改行で複数処理を連結しません。
 - 複合コマンドが必要に見えても、人間へ提示する前に単一コマンドへ分割します。
+- 一般Bash（`ls`、`head`、`grep`、`find`等）は、`docs/CLAUDE_CODE_PERMISSION_DESIGN.md` §10.2のcanonical形だけを使用します。
 - `cat >`、`cat >>`、`tee`、`>`、`>>`、ヒアドキュメント `<<` を使用しません。
 - 外部通信は、前節の読み取り専用`gh issue view`と`gh issue list`だけを例外とします。
 - ユーザーが指定していないテストを推測して実行しません。
@@ -140,7 +142,7 @@ git am
 git update-ref
 ```
 
-`curl`、`wget`、`ssh`、`scp`、`rsync`、`WebFetch`、`WebSearch`、MCP、外部AIコネクタも使用しません。Bashのdenyパターンは別表記、ラッパー、スクリプト、間接操作を完全には防がないため、すべてのBash承認画面で人間がコマンド全体を確認します。原則として`Yes`（今回のみ許可）を使用し、`Yes, and don't ask again`は使用しません。恒久Allowは承認画面から追加せず、現時点では0件を維持します。
+`curl`、`wget`、`ssh`、`scp`、`rsync`、`WebFetch`、`WebSearch`、MCP、外部AIコネクタも使用しません。BashのdenyパターンとPreToolUse Hookは別表記、ラッパー、間接操作を完全には防がないため、Hookを通過して確認画面へ進んだBashも人間がコマンド全体を確認します。原則として`Yes`（今回のみ許可）を使用し、`Yes, and don't ask again`は使用しません。恒久Allowは承認画面から追加せず、現時点では0件を維持します。
 
 ## Laravelプロジェクトの前提
 

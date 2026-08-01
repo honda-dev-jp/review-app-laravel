@@ -214,5 +214,19 @@
       "Bash(sail php ./vendor/bin/pint)",
       "Bash(./vendor/bin/pint)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre_tool_use.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
