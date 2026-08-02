@@ -1058,6 +1058,23 @@ git status
 ./vendor/bin/sail npm run build
 ```
 
+### GitHub Actions CIとの対応
+
+Pull Requestおよび`main` / `develop`ブランチへのpush時は、GitHub Actionsが次のコマンドをSailを使用せずrunner上で直接実行する。
+
+| 品質チェック | ローカル（Sail） | GitHub Actions CI |
+|---|---|---|
+| Laravel Pint | `./vendor/bin/sail php ./vendor/bin/pint --test` | `vendor/bin/pint --test` |
+| PHPStan / Larastan | `./vendor/bin/sail php ./vendor/bin/phpstan analyse` | `vendor/bin/phpstan analyse --no-progress` |
+| Vite build | `./vendor/bin/sail npm run build` | `npm run build` |
+| PHPUnit | `./vendor/bin/sail test` | `php artisan test` |
+
+CIでは、Composer依存関係を`composer.lock`に基づいて`composer install`で導入し、npm依存関係を`package-lock.json`に基づいて`npm ci`で導入する。
+
+PHPStanの解析レベルは`phpstan.neon`を正本とし、CIコマンド側ではLevelを指定しない。
+
+PHPUnitはMySQLの`testing`データベースを使用する。
+
 ### 注意点
 
 PRを作成する前に、以下を確認する。
