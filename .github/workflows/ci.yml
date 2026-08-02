@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: false
+      # CI専用のテストキー。本番環境では使用しない。
+      APP_KEY: base64:6ftPd6RhUC2jRPdhqwdrl4HukEopAGXpepirISDfw7E=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: ci_user
+      DB_PASSWORD: ci_password
+
+    services:
+      mysql:
+        image: mysql:8.4.11
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_USER: ci_user
+          MYSQL_PASSWORD: ci_password
+          MYSQL_ROOT_PASSWORD: root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=ci_user --password=ci_password --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, xml, xmlwriter, bcmath, zip
+          coverage: none
+          tools: composer:2.10.2
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Run Laravel Pint
+        run: vendor/bin/pint --test
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.18.0'
+          package-manager-cache: false
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run PHPUnit
+        run: php artisan test

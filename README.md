@@ -29,6 +29,17 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravel 10へ�
 - Laravel IDE Helper
 - Git / GitHub
 
+## CI
+
+GitHub Actionsを使用し、Pull Requestおよび`main` / `develop`ブランチへのpush時に、次の品質チェックを自動実行します。
+
+- Laravel Pint
+- PHPStan / Larastan Level 4
+- Vite build
+- PHPUnit（MySQL環境）
+
+Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`を正本として、固定されたバージョンを使用します。
+
 ## 開発環境
 
 ### ローカル環境のポート設定
