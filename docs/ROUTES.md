@@ -15,6 +15,7 @@
 - URLはLaravelの慣習に合わせて分かりやすくする
 - ルート名は `items.index` のようにドット区切りで定義する
 - 共通画面は認証不要とする
+- 未ログイン限定画面は `guest` ミドルウェアで保護する
 - 会員機能は `auth` ミドルウェアで保護する
 - 自分のレビュー削除など本人確認が必要な処理は、PolicyまたはController側で認可を行う
 - POST、PATCH、DELETEなど状態変更を伴う処理ではCSRF保護を前提とする
@@ -35,10 +36,16 @@ Laravel Breezeの認証ルートを使用する。
 
 | HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
 |---|---|---|---|---|---|
-| GET | `/register` | `register` | Breeze標準 | 不要 | 会員登録画面を表示する |
-| POST | `/register` | `register` | Breeze標準 | 不要 | 会員登録処理を行う |
-| GET | `/login` | `login` | Breeze標準 | 不要 | ログイン画面を表示する |
-| POST | `/login` | `login` | Breeze標準 | 不要 | ログイン処理を行う |
+| GET | `/register` | `register` | Breeze標準 | 未ログイン限定（`guest`） | 会員登録画面を表示する |
+| POST | `/register` | なし | Breeze標準 | 未ログイン限定（`guest`） | 会員登録処理を行う |
+| GET | `/login` | `login` | Breeze標準 | 未ログイン限定（`guest`） | ログイン画面を表示する |
+| POST | `/login` | なし | Breeze標準 | 未ログイン限定（`guest`） | ログイン処理を行う |
+| GET | `/forgot-password` | `password.request` | Breeze標準 | 未ログイン限定（`guest`） | パスワードリセット申請画面を表示する |
+| POST | `/forgot-password` | `password.email` | Breeze標準 | 未ログイン限定（`guest`） | パスワードリセットメールを送信する |
+| GET | `/reset-password/{token}` | `password.reset` | Breeze標準 | 未ログイン限定（`guest`） | パスワード再設定画面を表示する |
+| POST | `/reset-password` | `password.store` | Breeze標準 | 未ログイン限定（`guest`） | 新しいパスワードを保存する |
+
+これらのルートは `routes/auth.php` の `guest` ミドルウェア配下にあり、ログイン済みユーザーがアクセスした場合は `/` へリダイレクトされる。
 
 ### 会員画面
 
@@ -91,8 +98,15 @@ Laravel Breezeの認証ルートを使用する。
 - レビュー表示
 - レビュー返信表示
 - 星評価表示
+
+### 未ログイン限定（`guest`）
+
+以下は `guest` ミドルウェアで保護し、ログイン済みの場合は `/` へリダイレクトする。
+
 - 会員登録画面
 - ログイン画面
+- パスワードリセット申請画面
+- パスワード再設定画面
 
 ### 認証必須
 
@@ -132,7 +146,7 @@ Laravel Breezeの認証ルートを使用する。
 | `ReviewController` | レビュー・評価投稿、本人レビュー一覧、レビュー削除 |
 | `ReviewCommentController` | レビュー返信投稿 |
 | `ProfileController` | アカウント画面表示、アカウント情報更新、退会 |
-| Breeze標準Controller | 会員登録、ログイン、ログアウト |
+| Breeze標準Controller | 会員登録、ログイン、ログアウト、パスワードリセット |
 
 ## 後続フェーズで検討するルート
 

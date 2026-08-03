@@ -301,6 +301,16 @@ Laravel Breezeによる認証機能に関する確認コマンドをまとめる
 ./vendor/bin/sail artisan route:list --path=logout
 ```
 
+### パスワードリセット関連ルートの確認
+
+パスワードリセット申請、リセットメール送信、再設定画面、再設定処理のルートを確認する。
+
+```bash
+./vendor/bin/sail artisan route:list --path=password
+```
+
+`--path=password` では、ログイン中のパスワード確認やパスワード更新のルートも表示される。
+
 ### 認証関連ルート全体の確認
 
 Breezeで追加された認証関連ルートを確認する。
@@ -344,6 +354,34 @@ Laravel Breezeが導入されているか確認する。
 - Middleware
 
 会員のみ利用できる機能は、原則として `auth` ミドルウェアで制御する。
+
+## メール確認（Mailpit）
+
+ローカル環境では、送信されたメールをMailpitで確認する。
+
+### Mailpitの起動確認
+
+```bash
+./vendor/bin/sail ps
+```
+
+`mailpit` コンテナが起動していることを確認する。
+
+### Mailpit Web UI
+
+ブラウザで以下を開き、受信したメールの件名、本文、再設定URLを確認する。
+
+```text
+http://localhost:8025
+```
+
+### 補足
+
+- LaravelコンテナからMailpitへは `mailpit:1025` で接続する
+- コンテナ内部のポートは `1025` / `8025`
+- ホスト側ポートは `.env` の `FORWARD_MAILPIT_PORT` / `FORWARD_MAILPIT_DASHBOARD_PORT` で変更する
+- Mailpitはローカル開発専用であり、CIおよび本番環境では使用しない
+- Mailpitサービスは `compose.yaml` へ手動追加し、`sail:add` は使用しない
 
 ## テスト
 

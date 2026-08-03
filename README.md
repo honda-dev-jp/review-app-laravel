@@ -19,6 +19,7 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravel 10へ�
 - Laravel Sail
 - MySQL
 - phpMyAdmin
+- Mailpit（ローカルのメール確認用）
 - Laravel Breeze
 - Blade
 - Tailwind CSS
@@ -51,6 +52,8 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 | Laravel | http://localhost:82 |
 | MySQL外部接続 | localhost:3308 |
 | phpMyAdmin | http://localhost:8083 |
+| Mailpit SMTP | localhost:1025 |
+| Mailpit Web UI | http://localhost:8025 |
 
 ## 主な機能
 
@@ -69,6 +72,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 
 - 会員登録
 - ログイン
+- パスワードリセット
 
 #### 会員機能
 

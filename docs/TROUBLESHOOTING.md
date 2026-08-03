@@ -37,7 +37,7 @@ git branch
 
 - Docker Desktopが起動しているか確認する
 - 既存コンテナとのポート競合を確認する
-- `.env` の `APP_PORT`、`FORWARD_DB_PORT` を確認する
+- `.env` の `APP_PORT`、`FORWARD_DB_PORT`、`PHPMYADMIN_PORT`、`FORWARD_MAILPIT_PORT`、`FORWARD_MAILPIT_DASHBOARD_PORT` が他サービスと競合していないか確認する
 - それでも起動しない場合はログを確認する
 
 ```bash
@@ -96,6 +96,7 @@ git branch
 ./vendor/bin/sail artisan route:list --path=login
 ./vendor/bin/sail artisan route:list --path=register
 ./vendor/bin/sail artisan route:list --path=logout
+./vendor/bin/sail artisan route:list --path=password
 ./vendor/bin/sail artisan migrate:status
 ```
 
@@ -582,3 +583,49 @@ git status
 - `docs/SECURITY.md`
 - `docs/DEPLOYMENT.md`
 - `README.md`
+
+## 36. パスワードリセットメールがMailpitに届かない
+
+確認手順：
+
+1. `mailpit` コンテナが起動しているか確認する
+
+```bash
+./vendor/bin/sail ps
+```
+
+2. ローカル環境の `.env` で次を確認する
+
+```text
+MAIL_MAILER=smtp
+MAIL_HOST=mailpit
+MAIL_PORT=1025
+```
+
+`.env` の実値はドキュメントへ転載しない。
+
+3. `.env` を変更した場合は設定キャッシュをクリアする
+
+```bash
+./vendor/bin/sail artisan config:clear
+```
+
+4. パスワードリセット関連ルートを確認する
+
+```bash
+./vendor/bin/sail artisan route:list --path=password
+```
+
+5. ログイン中は `/forgot-password` へアクセスできないため、ログアウトしてから再確認する
+
+6. 同一メールアドレスへの再送は60秒間制限される
+
+7. 未登録メールアドレスではエラーとなり、メールは送信されない
+
+8. Mailpit Web UIを確認する
+
+```text
+http://localhost:8025
+```
+
+9. ホスト側ポートを変更している場合は、`.env` の `FORWARD_MAILPIT_DASHBOARD_PORT` を確認する
