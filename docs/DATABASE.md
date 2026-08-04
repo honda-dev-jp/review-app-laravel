@@ -58,7 +58,7 @@ Laravel Breezeの認証機能をベースに使用する。
 | `password` | varchar(255) | ハッシュ化したパスワード |
 | `role` | varchar(20) | 権限。初期値は `user` |
 | `profile` | text nullable | 自己紹介文 |
-| `avatar_path` | varchar(255) nullable | プロフィール画像パス |
+| `avatar_path` | varchar(255) nullable | ユーザーアイコンのpublicディスク内相対パス。未設定時は `null` |
 | `remember_token` | varchar(100) nullable | ログイン保持用 |
 | `created_at` | timestamp | 作成日時 |
 | `updated_at` | timestamp | 更新日時 |
@@ -67,7 +67,11 @@ Laravel Breezeの認証機能をベースに使用する。
 
 初期移植フェーズでは、Breeze標準の `users` テーブルをベースにする。
 
-アカウント画面でプロフィール情報を編集できるよう、`profile` と `avatar_path` を追加する。
+アカウント画面でプロフィール情報を編集できるよう、`profile` と `avatar_path` を追加する。ユーザーアイコン機能では既存の `avatar_path` を使用し、追加マイグレーションは行わない。
+
+`avatar_path` には `avatars/...` 形式のpublicディスク内相対パスを保存し、公開URLや共通のNo Image画像のパスは保存しない。
+
+新画像が選択されていない場合は既存の `avatar_path` を維持し、差し替え時はpublicディスク内の新しい相対パスへ更新する。
 
 将来の管理者機能に備えて、`role` を初期設計に含める。
 
@@ -306,6 +310,8 @@ index(parent_id)
 投稿者ユーザーが存在しないレビュー・レビューコメントは、画面上では投稿者名を「匿名」と表示する。
 
 退会後のレビュー・レビューコメントは、投稿者との紐づきがなくなるため編集不可とする。
+
+退会時は、`users` レコードの削除と投稿者との紐づきの更新を含むDB整合性を優先する。アイコンファイルの削除順序と失敗時の扱いは `docs/IMPLEMENTATION_PLAN.md` に整理する。
 
 退会ユーザーのお気に入りデータは、将来お気に入り機能を追加した場合も削除する方針とする。
 

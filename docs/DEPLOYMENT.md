@@ -493,7 +493,9 @@ php artisan migrate:rollback
 
 個人情報性が高い画像や非公開画像は公開ディレクトリに直接置かない。
 
-Laravelでは `storage:link` の利用を検討する。
+ユーザーアバターはpublicディスクの `avatars`（`storage/app/public/avatars`）へ保存し、公開に `storage:link` を使用する。共通のNo Image画像は `public/images/no-image.png` に配置する固定アセットとする。
+
+XServer上での `storage:link` は未検証とし、詳細な確認事項は以下に整理する。
 
 ### 未検証
 
