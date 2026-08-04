@@ -241,8 +241,16 @@
                 {{-- ---------- レビュー1件：開始 ---------- --}}
                 <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="font-semibold text-slate-900">
-                            {{ $review->user?->name ?? '匿名' }}
+                        <div class="flex items-center gap-3">
+                            <x-user-avatar
+                                :user="$review->user"
+                                alt=""
+                                class="h-10 w-10"
+                            />
+
+                            <div class="font-semibold text-slate-900">
+                                {{ $review->user?->name ?? '匿名' }}
+                            </div>
                         </div>
 
                         <div class="text-sm text-slate-500">
@@ -281,8 +289,16 @@
                             @foreach ($review->comments as $comment)
                                 <div class="mt-3 rounded-xl bg-white p-3 text-sm">
                                     <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                        <div class="font-semibold text-slate-800">
-                                            {{ $comment->user?->name ?? '匿名' }}
+                                        <div class="flex items-center gap-3">
+                                            <x-user-avatar
+                                                :user="$comment->user"
+                                                alt=""
+                                                class="h-8 w-8"
+                                            />
+
+                                            <div class="font-semibold text-slate-800">
+                                                {{ $comment->user?->name ?? '匿名' }}
+                                            </div>
                                         </div>
 
                                         <div class="text-xs text-slate-500">

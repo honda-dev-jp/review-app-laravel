@@ -8,6 +8,7 @@
             <img src="{{ asset('images/logo-header.png') }}" alt="映画レビュー" class="h-10 w-auto sm:h-12">
         </a>
 
+        {{-- ==================== PCナビゲーション：開始 ==================== --}}
         <div class="flex items-center gap-6">
             <div class="hidden items-center gap-8 whitespace-nowrap text-sm font-semibold text-slate-600 md:flex" aria-label="PCナビゲーション">
                 <x-nav-link :href="route('items.index')" :active="request()->routeIs('home') || request()->routeIs('items.*')">
@@ -26,6 +27,7 @@
             </div>
 
             @guest
+                {{-- PC：未ログイン時メニュー --}}
                 <div class="hidden items-center gap-3 whitespace-nowrap md:flex">
                     <a
                         href="{{ route('login') }}"
@@ -46,6 +48,7 @@
             @endguest
 
             @auth
+                {{-- PC：ログイン時ユーザーメニュー --}}
                 <div class="relative hidden items-center gap-3 whitespace-nowrap md:flex" x-data="{ open: false }" @keydown.escape.window="open = false">
                     <button
                         type="button"
@@ -55,9 +58,11 @@
                         @click="open = ! open"
                         @click.outside="open = false"
                     >
-                        <span class="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-blue-100 to-sky-100 text-lg">
-                            {{ mb_substr(Auth::user()->name, 0, 1) }}
-                        </span>
+                        <x-user-avatar
+                            :user="Auth::user()"
+                            alt=""
+                            class="h-9 w-9"
+                        />
                         <span class="text-sm font-semibold text-slate-700">{{ Auth::user()->name }}</span>
                         <span class="text-slate-400 transition group-hover:text-blue-500" :class="{ 'rotate-180': open }">⌄</span>
                     </button>
@@ -98,7 +103,9 @@
                 </div>
             @endauth
         </div>
+        {{-- ==================== PCナビゲーション：終了 ==================== --}}
 
+        {{-- ==================== モバイルナビゲーション：開始 ==================== --}}
         <button
             type="button"
             class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"
@@ -144,6 +151,7 @@
             </a>
 
             @guest
+                {{-- モバイル：未ログイン時メニュー --}}
                 <a
                     href="{{ route('login') }}"
                     class="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
@@ -164,6 +172,18 @@
             @endguest
 
             @auth
+                {{-- モバイル：ログイン時メニュー --}}
+                <div class="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                    <x-user-avatar
+                        :user="Auth::user()"
+                        alt=""
+                        class="h-10 w-10"
+                    />
+
+                    <span class="min-w-0 truncate text-sm font-semibold text-slate-700">
+                        {{ Auth::user()->name }}
+                    </span>
+                </div>
                 <a
                     href="{{ route('reviews.mine') }}"
                     class="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
@@ -193,4 +213,5 @@
             @endauth
         </div>
     </aside>
+    {{-- ==================== モバイルナビゲーション：終了 ==================== --}}
 </nav>

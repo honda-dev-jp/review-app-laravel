@@ -9,20 +9,94 @@
         </p>
     </header>
 
+    {{-- メール認証リンク再送フォーム --}}
     <form id="send-verification" method="post" action="{{ route('verification.send') }}">
         @csrf
     </form>
 
-    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6">
+    {{-- アカウント情報更新フォーム（ユーザーアイコンを含む） --}}
+    <form method="post" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="mt-6 space-y-6">
         @csrf
         @method('patch')
 
+        {{-- ユーザーアイコン入力欄 --}}
+        <div
+            x-data="{
+                previewUrl: null,
+                updatePreview(event) {
+                    const file = event.target.files[0];
+
+                    if (! file) {
+                        if (this.previewUrl) {
+                            URL.revokeObjectURL(this.previewUrl);
+                        }
+
+                        this.previewUrl = null;
+
+                        return;
+                    }
+
+                    if (this.previewUrl) {
+                        URL.revokeObjectURL(this.previewUrl);
+                    }
+
+                    this.previewUrl = URL.createObjectURL(file);
+                }
+            }"
+        >
+            <x-input-label for="avatar_image" :value="__('User Icon')" />
+
+            <div class="mb-3 mt-2">
+                <template x-if="previewUrl">
+                    <img
+                        :src="previewUrl"
+                        alt="選択したユーザーアイコンのプレビュー"
+                        class="h-20 w-20 rounded-full object-cover"
+                    >
+                </template>
+
+                <template x-if="! previewUrl">
+                    <x-user-avatar
+                        :user="$user"
+                        alt="現在のユーザーアイコン"
+                        class="h-20 w-20"
+                    />
+                </template>
+            </div>
+
+            <input
+                id="avatar_image"
+                name="avatar_image"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                @change="updatePreview($event)"
+                @error('avatar_image')
+                    aria-invalid="true"
+                    aria-describedby="avatar-image-error"
+                @enderror
+                class="mt-2 block w-full text-sm text-gray-700
+                    file:mr-4 file:rounded-md file:border-0
+                    file:bg-gray-800 file:px-4 file:py-2
+                    file:text-sm file:font-semibold file:text-white
+                    hover:file:bg-gray-700
+                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+
+            <x-input-error
+                id="avatar-image-error"
+                class="mt-2"
+                :messages="$errors->get('avatar_image')"
+            />
+        </div>
+
+        {{-- ニックネーム入力欄 --}}
         <div>
             <x-input-label for="name" :value="__('Name')" />
             <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
             <x-input-error class="mt-2" :messages="$errors->get('name')" />
         </div>
 
+        {{-- メールアドレス入力欄 --}}
         <div>
             <x-input-label for="email" :value="__('Email')" />
             <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $user->email)" required autocomplete="username" />
@@ -47,6 +121,7 @@
             @endif
         </div>
 
+        {{-- 自己紹介入力欄 --}}
         <div>
             <x-input-label for="profile" :value="__('Self Introduction')" />
             <textarea
@@ -62,6 +137,7 @@
             <x-input-error class="mt-2" :messages="$errors->get('profile')" />
         </div>
 
+        {{-- 更新ボタンと保存完了メッセージ --}}
         <div class="flex items-center gap-4">
             <x-primary-button>{{ __('Save') }}</x-primary-button>
 
