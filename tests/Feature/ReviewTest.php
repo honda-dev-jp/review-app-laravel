@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Item;
 use App\Models\Review;
+use App\Models\ReviewComment;
 use App\Models\User;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ReviewTest extends TestCase
@@ -82,6 +84,53 @@ class ReviewTest extends TestCase
         $response->assertRedirect(route('login'));
 
         $this->assertDatabaseCount('reviews', 0);
+    }
+
+    /**
+     * 作品詳細のレビュー投稿者と返信投稿者へ、それぞれのアバターが表示されることを確認する。
+     */
+    public function test_item_show_displays_review_and_comment_author_avatars(): void
+    {
+        Storage::fake('public');
+
+        $reviewerAvatarPath = 'avatars/reviewer-avatar.jpg';
+        $commenterAvatarPath = 'avatars/commenter-avatar.jpg';
+        Storage::disk('public')->put($reviewerAvatarPath, 'reviewer avatar');
+        Storage::disk('public')->put($commenterAvatarPath, 'commenter avatar');
+
+        $reviewer = User::factory()->create(['avatar_path' => $reviewerAvatarPath]);
+        $commenter = User::factory()->create(['avatar_path' => $commenterAvatarPath]);
+        $review = Review::factory()->for($reviewer)->create([
+            'body' => 'アバター表示確認用レビューです。',
+        ]);
+        ReviewComment::query()->create([
+            'review_id' => $review->id,
+            'user_id' => $commenter->id,
+            'parent_id' => null,
+            'body' => 'アバター表示確認用返信です。',
+        ]);
+
+        $response = $this->get(route('items.show', $review->item_id));
+
+        $response
+            ->assertOk()
+            ->assertSeeText($reviewer->name)
+            ->assertSeeText($commenter->name);
+
+        $xpath = $this->createXPath($response->getContent());
+        $reviewerAvatars = $xpath->query(sprintf(
+            '//img[@src="%s"]',
+            Storage::disk('public')->url($reviewerAvatarPath)
+        ));
+        $commenterAvatars = $xpath->query(sprintf(
+            '//img[@src="%s"]',
+            Storage::disk('public')->url($commenterAvatarPath)
+        ));
+
+        $this->assertNotFalse($reviewerAvatars);
+        $this->assertCount(1, $reviewerAvatars);
+        $this->assertNotFalse($commenterAvatars);
+        $this->assertCount(1, $commenterAvatars);
     }
 
     /**

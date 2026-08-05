@@ -28,15 +28,25 @@
 
         <section class="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900">
-                        レビュー履歴
-                    </h2>
-                    <p class="mt-1 text-sm text-slate-500">
-                        自分が投稿したレビューだけを新しい順に表示しています。
-                    </p>
+
+                {{-- 左側 --}}
+                <div class="flex items-center gap-4">
+                    <x-user-avatar
+                        :user="Auth::user()"
+                        alt=""
+                        class="h-12 w-12"
+                    />
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">
+                            レビュー履歴
+                        </h2>
+                        <p class="mt-1 text-sm text-slate-500">
+                            自分が投稿したレビューだけを新しい順に表示しています。
+                        </p>
+                    </div>
                 </div>
 
+                {{-- 右側 --}}
                 <p class="text-sm font-semibold text-slate-500">
                     {{ number_format($reviews->total()) }}件
                 </p>

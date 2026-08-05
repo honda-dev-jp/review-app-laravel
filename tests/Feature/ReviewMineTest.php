@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\Review;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ReviewMineTest extends TestCase
@@ -41,6 +42,31 @@ class ReviewMineTest extends TestCase
             ->assertSee('サンプル映画テスト')
             ->assertSee('本人レビュー本文です。')
             ->assertSee('レビューを削除する');
+    }
+
+    /**
+     * 本人レビュー一覧固有の表示とPC・モバイル用ナビゲーションは別要素であるため、
+     * いずれか一つだけアバター表示が欠落する回帰を防ぐ。
+     */
+    public function test_my_reviews_page_and_both_navigation_variants_display_avatar(): void
+    {
+        Storage::fake('public');
+
+        $avatarPath = 'avatars/my-reviews-avatar.jpg';
+        Storage::disk('public')->put($avatarPath, 'avatar image');
+
+        $user = User::factory()->create(['avatar_path' => $avatarPath]);
+        $avatarUrl = Storage::disk('public')->url($avatarPath);
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('reviews.mine'));
+
+        $response->assertOk();
+        $this->assertSame(3, substr_count(
+            $response->getContent(),
+            'src="'.$avatarUrl.'"'
+        ));
     }
 
     /**

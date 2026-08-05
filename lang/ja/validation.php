@@ -170,6 +170,14 @@ return [
         'terms' => [
             'required' => '登録には規約への同意が必須となります。',
         ],
+        'profile' => [
+            'max' => '自己紹介は1000文字以内で入力してください。',
+        ],
+        'avatar_image' => [
+            'mimes' => 'アップロードできる画像の形式はJPEG、PNG、WebPです。',
+            'max' => 'アップロードする画像の容量は2MB以下にしてください。',
+            'uploaded' => 'ユーザーアイコンをアップロードできませんでした。容量が2MB以下か確認してください。',
+        ],
     ],
 
     /*
@@ -189,6 +197,7 @@ return [
         'amount' => '額',
         'area' => 'エリア',
         'available' => '利用可能',
+        'avatar_image' => 'ユーザーアイコン',
         'birthday' => '誕生日',
         'body' => '本文',
         'city' => '市',
@@ -231,6 +240,7 @@ return [
         'postal_code' => '郵便番号',
         'prefecture' => '都道府県',
         'price' => '価格',
+        'profile' => '自己紹介',
         'province' => '都道府県',
         'recaptcha_response_field' => 'recaptcha応答フィールド',
         'remember' => '記憶',
