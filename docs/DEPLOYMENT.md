@@ -489,11 +489,13 @@ php artisan migrate:rollback
 
 ## 12. storageと画像
 
-ユーザーアバターや作品サムネイルを扱う場合、公開が必要なファイルだけを公開する。
+ユーザーアイコンや作品サムネイルを扱う場合、公開が必要なファイルだけを公開する。
 
 個人情報性が高い画像や非公開画像は公開ディレクトリに直接置かない。
 
-ユーザーアバターはpublicディスクの `avatars`（`storage/app/public/avatars`）へ保存し、公開に `storage:link` を使用する。共通のNo Image画像は `public/images/no-image.png` に配置する固定アセットとする。
+ユーザーアイコンはpublicディスクの `avatars`（`storage/app/public/avatars`）へ保存し、公開に `storage:link` を使用する。本番環境ではこの保存先へアプリケーションが書き込める権限を設定する。アップロード画像はGit管理せず、外部ストレージやCDNも使用しない。
+
+共通のNo Image画像は `public/images/no-image.png` に配置する固定アセットであり、アップロード画像と異なりGit管理対象とする。
 
 XServer上での `storage:link` は未検証とし、詳細な確認事項は以下に整理する。
 
