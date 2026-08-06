@@ -162,6 +162,10 @@
                             <select
                                 id="rating"
                                 name="rating"
+                                @error('rating')
+                                    aria-invalid="true"
+                                    aria-describedby="review-rating-error"
+                                @enderror
                                 class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             >
                                 <option value="">評価を選択してください</option>
@@ -173,7 +177,10 @@
                             </select>
 
                             @error('rating')
-                                <p class="mt-2 text-sm font-semibold text-red-600">
+                                <p
+                                    id="review-rating-error"
+                                    class="mt-2 text-sm font-semibold text-red-600"
+                                >
                                     {{ $message }}
                                 </p>
                             @enderror

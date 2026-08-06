@@ -92,15 +92,48 @@
         {{-- ニックネーム入力欄 --}}
         <div>
             <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
+
+            <x-text-input
+                id="name"
+                name="name"
+                type="text"
+                class="mt-1 block w-full"
+                :value="old('name', $user->name)"
+                :aria-invalid="$errors->has('name') ? 'true' : null"
+                :aria-describedby="$errors->has('name') ? 'profile-name-error' : null"
+                required
+                autofocus
+                autocomplete="name"
+            />
+
+            <x-input-error
+                id="profile-name-error"
+                class="mt-2"
+                :messages="$errors->get('name')"
+            />
         </div>
 
         {{-- メールアドレス入力欄 --}}
         <div>
             <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $user->email)" required autocomplete="username" />
-            <x-input-error class="mt-2" :messages="$errors->get('email')" />
+
+            <x-text-input
+                id="email"
+                name="email"
+                type="email"
+                class="mt-1 block w-full"
+                :value="old('email', $user->email)"
+                :aria-invalid="$errors->has('email') ? 'true' : null"
+                :aria-describedby="$errors->has('email') ? 'profile-email-error' : null"
+                required
+                autocomplete="username"
+            />
+
+            <x-input-error
+                id="profile-email-error"
+                class="mt-2"
+                :messages="$errors->get('email')"
+            />
 
             @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
                 <div>
@@ -124,17 +157,26 @@
         {{-- 自己紹介入力欄 --}}
         <div>
             <x-input-label for="profile" :value="__('Self Introduction')" />
+
             <textarea
                 id="profile"
                 name="profile"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 rows="5"
                 maxlength="1000"
+                @error('profile')
+                    aria-invalid="true"
+                    aria-describedby="profile-error"
+                @enderror
             >{{ old('profile', $user->profile) }}</textarea>
             <p class="mt-1 text-sm text-gray-500">
                 {{ __('Please enter within 1000 characters.') }}
             </p>
-            <x-input-error class="mt-2" :messages="$errors->get('profile')" />
+            <x-input-error
+                id="profile-error"
+                class="mt-2"
+                :messages="$errors->get('profile')"
+            />
         </div>
 
         {{-- 更新ボタンと保存完了メッセージ --}}

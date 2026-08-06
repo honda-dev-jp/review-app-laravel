@@ -1,4 +1,7 @@
 <section class="space-y-6">
+    {{-- ==================== 会員退会セクション：開始 ==================== --}}
+
+    {{-- 退会機能の見出し・説明 --}}
     <header>
         <h2 class="text-lg font-medium text-gray-900">
             {{ __('Delete Account') }}
@@ -9,47 +12,80 @@
         </p>
     </header>
 
+    {{-- 退会確認モーダルを開くボタン --}}
     <x-danger-button
         x-data=""
         x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')"
-    >{{ __('Delete Account') }}</x-danger-button>
+    >
+        {{ __('Delete Account') }}
+    </x-danger-button>
 
-    <x-modal name="confirm-user-deletion" :show="$errors->userDeletion->isNotEmpty()" focusable>
-        <form method="post" action="{{ route('profile.destroy') }}" class="p-6">
+    {{-- ==================== 退会確認モーダル：開始 ==================== --}}
+    <x-modal
+        name="confirm-user-deletion"
+        :show="$errors->userDeletion->isNotEmpty()"
+        focusable
+    >
+        {{-- 退会処理送信フォーム --}}
+        <form
+            method="post"
+            action="{{ route('profile.destroy') }}"
+            class="p-6"
+        >
             @csrf
             @method('delete')
 
+            {{-- モーダルの見出し --}}
             <h2 class="text-lg font-medium text-gray-900">
                 {{ __('Are you sure you want to delete your account?') }}
             </h2>
 
+            {{-- 退会後のデータと確認方法の説明 --}}
             <p class="mt-1 whitespace-pre-line text-sm text-gray-600">
                 {{ __('Once your account is deleted, it cannot be restored. Your reviews and replies will remain and be displayed anonymously. Please enter your current password to confirm account deletion.') }}
             </p>
 
+            {{-- 現在のパスワード入力欄 --}}
             <div class="mt-6">
-                <x-input-label for="password" value="{{ __('Current Password') }}" class="sr-only" />
+                <x-input-label
+                    for="password"
+                    value="{{ __('Current Password') }}"
+                    class="sr-only"
+                />
 
                 <x-text-input
                     id="password"
                     name="password"
                     type="password"
                     class="mt-1 block w-3/4"
+                    :aria-invalid="$errors->userDeletion->has('password') ? 'true' : null"
+                    :aria-describedby="$errors->userDeletion->has('password') ? 'user-deletion-password-error' : null"
                     placeholder="{{ __('Current Password') }}"
                 />
 
-                <x-input-error :messages="$errors->userDeletion->get('password')" class="mt-2" />
+                {{-- userDeletionエラーバッグのパスワードエラーを表示 --}}
+                <x-input-error
+                    id="user-deletion-password-error"
+                    :messages="$errors->userDeletion->get('password')"
+                    class="mt-2"
+                />
             </div>
 
+            {{-- キャンセル・退会実行ボタン --}}
             <div class="mt-6 flex justify-end">
+                {{-- モーダルを閉じる --}}
                 <x-secondary-button x-on:click="$dispatch('close')">
                     {{ __('Cancel') }}
                 </x-secondary-button>
 
+                {{-- 退会処理を送信する --}}
                 <x-danger-button class="ms-3">
                     {{ __('Delete Account') }}
                 </x-danger-button>
             </div>
         </form>
     </x-modal>
+    {{-- ==================== 退会確認モーダル：終了 ==================== --}}
+
+    {{-- ==================== 会員退会セクション：終了 ==================== --}}
 </section>
