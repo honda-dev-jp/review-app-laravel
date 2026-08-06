@@ -49,6 +49,197 @@ class ProfileTest extends TestCase
     }
 
     /**
+     * 複数フォームが同居する通常表示で、エラー用ARIA属性やメッセージIDを出力しないことを確認する。
+     */
+    public function test_profile_forms_do_not_output_error_aria_attributes_normally(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('profile.edit'));
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $inputIds = [
+            'name',
+            'email',
+            'profile',
+            'update_password_current_password',
+            'update_password_password',
+            'password',
+        ];
+
+        foreach ($inputIds as $id) {
+            $input = $this->getSingleElementById($xpath, $id);
+            $labels = $xpath->query(sprintf('//label[@for="%s"]', $id));
+
+            $this->assertFalse($input->hasAttribute('aria-invalid'));
+            $this->assertFalse($input->hasAttribute('aria-describedby'));
+            $this->assertNotFalse($labels);
+            $this->assertCount(1, $labels);
+        }
+
+        $errorIds = [
+            'profile-name-error',
+            'profile-email-error',
+            'profile-error',
+            'update-password-current-password-error',
+            'update-password-password-error',
+            'user-deletion-password-error',
+        ];
+
+        foreach ($errorIds as $id) {
+            $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+            $this->assertNotFalse($elements);
+            $this->assertCount(0, $elements);
+        }
+    }
+
+    /**
+     * プロフィール情報の各エラーを対象入力へ関連付け、他フォームへ漏らさないことを確認する。
+     */
+    public function test_profile_information_validation_errors_have_accessible_aria_attributes(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->followingRedirects()
+            ->patch('/profile', [
+                'name' => '',
+                'email' => '',
+                'profile' => str_repeat('a', 1001),
+            ]);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $cases = [
+            'name' => [
+                'error_id' => 'profile-name-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.name'),
+                ]),
+            ],
+            'email' => [
+                'error_id' => 'profile-email-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.email'),
+                ]),
+            ],
+            'profile' => [
+                'error_id' => 'profile-error',
+                'message' => __('validation.custom.profile.max'),
+            ],
+        ];
+
+        foreach ($cases as $field => $case) {
+            $input = $this->getSingleElementById($xpath, $field);
+            $error = $this->getSingleElementById($xpath, $case['error_id']);
+
+            $this->assertSame('true', $input->getAttribute('aria-invalid'));
+            $this->assertSame($case['error_id'], $input->getAttribute('aria-describedby'));
+            $this->assertSame($case['message'], trim($error->textContent));
+        }
+
+        foreach (['update_password_current_password', 'update_password_password', 'password'] as $id) {
+            $input = $this->getSingleElementById($xpath, $id);
+
+            $this->assertFalse($input->hasAttribute('aria-invalid'));
+            $this->assertFalse($input->hasAttribute('aria-describedby'));
+        }
+    }
+
+    /**
+     * updatePasswordバッグのエラーをパスワード変更フォーム内だけへ表示することを確認する。
+     */
+    public function test_password_update_validation_errors_are_isolated_with_accessible_aria_attributes(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->followingRedirects()
+            ->put('/password', [
+                'current_password' => '',
+                'password' => '',
+                'password_confirmation' => '',
+            ]);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $cases = [
+            'update_password_current_password' => [
+                'error_id' => 'update-password-current-password-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.current_password'),
+                ]),
+            ],
+            'update_password_password' => [
+                'error_id' => 'update-password-password-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.password'),
+                ]),
+            ],
+        ];
+
+        foreach ($cases as $field => $case) {
+            $input = $this->getSingleElementById($xpath, $field);
+            $error = $this->getSingleElementById($xpath, $case['error_id']);
+
+            $this->assertSame('true', $input->getAttribute('aria-invalid'));
+            $this->assertSame($case['error_id'], $input->getAttribute('aria-describedby'));
+            $this->assertSame($case['message'], trim($error->textContent));
+        }
+
+        foreach (['name', 'email', 'profile', 'password'] as $id) {
+            $input = $this->getSingleElementById($xpath, $id);
+
+            $this->assertFalse($input->hasAttribute('aria-invalid'));
+            $this->assertFalse($input->hasAttribute('aria-describedby'));
+        }
+    }
+
+    /**
+     * userDeletionバッグのエラーを退会フォーム内だけへ表示し、IDを一意に保つことを確認する。
+     */
+    public function test_user_deletion_validation_error_is_isolated_with_accessible_aria_attributes(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->followingRedirects()
+            ->delete('/profile', [
+                'password' => 'wrong-password',
+            ]);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $passwordInput = $this->getSingleElementById($xpath, 'password');
+        $error = $this->getSingleElementById($xpath, 'user-deletion-password-error');
+
+        $this->assertSame('true', $passwordInput->getAttribute('aria-invalid'));
+        $this->assertSame('user-deletion-password-error', $passwordInput->getAttribute('aria-describedby'));
+        $this->assertSame(__('validation.current_password'), trim($error->textContent));
+
+        foreach (['name', 'email', 'profile', 'update_password_current_password', 'update_password_password'] as $id) {
+            $input = $this->getSingleElementById($xpath, $id);
+
+            $this->assertFalse($input->hasAttribute('aria-invalid'));
+            $this->assertFalse($input->hasAttribute('aria-describedby'));
+        }
+    }
+
+    /**
      * プロフィール情報を更新できることを確認する。
      */
     public function test_profile_information_can_be_updated(): void
@@ -639,9 +830,15 @@ class ProfileTest extends TestCase
 
         $normalXPath = $this->createXPath($normalResponse->getContent());
         $normalInputs = $normalXPath->query('//*[@id="avatar_image"]');
+        $normalLabels = $normalXPath->query('//label[@for="avatar_image"]');
+        $normalErrors = $normalXPath->query('//*[@id="avatar-image-error"]');
 
         $this->assertNotFalse($normalInputs);
         $this->assertCount(1, $normalInputs);
+        $this->assertNotFalse($normalLabels);
+        $this->assertCount(1, $normalLabels);
+        $this->assertNotFalse($normalErrors);
+        $this->assertCount(0, $normalErrors);
 
         $normalInput = $normalInputs->item(0);
         $this->assertInstanceOf(DOMElement::class, $normalInput);
@@ -1144,6 +1341,19 @@ class ProfileTest extends TestCase
             libxml_clear_errors();
             libxml_use_internal_errors($previousUseInternalErrors);
         }
+    }
+
+    private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
+    {
+        $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+        $this->assertNotFalse($elements);
+        $this->assertCount(1, $elements);
+
+        $element = $elements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $element);
+
+        return $element;
     }
 
     private function assertAvatarCanBeUploaded(UploadedFile $avatarImage): void

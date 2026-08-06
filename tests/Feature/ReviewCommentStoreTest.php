@@ -142,13 +142,25 @@ class ReviewCommentStoreTest extends TestCase
         $normalXPath = $this->createXPath($normalHtml);
         $normalSourceTextarea = $this->getSingleElementById($normalXPath, 'comment-body-'.$review->id);
         $normalOtherTextarea = $this->getSingleElementById($normalXPath, 'comment-body-'.$otherReview->id);
+        $normalSourceLabels = $normalXPath->query('//label[@for="comment-body-'.$review->id.'"]');
+        $normalOtherLabels = $normalXPath->query('//label[@for="comment-body-'.$otherReview->id.'"]');
+        $normalSourceErrors = $normalXPath->query('//*[@id="comment-body-error-'.$review->id.'"]');
+        $normalOtherErrors = $normalXPath->query('//*[@id="comment-body-error-'.$otherReview->id.'"]');
 
         $this->assertSame('textarea', $normalSourceTextarea->tagName);
         $this->assertFalse($normalSourceTextarea->hasAttribute('aria-invalid'));
         $this->assertFalse($normalSourceTextarea->hasAttribute('aria-describedby'));
+        $this->assertNotFalse($normalSourceLabels);
+        $this->assertCount(1, $normalSourceLabels);
+        $this->assertNotFalse($normalSourceErrors);
+        $this->assertCount(0, $normalSourceErrors);
         $this->assertSame('textarea', $normalOtherTextarea->tagName);
         $this->assertFalse($normalOtherTextarea->hasAttribute('aria-invalid'));
         $this->assertFalse($normalOtherTextarea->hasAttribute('aria-describedby'));
+        $this->assertNotFalse($normalOtherLabels);
+        $this->assertCount(1, $normalOtherLabels);
+        $this->assertNotFalse($normalOtherErrors);
+        $this->assertCount(0, $normalOtherErrors);
 
         $response = $this
             ->actingAs($user)

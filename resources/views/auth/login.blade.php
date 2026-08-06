@@ -8,20 +8,46 @@
         <!-- Email Address -->
         <div>
             <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+
+            <x-text-input
+                id="email"
+                class="block mt-1 w-full"
+                type="email"
+                name="email"
+                :value="old('email')"
+                :aria-invalid="$errors->has('email') ? 'true' : null"
+                :aria-describedby="$errors->has('email') ? 'login-email-error' : null"
+                required
+                autofocus
+                autocomplete="username"
+            />
+            <x-input-error
+                id="login-email-error"
+                :messages="$errors->get('email')"
+                class="mt-2"
+            />
         </div>
 
         <!-- Password -->
         <div class="mt-4">
             <x-input-label for="password" :value="__('Password')" />
 
-            <x-text-input id="password" class="block mt-1 w-full"
-                            type="password"
-                            name="password"
-                            required autocomplete="current-password" />
+            <x-text-input
+                id="password"
+                class="block mt-1 w-full"
+                type="password"
+                name="password"
+                :aria-invalid="$errors->has('password') ? 'true' : null"
+                :aria-describedby="$errors->has('password') ? 'login-password-error' : null"
+                required
+                autocomplete="current-password"
+            />
 
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+            <x-input-error
+                id="login-password-error"
+                :messages="$errors->get('password')"
+                class="mt-2"
+            />
         </div>
 
         <!-- Remember Me -->

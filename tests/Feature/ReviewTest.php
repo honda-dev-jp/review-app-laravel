@@ -175,10 +175,13 @@ class ReviewTest extends TestCase
 
         $normalXPath = $this->createXPath($normalHtml);
         $normalTextarea = $this->getSingleElementById($normalXPath, 'body');
+        $normalLabels = $normalXPath->query('//label[@for="body"]');
 
         $this->assertSame('textarea', $normalTextarea->tagName);
         $this->assertFalse($normalTextarea->hasAttribute('aria-invalid'));
         $this->assertFalse($normalTextarea->hasAttribute('aria-describedby'));
+        $this->assertNotFalse($normalLabels);
+        $this->assertCount(1, $normalLabels);
 
         $normalErrorElements = $normalXPath->query('//*[@id="review-body-error"]');
         $this->assertNotFalse($normalErrorElements);
@@ -206,6 +209,78 @@ class ReviewTest extends TestCase
         $this->assertSame('true', $textarea->getAttribute('aria-invalid'));
         $this->assertSame('review-body-error', $textarea->getAttribute('aria-describedby'));
         $this->assertSame('レビュー本文を入力してください。', trim($errorElement->textContent));
+    }
+
+    /**
+     * 評価エラーをselect自身へ関連付け、レビュー本文と返信フォームへエラー状態を漏らさないことを確認する。
+     */
+    public function test_review_rating_validation_error_has_accessible_aria_attributes(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $item = Item::factory()->create();
+        $otherReview = Review::factory()->create([
+            'user_id' => $otherUser->id,
+            'item_id' => $item->id,
+        ]);
+
+        $normalResponse = $this
+            ->actingAs($user)
+            ->get(route('items.show', $item));
+
+        $normalResponse->assertOk();
+
+        $normalXPath = $this->createXPath($normalResponse->getContent());
+        $normalRating = $this->getSingleElementById($normalXPath, 'rating');
+        $normalBody = $this->getSingleElementById($normalXPath, 'body');
+        $normalCommentBody = $this->getSingleElementById($normalXPath, 'comment-body-'.$otherReview->id);
+        $ratingLabels = $normalXPath->query('//label[@for="rating"]');
+
+        foreach ([$normalRating, $normalBody, $normalCommentBody] as $element) {
+            $this->assertFalse($element->hasAttribute('aria-invalid'));
+            $this->assertFalse($element->hasAttribute('aria-describedby'));
+        }
+
+        $this->assertNotFalse($ratingLabels);
+        $this->assertCount(1, $ratingLabels);
+
+        $normalRatingErrors = $normalXPath->query('//*[@id="review-rating-error"]');
+        $this->assertNotFalse($normalRatingErrors);
+        $this->assertCount(0, $normalRatingErrors);
+
+        $response = $this
+            ->actingAs($user)
+            ->followingRedirects()
+            ->post(route('reviews.store', $item), [
+                'rating' => '',
+                'body' => '評価エラー時のフォーム分離を確認するレビューです。',
+            ]);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $rating = $this->getSingleElementById($xpath, 'rating');
+        $error = $this->getSingleElementById($xpath, 'review-rating-error');
+        $body = $this->getSingleElementById($xpath, 'body');
+        $commentBody = $this->getSingleElementById($xpath, 'comment-body-'.$otherReview->id);
+
+        $this->assertSame('select', $rating->tagName);
+        $this->assertSame('true', $rating->getAttribute('aria-invalid'));
+        $this->assertSame('review-rating-error', $rating->getAttribute('aria-describedby'));
+        $this->assertSame('評価を選択してください。', trim($error->textContent));
+
+        foreach ([$body, $commentBody] as $element) {
+            $this->assertFalse($element->hasAttribute('aria-invalid'));
+            $this->assertFalse($element->hasAttribute('aria-describedby'));
+        }
+
+        $invalidElements = $xpath->query('//*[@aria-invalid="true"]');
+        $reviewBodyErrors = $xpath->query('//*[@id="review-body-error"]');
+
+        $this->assertNotFalse($invalidElements);
+        $this->assertCount(1, $invalidElements);
+        $this->assertNotFalse($reviewBodyErrors);
+        $this->assertCount(0, $reviewBodyErrors);
     }
 
     /**
