@@ -3,6 +3,9 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +24,45 @@ class PasswordResetTest extends TestCase
         $response = $this->get('/forgot-password');
 
         $response->assertStatus(200);
+
+        $xpath = $this->createXPath($response->getContent());
+        $emailInput = $this->getSingleElementById($xpath, 'email');
+        $emailLabels = $xpath->query('//label[@for="email"]');
+
+        $this->assertFalse($emailInput->hasAttribute('aria-invalid'));
+        $this->assertFalse($emailInput->hasAttribute('aria-describedby'));
+        $this->assertNotFalse($emailLabels);
+        $this->assertCount(1, $emailLabels);
+
+        $errorElements = $xpath->query('//*[@id="forgot-email-error"]');
+        $this->assertNotFalse($errorElements);
+        $this->assertCount(0, $errorElements);
+    }
+
+    /**
+     * リセット申請エラーを支援技術へ伝えられるよう、email自身とメッセージの関連付けを保証する。
+     */
+    public function test_reset_password_link_validation_error_has_accessible_aria_attributes(): void
+    {
+        $response = $this
+            ->from('/forgot-password')
+            ->followingRedirects()
+            ->post('/forgot-password', ['email' => '']);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $emailInput = $this->getSingleElementById($xpath, 'email');
+        $error = $this->getSingleElementById($xpath, 'forgot-email-error');
+
+        $this->assertSame('true', $emailInput->getAttribute('aria-invalid'));
+        $this->assertSame('forgot-email-error', $emailInput->getAttribute('aria-describedby'));
+        $this->assertSame(
+            __('validation.required', [
+                'attribute' => __('validation.attributes.email'),
+            ]),
+            trim($error->textContent)
+        );
     }
 
     /**
@@ -55,6 +97,82 @@ class PasswordResetTest extends TestCase
 
             return true;
         });
+    }
+
+    /**
+     * 正常表示を誤ってエラー状態として通知しないよう、不要なARIA属性とエラー要素の非出力を保証する。
+     */
+    public function test_reset_password_screen_does_not_output_error_aria_attributes_normally(): void
+    {
+        $response = $this->get('/reset-password/test-token?email=test%40example.com');
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+
+        foreach (['email', 'password'] as $id) {
+            $input = $this->getSingleElementById($xpath, $id);
+            $labels = $xpath->query(sprintf('//label[@for="%s"]', $id));
+
+            $this->assertFalse($input->hasAttribute('aria-invalid'));
+            $this->assertFalse($input->hasAttribute('aria-describedby'));
+            $this->assertNotFalse($labels);
+            $this->assertCount(1, $labels);
+        }
+
+        foreach (['reset-email-error', 'reset-password-error'] as $id) {
+            $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+            $this->assertNotFalse($elements);
+            $this->assertCount(0, $elements);
+        }
+    }
+
+    /**
+     * 再設定エラーを各入力へ正しく関連付け、対象外の確認入力へARIA属性を付けないことを保証する。
+     */
+    public function test_reset_password_validation_errors_have_accessible_aria_attributes(): void
+    {
+        $response = $this
+            ->from('/reset-password/test-token')
+            ->followingRedirects()
+            ->post('/reset-password', [
+                'token' => 'test-token',
+                'email' => '',
+                'password' => '',
+                'password_confirmation' => '',
+            ]);
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $cases = [
+            'email' => [
+                'error_id' => 'reset-email-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.email'),
+                ]),
+            ],
+            'password' => [
+                'error_id' => 'reset-password-error',
+                'message' => __('validation.required', [
+                    'attribute' => __('validation.attributes.password'),
+                ]),
+            ],
+        ];
+
+        foreach ($cases as $field => $case) {
+            $input = $this->getSingleElementById($xpath, $field);
+            $error = $this->getSingleElementById($xpath, $case['error_id']);
+
+            $this->assertSame('true', $input->getAttribute('aria-invalid'));
+            $this->assertSame($case['error_id'], $input->getAttribute('aria-describedby'));
+            $this->assertSame($case['message'], trim($error->textContent));
+        }
+
+        $confirmation = $this->getSingleElementById($xpath, 'password_confirmation');
+        $this->assertFalse($confirmation->hasAttribute('aria-invalid'));
+        $this->assertFalse($confirmation->hasAttribute('aria-describedby'));
     }
 
     /**
@@ -186,5 +304,36 @@ class PasswordResetTest extends TestCase
 
         // 未登録ユーザーへの通知処理が走らないことを、画面上のエラーとは別に保証する。
         Notification::assertNothingSent();
+    }
+
+    /**
+     * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するためXPathを生成する。
+     */
+    private function createXPath(string $html): DOMXPath
+    {
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+
+        try {
+            $document = new DOMDocument;
+            $this->assertTrue($document->loadHTML($html, LIBXML_NONET));
+
+            return new DOMXPath($document);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+        }
+    }
+
+    private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
+    {
+        $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
+
+        $this->assertNotFalse($elements);
+        $this->assertCount(1, $elements);
+
+        $element = $elements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $element);
+
+        return $element;
     }
 }
