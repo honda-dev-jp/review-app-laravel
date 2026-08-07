@@ -22,6 +22,9 @@ class ReviewCommentStoreTest extends TestCase
     {
         $user = User::factory()->create();
         $review = Review::factory()->create();
+        Review::factory()->create([
+            'item_id' => $review->item_id,
+        ]);
 
         $response = $this
             ->actingAs($user)
@@ -41,6 +44,23 @@ class ReviewCommentStoreTest extends TestCase
             'parent_id' => null,
             'body' => 'レビューへの返信コメントです。',
         ]);
+
+        $pageResponse = $this
+            ->actingAs($user)
+            ->get(route('items.show', $review->item_id));
+
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('返信コメントを投稿しました。', trim($statusElement->textContent));
     }
 
     /**

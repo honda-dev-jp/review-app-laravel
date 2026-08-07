@@ -38,6 +38,10 @@ class AuthenticationTest extends TestCase
             $this->assertNotFalse($elements);
             $this->assertCount(0, $elements);
         }
+
+        $statusElements = $xpath->query('//*[@role="status"]');
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(0, $statusElements);
     }
 
     public function test_login_validation_errors_have_accessible_aria_attributes(): void
@@ -116,6 +120,20 @@ class AuthenticationTest extends TestCase
 
         $this->assertGuest();
         $response->assertRedirect('/');
+
+        $pageResponse = $this->get('/');
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('ログアウトしました。', trim($statusElement->textContent));
     }
 
     /**
