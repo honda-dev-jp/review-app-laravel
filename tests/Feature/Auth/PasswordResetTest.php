@@ -30,6 +30,10 @@ class PasswordResetTest extends TestCase
         $emailInput = $this->getSingleElementById($xpath, 'email');
         $emailLabels = $xpath->query('//label[@for="email"]');
 
+        $this->assertSame('email', $emailInput->getAttribute('id'));
+        $this->assertSame('email', $emailInput->getAttribute('name'));
+        $this->assertSame('email', $emailInput->getAttribute('type'));
+        $this->assertSame('username', $emailInput->getAttribute('autocomplete'));
         $this->assertFalse($emailInput->hasAttribute('aria-invalid'));
         $this->assertFalse($emailInput->hasAttribute('aria-describedby'));
         $this->assertNotFalse($emailLabels);

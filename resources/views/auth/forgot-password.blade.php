@@ -23,6 +23,7 @@
                 :aria-describedby="$errors->has('email') ? 'forgot-email-error' : null"
                 required
                 autofocus
+                autocomplete="username"
             />
             <x-input-error
                 id="forgot-email-error"

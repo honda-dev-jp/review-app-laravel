@@ -1042,6 +1042,16 @@ class ProfileTest extends TestCase
         $this->assertNotFalse($passwordInputs);
         $this->assertCount(1, $passwordInputs);
 
+        // autocomplete属性が別要素へ誤って付いても通らないよう、ページ内の対象と退会フォーム内の入力が同一要素であることを保証する。
+        $passwordInput = $this->getSingleElementById($xpath, 'password');
+        $formPasswordInput = $passwordInputs->item(0);
+        $this->assertInstanceOf(DOMElement::class, $formPasswordInput);
+        $this->assertSame($passwordInput->getNodePath(), $formPasswordInput->getNodePath());
+        $this->assertSame('password', $passwordInput->getAttribute('id'));
+        $this->assertSame('password', $passwordInput->getAttribute('name'));
+        $this->assertSame('password', $passwordInput->getAttribute('type'));
+        $this->assertSame('current-password', $passwordInput->getAttribute('autocomplete'));
+
         $response
             ->assertOk()
             ->assertSeeText(__('Delete Account'))
