@@ -44,6 +44,20 @@ class ReviewTest extends TestCase
             'rating' => 5,
             'body' => 'とても面白い作品でした。',
         ]);
+
+        $pageResponse = $this->actingAs($user)->get(route('items.show', $item));
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('レビューを投稿しました。', trim($statusElement->textContent));
     }
 
     /**
@@ -186,6 +200,10 @@ class ReviewTest extends TestCase
         $normalErrorElements = $normalXPath->query('//*[@id="review-body-error"]');
         $this->assertNotFalse($normalErrorElements);
         $this->assertCount(0, $normalErrorElements);
+
+        $normalStatusElements = $normalXPath->query('//*[@role="status"]');
+        $this->assertNotFalse($normalStatusElements);
+        $this->assertCount(0, $normalStatusElements);
 
         $response = $this
             ->actingAs($user)
@@ -397,6 +415,21 @@ class ReviewTest extends TestCase
 
         $this->assertSame(3.0, (float) $item->rating);
         $this->assertSame(1, $item->rating_count);
+
+        // 削除元により戻り先が変わるため、作品詳細へ戻る経路の通知DOMをここで保証する。
+        $pageResponse = $this->actingAs($user)->get(route('items.show', $item));
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('レビューを削除しました。', trim($statusElement->textContent));
     }
 
     /**

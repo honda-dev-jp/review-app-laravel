@@ -96,6 +96,10 @@ class ProfileTest extends TestCase
             $this->assertNotFalse($elements);
             $this->assertCount(0, $elements);
         }
+
+        $statusElements = $xpath->query('//*[@role="status"]');
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(0, $statusElements);
     }
 
     /**
@@ -262,6 +266,26 @@ class ProfileTest extends TestCase
         $this->assertSame('Test User', $user->name);
         $this->assertSame('test@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
+
+        $pageResponse = $this->actingAs($user)->get('/profile');
+        $pageResponse->assertOk();
+
+        // 複数フォームの完了通知が混線せず、プロフィール更新分だけ出力されることを保証する。
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame(__('Saved.'), trim($statusElement->textContent));
+
+        // 完了メッセージを時間で消す実装へ戻さないため、Alpine.jsの自動非表示属性がないことを確認する。
+        foreach (['x-data', 'x-show', 'x-transition', 'x-init'] as $attribute) {
+            $this->assertFalse($statusElement->hasAttribute($attribute));
+        }
     }
 
     /**
@@ -1037,9 +1061,19 @@ class ProfileTest extends TestCase
             'id' => $user->id,
         ]);
 
-        $this->get(route('home'))
-            ->assertOk()
-            ->assertSeeText('アカウントを削除しました。');
+        $pageResponse = $this->get(route('home'));
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('アカウントを削除しました。', trim($statusElement->textContent));
     }
 
     /**

@@ -10,6 +10,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
@@ -37,6 +38,10 @@ class PasswordResetTest extends TestCase
         $errorElements = $xpath->query('//*[@id="forgot-email-error"]');
         $this->assertNotFalse($errorElements);
         $this->assertCount(0, $errorElements);
+
+        $statusElements = $xpath->query('//*[@role="status"]');
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(0, $statusElements);
     }
 
     /**
@@ -74,9 +79,28 @@ class PasswordResetTest extends TestCase
 
         $user = User::factory()->create();
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this
+            ->from('/forgot-password')
+            ->post('/forgot-password', ['email' => $user->email]);
 
         Notification::assertSentTo($user, ResetPassword::class);
+
+        $response->assertRedirect('/forgot-password');
+
+        $pageResponse = $this->get('/forgot-password');
+        $pageResponse->assertOk();
+
+        // 共通コンポーネント側と呼び出し側の双方へroleを付ける回帰を、通知要素1件のDOM検証で防ぐ。
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame(__(Password::RESET_LINK_SENT), trim($statusElement->textContent));
     }
 
     /**
@@ -200,6 +224,20 @@ class PasswordResetTest extends TestCase
             $response
                 ->assertSessionHasNoErrors()
                 ->assertRedirect(route('login'));
+
+            $loginResponse = $this->get(route('login'));
+            $loginResponse->assertOk();
+
+            $statusElements = $this->createXPath($loginResponse->getContent())
+                ->query('//*[@role="status"]');
+
+            $this->assertNotFalse($statusElements);
+            $this->assertCount(1, $statusElements);
+
+            $statusElement = $statusElements->item(0);
+            $this->assertInstanceOf(DOMElement::class, $statusElement);
+            $this->assertSame('status', $statusElement->getAttribute('role'));
+            $this->assertSame(__(Password::PASSWORD_RESET), trim($statusElement->textContent));
 
             $user->refresh();
 

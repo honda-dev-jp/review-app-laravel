@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Item;
 use App\Models\Review;
 use App\Models\User;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -42,6 +45,12 @@ class ReviewMineTest extends TestCase
             ->assertSee('サンプル映画テスト')
             ->assertSee('本人レビュー本文です。')
             ->assertSee('レビューを削除する');
+
+        $statusElements = $this->createXPath($response->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(0, $statusElements);
     }
 
     /**
@@ -234,6 +243,21 @@ class ReviewMineTest extends TestCase
         $this->assertDatabaseMissing('reviews', [
             'id' => $review->id,
         ]);
+
+        // 削除元により戻り先が変わるため、本人レビュー一覧へ戻る経路の通知DOMをここで保証する。
+        $pageResponse = $this->actingAs($user)->get(route('reviews.mine'));
+        $pageResponse->assertOk();
+
+        $statusElements = $this->createXPath($pageResponse->getContent())
+            ->query('//*[@role="status"]');
+
+        $this->assertNotFalse($statusElements);
+        $this->assertCount(1, $statusElements);
+
+        $statusElement = $statusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $statusElement);
+        $this->assertSame('status', $statusElement->getAttribute('role'));
+        $this->assertSame('レビューを削除しました。', trim($statusElement->textContent));
     }
 
     /**
@@ -384,5 +408,20 @@ class ReviewMineTest extends TestCase
             ->assertSee('action="'.route('reviews.destroy', $review).'"', false)
             ->assertSee('name="_method" value="DELETE"', false)
             ->assertSee('name="redirect_to" value="reviews.mine"', false);
+    }
+
+    private function createXPath(string $html): DOMXPath
+    {
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+
+        try {
+            $document = new DOMDocument;
+            $this->assertTrue($document->loadHTML($html, LIBXML_NONET));
+
+            return new DOMXPath($document);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+        }
     }
 }
