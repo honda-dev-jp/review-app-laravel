@@ -146,7 +146,10 @@
                     </p>
 
                     @if (session('status') === 'verification-link-sent')
-                        <p class="mt-2 font-medium text-sm text-green-600">
+                        <p
+                            role="status"
+                            class="mt-2 font-medium text-sm text-green-600"
+                        >
                             {{ __('A new verification link has been sent to your email address.') }}
                         </p>
                     @endif
@@ -185,10 +188,7 @@
 
             @if (session('status') === 'profile-updated')
                 <p
-                    x-data="{ show: true }"
-                    x-show="show"
-                    x-transition
-                    x-init="setTimeout(() => show = false, 2000)"
+                    role="status"
                     class="text-sm text-gray-600"
                 >{{ __('Saved.') }}</p>
             @endif
