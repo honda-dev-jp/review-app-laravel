@@ -60,6 +60,7 @@
                     class="mt-1 block w-3/4"
                     :aria-invalid="$errors->userDeletion->has('password') ? 'true' : null"
                     :aria-describedby="$errors->userDeletion->has('password') ? 'user-deletion-password-error' : null"
+                    autocomplete="current-password"
                     placeholder="{{ __('Current Password') }}"
                 />
 
