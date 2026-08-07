@@ -158,7 +158,7 @@
         </div>
 
         {{-- 自己紹介入力欄 --}}
-        <div>
+        <div id="profile-information">
             <x-input-label for="profile" :value="__('Self Introduction')" />
 
             <textarea
@@ -189,8 +189,11 @@
             @if (session('status') === 'profile-updated')
                 <p
                     role="status"
-                    class="text-sm text-gray-600"
-                >{{ __('Saved.') }}</p>
+                    class="flex items-center gap-2 text-base font-semibold text-green-700"
+                >
+                    <span aria-hidden="true">✓</span>
+                    <span>{{ __('Saved.') }}</span>
+                </p>
             @endif
         </div>
     </form>

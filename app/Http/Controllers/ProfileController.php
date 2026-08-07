@@ -96,7 +96,9 @@ class ProfileController extends Controller
             }
         }
 
-        return Redirect::route('profile.edit')->with('status', 'profile-updated');
+        return Redirect::route('profile.edit')
+            ->withFragment('profile-information')
+            ->with('status', 'profile-updated');
     }
 
     /**

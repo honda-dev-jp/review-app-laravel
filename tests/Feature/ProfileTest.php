@@ -32,6 +32,9 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $xpath = $this->createXPath($response->getContent());
+        // フラグメント移動先を一意に保ち、ブラウザが対象フォーム付近へ確実に移動できることを保証する。
+        $profileInformation = $this->getSingleElementById($xpath, 'profile-information');
+        $updatePassword = $this->getSingleElementById($xpath, 'update-password');
         $accountHeadings = $xpath->query('//h2[normalize-space(.)="アカウント"]');
         $accountNavigationLinks = $xpath->query(sprintf(
             '//a[@href="%s" and normalize-space(.)="アカウント"]',
@@ -40,6 +43,8 @@ class ProfileTest extends TestCase
 
         $this->assertNotFalse($accountHeadings);
         $this->assertCount(1, $accountHeadings);
+        $this->assertSame('div', $profileInformation->tagName);
+        $this->assertSame('div', $updatePassword->tagName);
         $this->assertNotFalse($accountNavigationLinks);
         $this->assertCount(3, $accountNavigationLinks);
 
@@ -259,7 +264,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $user->refresh();
 
@@ -271,8 +276,8 @@ class ProfileTest extends TestCase
         $pageResponse->assertOk();
 
         // 複数フォームの完了通知が混線せず、プロフィール更新分だけ出力されることを保証する。
-        $statusElements = $this->createXPath($pageResponse->getContent())
-            ->query('//*[@role="status"]');
+        $xpath = $this->createXPath($pageResponse->getContent());
+        $statusElements = $xpath->query('//*[@role="status"]');
 
         $this->assertNotFalse($statusElements);
         $this->assertCount(1, $statusElements);
@@ -280,7 +285,42 @@ class ProfileTest extends TestCase
         $statusElement = $statusElements->item(0);
         $this->assertInstanceOf(DOMElement::class, $statusElement);
         $this->assertSame('status', $statusElement->getAttribute('role'));
-        $this->assertSame(__('Saved.'), trim($statusElement->textContent));
+
+        // アンカーだけが無関係な位置へ移動しても通らないよう、同じフォーム内で後方の成功通知へ到達できることを保証する。
+        $profileInformation = $this->getSingleElementById($xpath, 'profile-information');
+        $profileForms = $xpath->query('ancestor::form[1]', $profileInformation);
+        $this->assertNotFalse($profileForms);
+        $this->assertCount(1, $profileForms);
+
+        $profileForm = $profileForms->item(0);
+        $this->assertInstanceOf(DOMElement::class, $profileForm);
+
+        $anchoredStatusElements = $xpath->query(
+            './/*[@role="status" and preceding::*[@id="profile-information"]]',
+            $profileForm
+        );
+        $this->assertNotFalse($anchoredStatusElements);
+        $this->assertCount(1, $anchoredStatusElements);
+
+        $anchoredStatusElement = $anchoredStatusElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $anchoredStatusElement);
+        $this->assertSame($statusElement->getNodePath(), $anchoredStatusElement->getNodePath());
+
+        // 装飾用のチェック記号が成功文言として重複読み上げされないことを保証する。
+        $checkMarkElements = $xpath->query('./span[@aria-hidden="true"]', $statusElement);
+        $messageElements = $xpath->query('./span[not(@aria-hidden)]', $statusElement);
+        $this->assertNotFalse($checkMarkElements);
+        $this->assertCount(1, $checkMarkElements);
+        $this->assertNotFalse($messageElements);
+        $this->assertCount(1, $messageElements);
+
+        $checkMarkElement = $checkMarkElements->item(0);
+        $messageElement = $messageElements->item(0);
+        $this->assertInstanceOf(DOMElement::class, $checkMarkElement);
+        $this->assertInstanceOf(DOMElement::class, $messageElement);
+        $this->assertSame('true', $checkMarkElement->getAttribute('aria-hidden'));
+        $this->assertSame('✓', trim($checkMarkElement->textContent));
+        $this->assertSame(__('Saved.'), trim($messageElement->textContent));
 
         // 完了メッセージを時間で消す実装へ戻さないため、Alpine.jsの自動非表示属性がないことを確認する。
         foreach (['x-data', 'x-show', 'x-transition', 'x-init'] as $attribute) {
@@ -305,7 +345,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $user->refresh();
 
@@ -330,7 +370,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $this->assertSame($profile, $user->refresh()->profile);
     }
@@ -485,7 +525,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $this->assertSame($oldAvatarPath, $user->refresh()->avatar_path);
         Storage::disk('public')->assertExists($oldAvatarPath);
@@ -516,7 +556,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $newAvatarPath = $user->refresh()->avatar_path;
         $this->assertIsString($newAvatarPath);
@@ -548,7 +588,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $newAvatarPath = $user->refresh()->avatar_path;
         $this->assertIsString($newAvatarPath);
@@ -754,7 +794,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $newAvatarPath = $user->refresh()->avatar_path;
         $this->assertIsString($newAvatarPath);
@@ -921,7 +961,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $this->assertNotNull($user->refresh()->avatar_path);
         $this->assertNotSame($otherAvatarPath, $user->avatar_path);
@@ -950,7 +990,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $user->refresh();
 
@@ -1026,7 +1066,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
@@ -1407,7 +1447,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('profile.edit'));
+            ->assertRedirect(route('profile.edit').'#profile-information');
 
         $avatarPath = $user->refresh()->avatar_path;
         $this->assertIsString($avatarPath);
