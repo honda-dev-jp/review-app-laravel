@@ -43,6 +43,7 @@ class ReviewMineTest extends TestCase
             ->assertSee('投稿したレビュー')
             ->assertSee('レビュー履歴')
             ->assertSee('サンプル映画テスト')
+            ->assertSee('5.0')
             ->assertSee('本人レビュー本文です。')
             ->assertSee('レビューを削除する');
 

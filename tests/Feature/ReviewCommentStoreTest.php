@@ -117,6 +117,24 @@ class ReviewCommentStoreTest extends TestCase
     }
 
     /**
+     * 存在しないレビューへの返信投稿が404となり、返信を保存しないことを保証する。
+     */
+    public function test_store_returns_not_found_for_missing_review(): void
+    {
+        $user = User::factory()->create();
+
+        $this
+            ->actingAs($user)
+            ->post(route('reviews.comments.store', 999999), [
+                'body' => '存在しないレビューへの返信です。',
+                'form_review_id' => 999999,
+            ])
+            ->assertNotFound();
+
+        $this->assertDatabaseCount('review_comments', 0);
+    }
+
+    /**
      * 空の返信を表示・保存しないため、本文未入力が
      * reviewComment エラーバッグのバリデーションエラーになることを保証する。
      */

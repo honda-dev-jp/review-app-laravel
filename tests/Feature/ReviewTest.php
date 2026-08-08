@@ -6,11 +6,13 @@ use App\Models\Item;
 use App\Models\Review;
 use App\Models\ReviewComment;
 use App\Models\User;
+use App\Services\ItemRatingService;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Tests\TestCase;
 
 class ReviewTest extends TestCase
@@ -80,6 +82,98 @@ class ReviewTest extends TestCase
 
         $this->assertSame(4.0, (float) $item->rating);
         $this->assertSame(1, $item->rating_count);
+    }
+
+    /**
+     * 評価の下限値と本文の上限値が同時に指定されても保存できることを保証する。
+     */
+    public function test_review_store_accepts_rating_one_and_body_with_1000_characters(): void
+    {
+        $user = User::factory()->create();
+        $item = Item::factory()->create();
+        $body = str_repeat('a', 1000);
+
+        $response = $this
+            ->actingAs($user)
+            ->post(route('reviews.store', $item), [
+                'rating' => 1,
+                'body' => $body,
+            ]);
+
+        $response->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('reviews', [
+            'user_id' => $user->id,
+            'item_id' => $item->id,
+            'rating' => 1,
+            'body' => $body,
+        ]);
+    }
+
+    /**
+     * リクエスト中の識別子ではなく、認証ユーザーとURL上の作品でレビューが保存されることを保証する。
+     */
+    public function test_request_identifiers_cannot_override_review_relations(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $item = Item::factory()->create();
+        $otherItem = Item::factory()->create();
+
+        $this
+            ->actingAs($user)
+            ->post(route('reviews.store', $item), [
+                'user_id' => $otherUser->id,
+                'item_id' => $otherItem->id,
+                'rating' => 4,
+                'body' => '保存先を確認するレビューです。',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('reviews', [
+            'user_id' => $user->id,
+            'item_id' => $item->id,
+            'body' => '保存先を確認するレビューです。',
+        ]);
+        $this->assertDatabaseMissing('reviews', [
+            'user_id' => $otherUser->id,
+            'body' => '保存先を確認するレビューです。',
+        ]);
+        $this->assertDatabaseMissing('reviews', [
+            'item_id' => $otherItem->id,
+            'body' => '保存先を確認するレビューです。',
+        ]);
+    }
+
+    /**
+     * 複数レビュー投稿後の平均評価が小数1桁で更新されることを保証する。
+     */
+    public function test_item_rating_cache_calculates_decimal_average_after_multiple_reviews(): void
+    {
+        $firstUser = User::factory()->create();
+        $secondUser = User::factory()->create();
+        $item = Item::factory()->create();
+
+        $this
+            ->actingAs($firstUser)
+            ->post(route('reviews.store', $item), [
+                'rating' => 4,
+                'body' => '平均評価確認用レビュー1です。',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this
+            ->actingAs($secondUser)
+            ->post(route('reviews.store', $item), [
+                'rating' => 5,
+                'body' => '平均評価確認用レビュー2です。',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $item->refresh();
+
+        $this->assertSame(4.5, (float) $item->rating);
+        $this->assertSame(2, $item->rating_count);
     }
 
     /**
@@ -464,6 +558,80 @@ class ReviewTest extends TestCase
 
         $this->assertNull($item->rating);
         $this->assertSame(0, $item->rating_count);
+    }
+
+    /**
+     * レビュー削除後の評価更新に失敗した場合、削除と評価キャッシュがロールバックされることを保証する。
+     */
+    public function test_review_deletion_is_rolled_back_when_rating_cache_refresh_fails(): void
+    {
+        $user = User::factory()->create();
+        $item = Item::factory()->create();
+        $review = Review::factory()->create([
+            'user_id' => $user->id,
+            'item_id' => $item->id,
+            'rating' => 4,
+            'body' => 'ロールバック確認用レビューです。',
+        ]);
+        $item->refresh();
+        $ratingBeforeDeletion = $item->rating;
+        $ratingCountBeforeDeletion = $item->rating_count;
+
+        // FactoryのafterCreatingによる評価更新が完了してから、削除処理だけを失敗させる。
+        $this->mock(ItemRatingService::class, function ($mock): void {
+            $mock->shouldReceive('refresh')
+                ->andThrow(new RuntimeException('評価キャッシュ更新失敗'));
+        });
+
+        $this->withoutExceptionHandling();
+
+        try {
+            $this
+                ->actingAs($user)
+                ->delete(route('reviews.destroy', $review));
+
+            $this->fail('評価キャッシュ更新例外が送出されませんでした。');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('評価キャッシュ更新失敗', $exception->getMessage());
+        }
+
+        $this->assertDatabaseHas('reviews', [
+            'id' => $review->id,
+            'user_id' => $user->id,
+            'item_id' => $item->id,
+        ]);
+
+        $item->refresh();
+
+        $this->assertSame($ratingBeforeDeletion, $item->rating);
+        $this->assertSame($ratingCountBeforeDeletion, $item->rating_count);
+    }
+
+    /**
+     * 認可された削除ルートでレビューを削除すると、紐づく返信もcascade削除されることを保証する。
+     */
+    public function test_deleting_review_cascade_deletes_its_comments(): void
+    {
+        $user = User::factory()->create();
+        $review = Review::factory()->for($user)->create();
+        $comment = ReviewComment::query()->create([
+            'review_id' => $review->id,
+            'user_id' => User::factory()->create()->id,
+            'parent_id' => null,
+            'body' => 'レビューとともに削除される返信です。',
+        ]);
+
+        $this
+            ->actingAs($user)
+            ->delete(route('reviews.destroy', $review))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('reviews', [
+            'id' => $review->id,
+        ]);
+        $this->assertDatabaseMissing('review_comments', [
+            'id' => $comment->id,
+        ]);
     }
 
     /**

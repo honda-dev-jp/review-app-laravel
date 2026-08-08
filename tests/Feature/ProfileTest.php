@@ -1484,6 +1484,9 @@ class ProfileTest extends TestCase
         $review = Review::factory()->for($user)->create([
             'body' => '退会後も残るレビューです。',
         ]);
+        $item = $review->item->refresh();
+        $ratingBeforeDeletion = $item->rating;
+        $ratingCountBeforeDeletion = $item->rating_count;
         $comment = ReviewComment::query()->create([
             'review_id' => $review->id,
             'user_id' => $user->id,
@@ -1510,6 +1513,11 @@ class ProfileTest extends TestCase
             'user_id' => null,
             'body' => '退会後も残る返信コメントです。',
         ]);
+
+        $item->refresh();
+
+        $this->assertSame($ratingBeforeDeletion, $item->rating);
+        $this->assertSame($ratingCountBeforeDeletion, $item->rating_count);
     }
 
     /**
@@ -1591,6 +1599,28 @@ class ProfileTest extends TestCase
             'review_id' => $review->id,
             'user_id' => $user->id,
             'body' => '削除されない返信コメントです。',
+        ]);
+    }
+
+    /**
+     * 退会リクエストにpasswordキーがない場合、退会せず認証状態を維持することを確認する。
+     */
+    public function test_password_is_required_to_delete_account(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->from(route('profile.edit'))
+            ->delete(route('profile.destroy'));
+
+        $response
+            ->assertSessionHasErrorsIn('userDeletion', 'password')
+            ->assertRedirect(route('profile.edit'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
         ]);
     }
 
