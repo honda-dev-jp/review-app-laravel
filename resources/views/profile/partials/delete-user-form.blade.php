@@ -31,10 +31,24 @@
         focusable
     >
         {{-- 退会処理送信フォーム --}}
+        {{-- すべての閉じ方を共通モーダルのshowへ集約し、退会フォーム固有の状態だけをリセットする。 --}}
         <form
             method="post"
             action="{{ route('profile.destroy') }}"
             class="p-6"
+            x-data="{
+                showDeletionError: @js($errors->userDeletion->has('password')),
+                password: '',
+                resetDeletionUi() {
+                    this.showDeletionError = false
+                    this.password = ''
+                },
+            }"
+            x-init="$watch('show', value => {
+                if (! value) {
+                    resetDeletionUi()
+                }
+            })"
         >
             @csrf
             @method('delete')
@@ -67,6 +81,9 @@
                     class="mt-1 block w-3/4"
                     :aria-invalid="$errors->userDeletion->has('password') ? 'true' : null"
                     :aria-describedby="$errors->userDeletion->has('password') ? 'user-deletion-password-error' : null"
+                    x-model="password"
+                    x-bind:aria-invalid="showDeletionError ? 'true' : null"
+                    x-bind:aria-describedby="showDeletionError ? 'user-deletion-password-error' : null"
                     autocomplete="current-password"
                     placeholder="{{ __('Current Password') }}"
                 />
@@ -76,6 +93,7 @@
                     id="user-deletion-password-error"
                     :messages="$errors->userDeletion->get('password')"
                     class="mt-2"
+                    x-show="showDeletionError"
                 />
             </div>
 
