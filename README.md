@@ -127,6 +127,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 
 - [開発フロー](docs/DEVELOPMENT_FLOW.md)
 - [実装計画](docs/IMPLEMENTATION_PLAN.md)
+- [MVP1テスト対応状況](docs/MVP1_TEST_COVERAGE.md)
 - [Claude Code実装前検証運用手順](docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
 - [Claude Codeレビュー運用手順](docs/CLAUDE_CODE_REVIEW.md)
 - [Claude Code権限設計](docs/CLAUDE_CODE_PERMISSION_DESIGN.md)
