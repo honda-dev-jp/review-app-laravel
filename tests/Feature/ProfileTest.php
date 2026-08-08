@@ -235,6 +235,39 @@ class ProfileTest extends TestCase
         $xpath = $this->createXPath($response->getContent());
         $passwordInput = $this->getSingleElementById($xpath, 'password');
         $error = $this->getSingleElementById($xpath, 'user-deletion-password-error');
+        $dialogs = $xpath->query('//*[@role="dialog"]');
+
+        $this->assertNotFalse($dialogs);
+        $this->assertCount(1, $dialogs);
+
+        $dialog = $dialogs->item(0);
+        $this->assertInstanceOf(DOMElement::class, $dialog);
+        $this->assertSame('true', $dialog->getAttribute('aria-modal'));
+        $this->assertSame('confirm-user-deletion-title', $dialog->getAttribute('aria-labelledby'));
+        $this->assertSame('-1', $dialog->getAttribute('tabindex'));
+
+        $modalRoots = $xpath->query('ancestor::div[@x-data][1]', $dialog);
+        $dialogPasswordInputs = $xpath->query('.//*[@id="password"]', $dialog);
+        $dialogErrors = $xpath->query('.//*[@id="user-deletion-password-error"]', $dialog);
+
+        $this->assertNotFalse($modalRoots);
+        $this->assertCount(1, $modalRoots);
+        $this->assertNotFalse($dialogPasswordInputs);
+        $this->assertCount(1, $dialogPasswordInputs);
+        $this->assertNotFalse($dialogErrors);
+        $this->assertCount(1, $dialogErrors);
+
+        $modalRoot = $modalRoots->item(0);
+        $dialogPasswordInput = $dialogPasswordInputs->item(0);
+        $dialogError = $dialogErrors->item(0);
+        $this->assertInstanceOf(DOMElement::class, $modalRoot);
+        $this->assertInstanceOf(DOMElement::class, $dialogPasswordInput);
+        $this->assertInstanceOf(DOMElement::class, $dialogError);
+        $this->assertStringContainsString('display: block;', $modalRoot->getAttribute('style'));
+        // 入力欄やエラー要素がダイアログ外へ誤配置されても通らないよう、
+        // ページ全体とダイアログ内から取得した要素が同一ノードであることを保証する。
+        $this->assertSame($passwordInput->getNodePath(), $dialogPasswordInput->getNodePath());
+        $this->assertSame($error->getNodePath(), $dialogError->getNodePath());
 
         $this->assertSame('true', $passwordInput->getAttribute('aria-invalid'));
         $this->assertSame('user-deletion-password-error', $passwordInput->getAttribute('aria-describedby'));
@@ -1010,17 +1043,86 @@ class ProfileTest extends TestCase
             ->get('/profile');
 
         $xpath = $this->createXPath($response->getContent());
+        $trigger = $this->getSingleElementById($xpath, 'delete-account-trigger');
+        $heading = $this->getSingleElementById($xpath, 'confirm-user-deletion-title');
         $forms = $xpath->query(sprintf(
             '//form[@action="%s" and .//input[@type="hidden" and @name="_method" and translate(@value, "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")="DELETE"]]',
             route('profile.destroy')
         ));
+        $dialogs = $xpath->query('//*[@role="dialog"]');
 
         $this->assertNotFalse($forms);
         $this->assertCount(1, $forms);
+        $this->assertNotFalse($dialogs);
+        $this->assertCount(1, $dialogs);
 
         $form = $forms->item(0);
+        $dialog = $dialogs->item(0);
         $this->assertInstanceOf(DOMElement::class, $form);
+        $this->assertInstanceOf(DOMElement::class, $dialog);
         $this->assertSame('post', strtolower($form->getAttribute('method')));
+
+        $triggerDialogs = $xpath->query('ancestor::*[@role="dialog"]', $trigger);
+        $modalRoots = $xpath->query('ancestor::div[@x-data][1]', $dialog);
+        $dialogHeadings = $xpath->query('.//*[@id="confirm-user-deletion-title"]', $dialog);
+        $dialogForms = $xpath->query(sprintf(
+            './/form[@action="%s"]',
+            route('profile.destroy')
+        ), $dialog);
+
+        $this->assertSame('button', $trigger->tagName);
+        $this->assertSame('button', $trigger->getAttribute('type'));
+        $this->assertSame(__('Delete Account'), trim($trigger->textContent));
+        $this->assertNotFalse($triggerDialogs);
+        $this->assertCount(0, $triggerDialogs);
+        $this->assertSame('true', $dialog->getAttribute('aria-modal'));
+        $this->assertSame('confirm-user-deletion-title', $dialog->getAttribute('aria-labelledby'));
+        $this->assertSame('-1', $dialog->getAttribute('tabindex'));
+        $this->assertSame('dialogPanel', $dialog->getAttribute('x-ref'));
+        $this->assertTrue($dialog->hasAttribute('x-show'));
+        $this->assertNotFalse($dialogHeadings);
+        $this->assertCount(1, $dialogHeadings);
+        $this->assertNotFalse($dialogForms);
+        $this->assertCount(1, $dialogForms);
+
+        $dialogHeading = $dialogHeadings->item(0);
+        $dialogForm = $dialogForms->item(0);
+        $this->assertInstanceOf(DOMElement::class, $dialogHeading);
+        $this->assertInstanceOf(DOMElement::class, $dialogForm);
+        // 見出しやフォームがダイアログ外へ誤配置されても通らないよう、
+        // ページ全体とダイアログ内から取得した要素が同一ノードであることを保証する。
+        $this->assertSame($heading->getNodePath(), $dialogHeading->getNodePath());
+        $this->assertSame(
+            __('Are you sure you want to delete your account?'),
+            trim($heading->textContent)
+        );
+        $this->assertSame($form->getNodePath(), $dialogForm->getNodePath());
+
+        $this->assertNotFalse($modalRoots);
+        $this->assertCount(1, $modalRoots);
+
+        $modalRoot = $modalRoots->item(0);
+        $this->assertInstanceOf(DOMElement::class, $modalRoot);
+        $this->assertStringContainsString('display: none;', $modalRoot->getAttribute('style'));
+
+        // Alpine.js内部の実装文字列は固定せず、
+        // モーダル制御に必要な接続点が出力されていることだけを保証する。
+        foreach ([
+            'x-data',
+            'x-init',
+            'x-on:open-modal.window',
+            'x-on:close-modal.window',
+            'x-on:close.stop',
+            'x-on:keydown.escape.window',
+            'x-on:keydown.tab.window',
+            'x-show',
+        ] as $attribute) {
+            $this->assertTrue($modalRoot->hasAttribute($attribute));
+        }
+
+        $overlays = $xpath->query('./div[@*[name()="x-on:click"]]', $modalRoot);
+        $this->assertNotFalse($overlays);
+        $this->assertCount(1, $overlays);
 
         $methodInputs = $xpath->query(
             './/input[@type="hidden" and @name="_method" and translate(@value, "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")="DELETE"]',
@@ -1034,6 +1136,14 @@ class ProfileTest extends TestCase
             './/input[@type="password" and @name="password"]',
             $form
         );
+        $cancelButtons = $xpath->query(sprintf(
+            './/button[@type="button" and normalize-space(.)="%s"]',
+            __('Cancel')
+        ), $form);
+        $deleteButtons = $xpath->query(sprintf(
+            './/button[@type="submit" and normalize-space(.)="%s"]',
+            __('Delete Account')
+        ), $form);
 
         $this->assertNotFalse($methodInputs);
         $this->assertCount(1, $methodInputs);
@@ -1041,6 +1151,10 @@ class ProfileTest extends TestCase
         $this->assertCount(1, $csrfInputs);
         $this->assertNotFalse($passwordInputs);
         $this->assertCount(1, $passwordInputs);
+        $this->assertNotFalse($cancelButtons);
+        $this->assertCount(1, $cancelButtons);
+        $this->assertNotFalse($deleteButtons);
+        $this->assertCount(1, $deleteButtons);
 
         // autocomplete属性が別要素へ誤って付いても通らないよう、ページ内の対象と退会フォーム内の入力が同一要素であることを保証する。
         $passwordInput = $this->getSingleElementById($xpath, 'password');
@@ -1051,6 +1165,8 @@ class ProfileTest extends TestCase
         $this->assertSame('password', $passwordInput->getAttribute('name'));
         $this->assertSame('password', $passwordInput->getAttribute('type'));
         $this->assertSame('current-password', $passwordInput->getAttribute('autocomplete'));
+        $this->assertFalse($passwordInput->hasAttribute('aria-invalid'));
+        $this->assertFalse($passwordInput->hasAttribute('aria-describedby'));
 
         $response
             ->assertOk()
