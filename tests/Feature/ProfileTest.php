@@ -249,6 +249,10 @@ class ProfileTest extends TestCase
         $modalRoots = $xpath->query('ancestor::div[@x-data][1]', $dialog);
         $dialogPasswordInputs = $xpath->query('.//*[@id="password"]', $dialog);
         $dialogErrors = $xpath->query('.//*[@id="user-deletion-password-error"]', $dialog);
+        $dialogForms = $xpath->query(sprintf(
+            './/form[@action="%s"]',
+            route('profile.destroy')
+        ), $dialog);
 
         $this->assertNotFalse($modalRoots);
         $this->assertCount(1, $modalRoots);
@@ -256,18 +260,54 @@ class ProfileTest extends TestCase
         $this->assertCount(1, $dialogPasswordInputs);
         $this->assertNotFalse($dialogErrors);
         $this->assertCount(1, $dialogErrors);
+        $this->assertNotFalse($dialogForms);
+        $this->assertCount(1, $dialogForms);
 
         $modalRoot = $modalRoots->item(0);
         $dialogPasswordInput = $dialogPasswordInputs->item(0);
         $dialogError = $dialogErrors->item(0);
+        $dialogForm = $dialogForms->item(0);
         $this->assertInstanceOf(DOMElement::class, $modalRoot);
         $this->assertInstanceOf(DOMElement::class, $dialogPasswordInput);
         $this->assertInstanceOf(DOMElement::class, $dialogError);
+        $this->assertInstanceOf(DOMElement::class, $dialogForm);
         $this->assertStringContainsString('display: block;', $modalRoot->getAttribute('style'));
         // 入力欄やエラー要素がダイアログ外へ誤配置されても通らないよう、
         // ページ全体とダイアログ内から取得した要素が同一ノードであることを保証する。
         $this->assertSame($passwordInput->getNodePath(), $dialogPasswordInput->getNodePath());
         $this->assertSame($error->getNodePath(), $dialogError->getNodePath());
+
+        // Alpine.jsの内部全文ではなく、エラー表示・ARIA・入力値を連動させる接続点だけを保証する。
+        foreach (['showDeletionError', 'password', 'resetDeletionUi'] as $stateName) {
+            $this->assertStringContainsString($stateName, $dialogForm->getAttribute('x-data'));
+        }
+        $this->assertMatchesRegularExpression(
+            '/showDeletionError\s*:\s*true/',
+            $dialogForm->getAttribute('x-data')
+        );
+        $this->assertStringContainsString('$watch', $dialogForm->getAttribute('x-init'));
+        $this->assertMatchesRegularExpression(
+            '/\$watch\(\s*[\'"]show[\'"]/',
+            $dialogForm->getAttribute('x-init')
+        );
+        $this->assertStringContainsString('resetDeletionUi', $dialogForm->getAttribute('x-init'));
+
+        foreach ([
+            'x-model' => 'password',
+            'x-bind:aria-invalid' => 'showDeletionError',
+            'x-bind:aria-describedby' => 'user-deletion-password-error',
+        ] as $attribute => $expectedValue) {
+            $attributes = $xpath->query(sprintf('@*[name()="%s"]', $attribute), $passwordInput);
+
+            $this->assertNotFalse($attributes);
+            $this->assertCount(1, $attributes);
+            $this->assertStringContainsString($expectedValue, $attributes->item(0)?->nodeValue ?? '');
+        }
+
+        $errorShowAttributes = $xpath->query('@*[name()="x-show"]', $error);
+        $this->assertNotFalse($errorShowAttributes);
+        $this->assertCount(1, $errorShowAttributes);
+        $this->assertSame('showDeletionError', $errorShowAttributes->item(0)?->nodeValue);
 
         $this->assertSame('true', $passwordInput->getAttribute('aria-invalid'));
         $this->assertSame('user-deletion-password-error', $passwordInput->getAttribute('aria-describedby'));
@@ -1165,8 +1205,36 @@ class ProfileTest extends TestCase
         $this->assertSame('password', $passwordInput->getAttribute('name'));
         $this->assertSame('password', $passwordInput->getAttribute('type'));
         $this->assertSame('current-password', $passwordInput->getAttribute('autocomplete'));
+        $this->assertFalse($passwordInput->hasAttribute('value'));
         $this->assertFalse($passwordInput->hasAttribute('aria-invalid'));
         $this->assertFalse($passwordInput->hasAttribute('aria-describedby'));
+
+        // Alpine.jsの内部全文ではなく、フォームと入力欄に必要な接続点があることだけを保証する。
+        foreach (['showDeletionError', 'password', 'resetDeletionUi'] as $stateName) {
+            $this->assertStringContainsString($stateName, $form->getAttribute('x-data'));
+        }
+        $this->assertMatchesRegularExpression(
+            '/showDeletionError\s*:\s*false/',
+            $form->getAttribute('x-data')
+        );
+        $this->assertStringContainsString('$watch', $form->getAttribute('x-init'));
+        $this->assertMatchesRegularExpression(
+            '/\$watch\(\s*[\'"]show[\'"]/',
+            $form->getAttribute('x-init')
+        );
+        $this->assertStringContainsString('resetDeletionUi', $form->getAttribute('x-init'));
+
+        foreach ([
+            'x-model' => 'password',
+            'x-bind:aria-invalid' => 'showDeletionError',
+            'x-bind:aria-describedby' => 'user-deletion-password-error',
+        ] as $attribute => $expectedValue) {
+            $attributes = $xpath->query(sprintf('@*[name()="%s"]', $attribute), $passwordInput);
+
+            $this->assertNotFalse($attributes);
+            $this->assertCount(1, $attributes);
+            $this->assertStringContainsString($expectedValue, $attributes->item(0)?->nodeValue ?? '');
+        }
 
         $response
             ->assertOk()
