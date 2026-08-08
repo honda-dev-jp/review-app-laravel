@@ -14,6 +14,8 @@
 
     {{-- 退会確認モーダルを開くボタン --}}
     <x-danger-button
+        id="delete-account-trigger"
+        type="button"
         x-data=""
         x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')"
     >
@@ -24,6 +26,8 @@
     <x-modal
         name="confirm-user-deletion"
         :show="$errors->userDeletion->isNotEmpty()"
+        labelled-by="confirm-user-deletion-title"
+        restore-focus-to="delete-account-trigger"
         focusable
     >
         {{-- 退会処理送信フォーム --}}
@@ -36,7 +40,10 @@
             @method('delete')
 
             {{-- モーダルの見出し --}}
-            <h2 class="text-lg font-medium text-gray-900">
+            <h2
+                id="confirm-user-deletion-title"
+                class="text-lg font-medium text-gray-900"
+            >
                 {{ __('Are you sure you want to delete your account?') }}
             </h2>
 
