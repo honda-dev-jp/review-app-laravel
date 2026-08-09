@@ -8,6 +8,7 @@ Laravel移植作業中に発生しやすい問題の確認手順をまとめる�
 
 - DB詳細設計の判断は `docs/DATABASE.md` で扱う
 - コマンド一覧は `docs/COMMANDS.md` を参照する
+- GitHubの正常系運用は `docs/GITHUB_WORKFLOW.md` を参照する
 - セキュリティ方針は `docs/SECURITY.md` を参照する
 - デプロイ方針は `docs/DEPLOYMENT.md` を参照する
 
@@ -519,39 +520,133 @@ git add docs/TROUBLESHOOTING.md
 
 ## 32. コミット前に確認すること
 
-- 現在のブランチが正しいか確認する
-- 関係ない変更が含まれていないか確認する
-- `.env` が含まれていないか確認する
-- `vendor/` や `node_modules/` が含まれていないか確認する
-- ドキュメントのみなら差分確認とリンク確認を行う
-- 実装を含むならPint、テスト、PHPStan、Vite buildを確認する
+コミット前の正常系チェックリストと実行順序は、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
 
-```bash
-git status
-git diff
-git diff --staged
-./vendor/bin/sail php ./vendor/bin/pint --test
-./vendor/bin/sail test
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
-./vendor/bin/sail npm run build
-```
+想定外のファイルや差分が見つかった場合は、この文書の「Gitで関係ないファイルが混ざった」で切り分ける。原因を確認する前にコミットへ進まない。
 
 ## 33. PR前確認
 
+通常PRと同期PRの正常系チェックリスト、CI成功確認、Merge commit方式の確認は、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
+
+差分、CI、BaseとHead、Issue参照、マージ方式のいずれかが想定と異なる場合は、PRの作成やマージを進めず、該当する異常系で切り分ける。
+
+## 34. `git pull --ff-only`が失敗した
+
+`git pull --ff-only`が失敗した場合は、ローカルとリモートの履歴がfast-forwardできない状態である可能性がある。
+
+確認手順：
+
+- 現在のブランチが`main`、`develop`、作業ブランチのどれか確認する
+- 未コミット変更がないか確認する
+- pull対象のブランチとリモート名を確認する
+- `git branch -a`と限定した`git log`で位置を確認する
+- 他の作業やPRによってリモートが進んでいないか確認する
+
 ```bash
-git status
-./vendor/bin/sail php ./vendor/bin/pint --test
-./vendor/bin/sail test
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
-./vendor/bin/sail npm run build
+git status --short
+git branch --show-current
+git branch -a
+git log --oneline --decorate -5
 ```
 
-注意：
+非fast-forward merge、rebase、reset、force pushへ切り替えず停止する。
 
-- ドキュメントのみのPRでは、差分確認とリンク確認を行う
-- 実装を含むPRでは、Pint、テスト、静的解析、ビルドを確認する
+## 35. `git merge --ff-only`が失敗した
 
-## 34. 解決しない場合
+同期PR後の`git merge --ff-only main`が失敗した場合は、`develop`が最新の`main`へfast-forwardできるという前提が成立していない。
+
+確認手順：
+
+- 同期PRがMerge commit方式でマージされているか確認する
+- 直前の`git pull --ff-only origin main`が成功したか確認する
+- ローカル`main`と`origin/main`の位置を確認する
+- ローカル`develop`と`origin/develop`の位置を確認する
+- 同期PR後に`develop`へ別の変更が入っていないか確認する
+
+追加のmerge、非fast-forward merge、rebase、reset、force pushを行わず停止する。履歴構造を確認してから、人間が対応方針を決める。
+
+## 36. `git push origin develop`が拒否された
+
+同期PR後のfast-forward同期でpushが拒否された場合は、次を確認する。
+
+- `git merge --ff-only main`が成功しているか
+- push先が`develop`であるか
+- `origin/develop`が別の変更で進んでいないか
+- Rulesetや権限によって直接pushが拒否されていないか
+- 通常の作業コミットが混入していないか
+
+force push、reset、rebase、非fast-forward mergeで回避しない。リモート状態またはGitHub設定を確認できるまで停止する。
+
+## 37. `git branch -d`が失敗した
+
+`git branch -d`が失敗した場合は、作業ブランチが現在の`develop`へマージ済みと判定できない、対象ブランチが間違っている、または現在そのブランチにいる可能性がある。
+
+確認手順：
+
+- GitHub上で対象の通常PRが`develop`へマージ済みか確認する
+- ローカル`develop`を`git pull --ff-only origin develop`で最新化済みか確認する
+- 現在のブランチと削除対象名を確認する
+- 作業ブランチに未反映のコミットがないか確認する
+
+標準手順で`git branch -D`へ切り替えない。削除してよい根拠を確認できるまでブランチを残す。
+
+## 38. 同期PRでMerge commit以外を選択してしまった
+
+同期PRでSquash mergeまたはRebase mergeを選択した場合は、`develop`から`main`へのfast-forward同期の前提が崩れている可能性がある。
+
+- `git merge --ff-only main`や`git push origin develop`へ進まない
+- 即時にreset、rebase、force pushで履歴を書き換えない
+- Merge commitを作り直す目的で追加の非fast-forward mergeを行わない
+- 対象PR、選択したマージ方式、`main`と`develop`の位置を記録する
+- 影響を確認し、人間が別PRや後続対応の要否を判断する
+
+誤操作を隠すための履歴改変は行わない。
+
+## 39. `main`と`develop`の位置が想定と異なる
+
+同期後の最終確認で、ローカルまたはリモート参照が同じ同期PRのMerge commitを指していない場合は同期未完了として扱う。
+
+```bash
+git status --short
+git branch -a
+git log --oneline --decorate -5
+```
+
+次を確認する。
+
+- ローカル`main`と`develop`の位置
+- `origin/main`と`origin/develop`の位置
+- 同期PRのMerge commit
+- 同期PR後に追加されたコミットの有無
+- 未コミット変更の有無
+
+原因が分かるまで追加のmergeやpushを行わない。最後の履歴確認を省略して同期完了と判断しない。
+
+## 40. CIが失敗している
+
+通常PRまたは同期PRのGitHub Actionsが失敗中、未完了、または結果を確認できない場合はマージしない。
+
+確認手順：
+
+- 失敗したjobとstepを確認する
+- Laravel Pint、PHPStan / Larastan、Vite build、PHPUnitのどこで失敗したか確認する
+- ローカルで同等の確認を実行済みか確認する
+- 差分に起因する失敗と、一時的なrunner・外部要因を区別する
+- 再実行する場合も、失敗内容を確認せず繰り返さない
+
+CIが実行されることと、Rulesetでrequired status checksとして強制されることは別である。required status checksが未設定でも、運用上はCIがすべて成功するまでマージしない。
+
+## 41. Git異常時の共通停止原則
+
+GitまたはGitHubの状態が想定と異なる場合は、次を守る。
+
+- force pushしない
+- resetで履歴を書き換えない
+- 非fast-forward mergeへ切り替えない
+- rebaseへ切り替えない
+- 原因確認前に作業を継続しない
+
+## 42. 解決しない場合
 
 以下を整理してから相談する。
 
@@ -571,8 +666,9 @@ git status
 - `git status` の結果
 - 関連するログ
 
-## 35. 関連ドキュメント
+## 43. 関連ドキュメント
 
+- `docs/GITHUB_WORKFLOW.md`
 - `docs/COMMANDS.md`
 - `docs/DEVELOPMENT_FLOW.md`
 - `docs/REQUIREMENTS.md`
@@ -584,7 +680,7 @@ git status
 - `docs/DEPLOYMENT.md`
 - `README.md`
 
-## 36. パスワードリセットメールがMailpitに届かない
+## 44. パスワードリセットメールがMailpitに届かない
 
 確認手順：
 

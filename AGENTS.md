@@ -14,5 +14,7 @@
 - このプロジェクトは、Laravel 10 への映画レビューアプリ移植プロジェクトである。
 - 認証、認可、バリデーション、CSRF、Bladeのエスケープ、Eloquentは、Laravel標準機能を優先して使用すること。
 - 実装を変更する前に、`docs/` 配下の既存ドキュメントを確認すること。
-- `main` ブランチへ直接pushしないこと。
+- 通常の作業コミットを`main`または`develop`へ直接pushしないこと。同期PR後の`develop`へのfast-forward同期だけを限定例外とし、詳細は`docs/GITHUB_WORKFLOW.md`に従うこと。
+- force pushを行わないこと。
+- GitおよびGitHubの変更操作はユーザー本人が行い、AIは代行しないこと。
 - コミットは1目的1コミットを基本とすること。
