@@ -216,6 +216,110 @@ class ReviewMineTest extends TestCase
     }
 
     /**
+     * 複数レビューの削除モーダルが、対応する起動元・見出し・削除フォームと混線しないことを確認する。
+     */
+    public function test_my_reviews_page_renders_accessible_delete_dialog_for_each_review(): void
+    {
+        $user = User::factory()->create();
+        $reviews = [];
+
+        foreach (['1件目', '2件目'] as $label) {
+            $item = Item::factory()->create();
+            $reviews[] = Review::factory()->create([
+                'user_id' => $user->id,
+                'item_id' => $item->id,
+                'body' => $label.'の削除モーダル確認用レビューです。',
+            ]);
+        }
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('reviews.mine'));
+
+        $response->assertOk();
+
+        $xpath = $this->createXPath($response->getContent());
+        $dialogs = $xpath->query('//*[@role="dialog"]');
+
+        $this->assertNotFalse($dialogs);
+        $this->assertCount(2, $dialogs);
+
+        foreach ($reviews as $review) {
+            $headingId = 'delete-review-title-'.$review->id;
+            $articles = $xpath->query(sprintf(
+                '//article[.//form[@action="%s"]]',
+                route('reviews.destroy', $review)
+            ));
+            $headings = $xpath->query(sprintf('//*[@id="%s"]', $headingId));
+
+            $this->assertNotFalse($articles);
+            $this->assertCount(1, $articles);
+            $this->assertNotFalse($headings);
+            $this->assertCount(1, $headings);
+
+            $article = $articles->item(0);
+            $heading = $headings->item(0);
+            $this->assertInstanceOf(DOMElement::class, $article);
+            $this->assertInstanceOf(DOMElement::class, $heading);
+            $this->assertTrue($article->hasAttribute('x-data'));
+
+            $escapeAttributes = $xpath->query(
+                '@*[name()="x-on:keydown.escape.window"]',
+                $article
+            );
+            $tabAttributes = $xpath->query(
+                '@*[name()="x-on:keydown.tab.window"]',
+                $article
+            );
+
+            $this->assertNotFalse($escapeAttributes);
+            $this->assertCount(1, $escapeAttributes);
+            $this->assertNotFalse($tabAttributes);
+            $this->assertCount(1, $tabAttributes);
+
+            $articleTriggers = $xpath->query(
+                './/button[@x-ref="deleteTrigger" and @type="button" and normalize-space(.)="レビューを削除する"]',
+                $article
+            );
+            $articleDialogs = $xpath->query('.//*[@role="dialog"]', $article);
+
+            $this->assertNotFalse($articleTriggers);
+            $this->assertCount(1, $articleTriggers);
+            $this->assertNotFalse($articleDialogs);
+            $this->assertCount(1, $articleDialogs);
+
+            $dialog = $articleDialogs->item(0);
+            $this->assertInstanceOf(DOMElement::class, $dialog);
+            $this->assertSame('true', $dialog->getAttribute('aria-modal'));
+            $this->assertSame($headingId, $dialog->getAttribute('aria-labelledby'));
+            $this->assertSame('-1', $dialog->getAttribute('tabindex'));
+            $this->assertSame('reviewDeleteDialog', $dialog->getAttribute('x-ref'));
+            $this->assertStringContainsString('display: none;', $dialog->getAttribute('style'));
+
+            $dialogHeadings = $xpath->query(sprintf('.//*[@id="%s"]', $headingId), $dialog);
+            $dialogForms = $xpath->query('.//form', $dialog);
+            $cancelButtons = $xpath->query(
+                './/button[@x-ref="cancelButton" and @type="button" and normalize-space(.)="キャンセル"]',
+                $dialog
+            );
+
+            $this->assertNotFalse($dialogHeadings);
+            $this->assertCount(1, $dialogHeadings);
+            $this->assertNotFalse($dialogForms);
+            $this->assertCount(1, $dialogForms);
+            $this->assertNotFalse($cancelButtons);
+            $this->assertCount(1, $cancelButtons);
+
+            $dialogHeading = $dialogHeadings->item(0);
+            $dialogForm = $dialogForms->item(0);
+            $this->assertInstanceOf(DOMElement::class, $dialogHeading);
+            $this->assertInstanceOf(DOMElement::class, $dialogForm);
+            $this->assertSame($heading->getNodePath(), $dialogHeading->getNodePath());
+            $this->assertSame(route('reviews.destroy', $review), $dialogForm->getAttribute('action'));
+        }
+    }
+
+    /**
      * 本人レビュー一覧から削除した場合は画面遷移を維持したいので、
      * 削除後に本人レビュー一覧へ戻ることを保証する。
      */
