@@ -125,6 +125,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 
 ## ドキュメント
 
+- [GitHub開発運用ガイド](docs/GITHUB_WORKFLOW.md)
 - [開発フロー](docs/DEVELOPMENT_FLOW.md)
 - [実装計画](docs/IMPLEMENTATION_PLAN.md)
 - [MVP1テスト対応状況](docs/MVP1_TEST_COVERAGE.md)
@@ -143,10 +144,13 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 
 ## 開発方針
 
-- mainブランチへ直接pushしない
-- 作業ブランチを作成し、Pull Request経由でmainへマージする
-- 必要に応じてIssueを作成し、作業内容・判断待ち・修正予定を整理する
+- 作業ブランチを作成する前にIssueを作成する
+- 最新の`develop`から作業ブランチを作成する
+- 通常のPull Requestは作業ブランチから`develop`へ作成する
+- 公開可能な単位を`develop`から`main`への同期Pull Requestで反映する
+- 通常の作業コミットを`main`または`develop`へ直接pushせず、force pushを使用しない
 - コミットは1目的1コミットを基本とする
+- Issue、ブランチ、Pull Request、マージ、マージ後整理の詳細は[GitHub開発運用ガイド](docs/GITHUB_WORKFLOW.md)を参照する
 - まずはスクラッチ版の最低限機能をLaravelへ移植する
 - 管理者機能や外部API連携は後続フェーズで検討する
 - セキュリティと正常動作のバランスを重視する

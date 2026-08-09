@@ -4,9 +4,11 @@
 
 このドキュメントでは、映画レビューアプリ Laravel移植版の初期移植フェーズにおける実装順序、Pull Request分割、確認項目を整理する。
 
+この文書のPR1からPR11は、MVP1の実装順序を示す歴史的な計画記録として残す。MVP2以降の現在のIssue、ブランチ、Pull Request、マージ運用は`docs/GITHUB_WORKFLOW.md`を正本とし、この文書内のMVP1当時のPR番号や統合先を現行標準として使用しない。
+
 `docs/FEATURES.md` は機能一覧と優先度を整理するドキュメントであり、このドキュメントでは実際にどの順番で実装するかを扱う。
 
-DB詳細設計は `docs/DATABASE.md`、開発フローやIssue運用は `docs/DEVELOPMENT_FLOW.md`、コマンド一覧は `docs/COMMANDS.md` に整理する。
+DB詳細設計は `docs/DATABASE.md`、開発全体フローは `docs/DEVELOPMENT_FLOW.md`、GitHub運用は`docs/GITHUB_WORKFLOW.md`、コマンド一覧は `docs/COMMANDS.md` に整理する。
 
 ## 前提
 
@@ -19,13 +21,13 @@ DB詳細設計は `docs/DATABASE.md`、開発フローやIssue運用は `docs/DE
 - MySQLを使用する
 - Laravel Breezeによる認証機能を利用する
 - DB基盤、モデル、リレーションを先に整えてから画面実装へ進む
-- mainブランチへ直接pushせず、作業ブランチからPull Request経由でmainへマージする
-- 必要に応じてIssueを作成し、作業内容、判断待ち、修正予定を整理する
+- MVP1では作業ブランチからPull Request経由でmainへ統合したが、MVP2以降は`docs/GITHUB_WORKFLOW.md`の`develop`運用に従う
+- 現在は作業ブランチを作成する前にIssueを作成し、作業内容、判断待ち、修正予定を整理する
 - コミットは1目的1コミットを基本とする
 
 ## IssueとPull Requestの関係
 
-作業内容が明確な場合は、必要に応じてIssueを作成してから作業ブランチを作成する。
+現在は、作業ブランチを作成する前にIssueを作成する。
 
 Issueは以下の用途で使用する。
 
@@ -35,7 +37,7 @@ Issueは以下の用途で使用する。
 - ドキュメント修正予定の整理
 - Pull Requestとの紐づけ
 
-基本の流れは以下とする。
+以下は初期移植フェーズを計画した当時の流れであり、MVP1では`main`を統合先として使用した。現在の標準手順ではない。
 
 ```text
 Issue作成
@@ -52,10 +54,10 @@ IssueとPull Requestを紐づけ
   ↓
 レビュー・確認
   ↓
-mainへマージ
+MVP1当時の統合先であるmainへマージ
 ```
 
-Pull Request本文では、必要に応じて関連Issueを `Closes #番号` または `Refs #番号` で紐づける。
+現在のPull Request本文では、通常PRに`Refs #番号`、`develop`から`main`への同期PRに`Closes #番号`を使用する。詳細は`docs/GITHUB_WORKFLOW.md`を参照する。
 
 ただし、Issue番号はGitHub上で作成してから確定するため、このドキュメントでは固定のIssue番号は記載しない。
 
@@ -489,7 +491,7 @@ Laravel 10では、ModelとPolicyを規約通りに配置した場合、Policy�
 
 ## PRごとの確認項目
 
-各Pull Requestでは、変更内容に応じて以下を確認する。
+以下は各実装項目で必要になるLaravelと品質確認の観点として残す。現在の通常PR・同期PRのチェックリストと実行順序は`docs/GITHUB_WORKFLOW.md`を正本とする。
 
 ### 共通確認
 
@@ -539,6 +541,7 @@ git diff --staged
 ## 関連ドキュメント
 
 - `README.md`
+- `docs/GITHUB_WORKFLOW.md`
 - `docs/DEVELOPMENT_FLOW.md`
 - `docs/COMMANDS.md`
 - `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md`

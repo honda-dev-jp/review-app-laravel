@@ -198,8 +198,6 @@ MVP1主要機能のFeatureテストはIssue #60・PR #78で整備済みであり
 - 未ログイン限定機能（会員登録、ログイン、パスワードリセット）は `guest` ミドルウェアで制御する
 - 自分の投稿のみ削除できるように認可を設計する
 - CSRF、XSS、SQLインジェクション対策はLaravel標準機能を優先する
-- コミットは1目的1コミットを基本とする
-- mainブランチへ直接pushせず、Pull Request経由でmainへマージする
 
 ## 補足
 
@@ -214,3 +212,5 @@ DB設計は `docs/DATABASE.md` に整理する。
 ルーティング設計は `docs/ROUTES.md` に整理する。
 
 セキュリティ方針は `docs/SECURITY.md` に整理する。
+
+Issue、ブランチ、Pull Request、コミット、マージの運用は `docs/GITHUB_WORKFLOW.md` に整理する。

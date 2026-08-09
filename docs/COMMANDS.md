@@ -12,6 +12,8 @@ Sailのエイリアスを設定している場合は、`./vendor/bin/sail` を `
 
 このドキュメントは、人間がローカル開発環境で実行するコマンドを整理したものです。ここに掲載されたコマンドが、Claude Codeで実行可能であることを意味しません。
 
+Issue、ブランチ、Pull Request、マージ、マージ後整理など、実行順序を含むGitHub運用は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
+
 Claude Codeで許可する確認系コマンドと禁止する変更系コマンドは、次の運用手順に従います。
 
 - [Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
@@ -893,11 +895,19 @@ git branch -a
 
 ### 最新状態の取得
 
-現在のブランチに、リモートの最新状態を取り込む。
+現在のブランチに、リモートの最新状態をfast-forwardできる場合だけ取り込む。
 
 ```bash
-git pull origin main
+git pull --ff-only origin develop
 ```
+
+`main`を最新化する場合は、対象ブランチと取得元を`main`にする。
+
+```bash
+git pull --ff-only origin main
+```
+
+`--ff-only`で取り込めない場合は、意図しない分岐がある可能性があるため停止する。非fast-forward mergeやrebaseへ切り替えず、[トラブルシューティング](TROUBLESHOOTING.md)を参照する。
 
 ### 作業ブランチ作成
 
@@ -910,7 +920,7 @@ git switch -c ブランチ名
 例：
 
 ```bash
-git switch -c docs/add-initial-project-documents
+git switch -c docs/64-add-github-workflow
 ```
 
 ### ブランチ切り替え
@@ -986,7 +996,7 @@ git push -u origin ブランチ名
 例：
 
 ```bash
-git push -u origin docs/add-initial-project-documents
+git push -u origin docs/64-add-github-workflow
 ```
 
 2回目以降のpushは、以下で実行できる。
@@ -1003,13 +1013,13 @@ git push
 git branch -d ブランチ名
 ```
 
-強制削除する場合は、以下を使用する。
+未マージのコミットを含むブランチも強制削除できるコマンドとして、`-D`がある。
 
 ```bash
 git branch -D ブランチ名
 ```
 
-`-D` は未マージの変更も削除できるため、使用前に内容を確認する。
+`-D`は通常のマージ後整理では使用しない。`git branch -d`が失敗した場合は、マージ状態や対象ブランチを確認するまで停止し、標準手順で`-D`へ切り替えない。
 
 ### リモート追跡ブランチの整理
 
@@ -1021,26 +1031,15 @@ git fetch --prune
 
 ### 注意点
 
-mainブランチへ直接pushしない。
+通常の作業コミットを`main`または`develop`へ直接pushしない。同期PR後の`develop`へのfast-forward同期だけは、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)で定義した限定例外とする。
 
-コミット前には、必ず以下を確認する。
+force pushは使用しない。
 
-```bash
-git status
-git diff
-```
-
-ステージ後は、以下でコミット対象を確認する。
-
-```bash
-git diff --staged
-```
-
-関係ない変更を同じコミットに含めない。
+Gitコマンド単体の意味と書式はこの章を正本とし、作業開始、コミット前、PR前、マージ後の実行順序と正常系チェックリストは[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を正本とする。
 
 ## PR前確認
 
-Pull Requestを作成する前に確認するコマンドをまとめる。
+Pull Request前に使用する各確認コマンドをまとめる。正常系チェックリストと実行順序は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
 
 ### 変更状況の確認
 
@@ -1096,18 +1095,6 @@ Viteのビルドが成功するか確認する。
 ./vendor/bin/sail npm run build
 ```
 
-### PR前の基本確認セット
-
-PR前には、必要に応じて以下をまとめて確認する。
-
-```bash
-git status
-./vendor/bin/sail php ./vendor/bin/pint --test
-./vendor/bin/sail test
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
-./vendor/bin/sail npm run build
-```
-
 ### GitHub Actions CIとの対応
 
 Pull Requestおよび`main` / `develop`ブランチへのpush時は、GitHub Actionsが次のコマンドをSailを使用せずrunner上で直接実行する。
@@ -1127,18 +1114,7 @@ PHPUnitはMySQLの`testing`データベースを使用する。
 
 ### 注意点
 
-PRを作成する前に、以下を確認する。
-
-- 関係ない変更が含まれていないか
-- `.env` がコミット対象に含まれていないか
-- `vendor/` や `node_modules/` が含まれていないか
-- 不要なデバッグコードが残っていないか
-- コミットメッセージが変更内容と合っているか
-- READMEやdocsのリンク切れがないか
-
-実装を含むPRでは、Pint、テスト、静的解析、ビルドを確認する。
-
-ドキュメントのみのPRでは、差分確認とリンク確認を行う。
+実行する確認は変更内容に応じて選ぶ。通常PRと同期PRのマージ前チェック、GitHub ActionsのCI成功確認、Merge commit方式の確認は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)に従う。
 
 ## 注意点
 
@@ -1164,22 +1140,7 @@ git diff composer.json composer.lock
 git diff package.json package-lock.json
 ```
 
-PR前には、必要に応じて以下を確認する。
-
-```bash
-git status
-./vendor/bin/sail php ./vendor/bin/pint --test
-./vendor/bin/sail test
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
-./vendor/bin/sail npm run build
-```
-
-ドキュメントのみの修正では、差分確認とリンク確認を行う。
-
-```bash
-git status
-git diff
-```
+PR前の正常系チェックリストと実行順序は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
 
 コマンドを実行する前に、現在のブランチと変更状況を確認する。
 
