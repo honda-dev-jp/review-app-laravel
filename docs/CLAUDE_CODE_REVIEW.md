@@ -33,6 +33,7 @@ MVPでは要件外の改善提案やリファクタリングを優先せず、�
 | `CLAUDE.md` | Claude Code向けのプロジェクト運用ガイドです。読み取り専用の用途、参照禁止対象、変更禁止、確認系コマンド、Laravelレビュー観点を定義します。 |
 | `.claude/settings.json` | Claude Codeのプロジェクト権限とHook登録です。bareのBashとWebFetchをAsk、恒久Allowを0件とし、ファイル編集、サブエージェント、一部の外部・変更系ツールをdenyします。Bashの個別denyとPreToolUse Hookはベストエフォートの補助線です。組み込みread-only commandは確認画面なしで実行される場合があります。 |
 | `AGENTS.md` | AIエージェント共通のプロジェクト制約です。秘密情報、Laravel標準機能、既存docsの事前確認、Git運用などを定義します。 |
+| `docs/GITHUB_WORKFLOW.md` | Issue、ブランチ、Pull Request、マージ、マージ後整理に関するプロジェクト共通の標準運用です。 |
 | `.gitignore` | `.env`、ローカル設定、生成物などをGit管理対象から外すための防御線です。Claude Codeに読ませてよい対象一覧ではありません。 |
 | `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md` | 設計、Issue分割、実装準備状況を検証するための運用手順です。 |
 | `docs/CLAUDE_CODE_REVIEW.md` | この文書です。PR差分レビューの人間向け運用手順を定義します。 |
@@ -250,7 +251,7 @@ git branch --show-current
 確認する内容:
 
 - 作業ブランチがレビュー対象ブランチである
-- `main`ブランチでレビュー作業を開始していない
+- `main`または`develop`ブランチでレビュー作業を開始していない
 - 意図しない未コミット変更が混ざっていない
 - staged、unstaged、untrackedのどれをレビューするか明確である
 - PR差分レビューの対象ファイルが明確である
@@ -533,6 +534,7 @@ PR差分を、Issueの受け入れ条件と既存ドキュメントに照らし�
 - `docs/SECURITY.md`
 - `docs/IMPLEMENTATION_PLAN.md`
 - `docs/COMMANDS.md`
+- `docs/GITHUB_WORKFLOW.md`
 - `docs/DEPLOYMENT.md`
 
 変更と無関係なドキュメントを広範囲に書き換えていないかも確認します。
