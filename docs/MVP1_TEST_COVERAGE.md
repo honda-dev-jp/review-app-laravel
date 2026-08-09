@@ -242,8 +242,7 @@ CodexおよびClaude Codeのレビューでは、Critical・High・Mediumの修�
 | ReviewMineTest | 13 passed / 129 assertions |
 | Vite build | 成功（55 modules transformed） |
 | `git diff --check` | 問題なし |
-
-Issue #80はPR作成前のため、Issue #80のGitHub Actions結果は未確認です。
+| GitHub Actions | PR #81で成功 |
 
 ### Issue #60監査時の記録
 

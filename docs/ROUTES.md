@@ -55,6 +55,7 @@ Laravel Breezeの認証ルートを使用する。
 |---|---|---|---|---|---|
 | GET | `/profile` | `profile.edit` | `ProfileController@edit` | 必要 | アカウント画面を表示する |
 | PATCH | `/profile` | `profile.update` | `ProfileController@update` | 必要 | アカウント情報更新処理を行う |
+| PUT | `/password` | `password.update` | `Auth\PasswordController@update` | 必要 | パスワード更新処理を行う |
 | DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | アカウント画面の確認モーダルから会員退会処理を行う |
 | GET | `/my-reviews` | `reviews.mine` | `ReviewController@mine` | 必要 | 本人のレビュー一覧を表示する |
 
@@ -89,6 +90,8 @@ Laravel Breezeの認証ルートを使用する。
 
 ## middleware設計
 
+`routes/auth.php` には、上表のMVP1で利用するルートに加えて、Breezeが提供するメール認証・パスワード確認の補助ルートも登録されている。MVP1では `User` モデルで `MustVerifyEmail` を有効化しておらず、メール認証はMVP2以降の対象とする。
+
 ### 認証不要
 
 以下は認証不要で閲覧できる。
@@ -114,6 +117,7 @@ Laravel Breezeの認証ルートを使用する。
 
 - アカウント画面表示
 - アカウント情報更新
+- パスワード更新
 - 会員退会
 - 本人のレビュー一覧表示
 - レビュー・評価投稿
@@ -146,7 +150,7 @@ Laravel Breezeの認証ルートを使用する。
 | `ReviewController` | レビュー・評価投稿、本人レビュー一覧、レビュー削除 |
 | `ReviewCommentController` | レビュー返信投稿 |
 | `ProfileController` | アカウント画面表示、アカウント情報更新、退会 |
-| Breeze標準Controller | 会員登録、ログイン、ログアウト、パスワードリセット |
+| Breeze標準Controller | 会員登録、ログイン、ログアウト、パスワードリセット、パスワード更新 |
 
 ## 後続フェーズで検討するルート
 
