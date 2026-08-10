@@ -22,6 +22,7 @@ Issue #89のGitHub Global Security Advisories専用実行本体は`.claude/helpe
 - 対象tool: `Bash`、`WebFetch`
 - matcher: `Bash|WebFetch`
 - 実装: Python 3.10以上、標準ライブラリのみ
+- CI検証: Python 3.12（実行要件であるPython 3.10以上の全versionを保証するものではない）
 - 外部package: なし
 
 ## 登録
@@ -141,7 +142,7 @@ pathを受け取るcommandへ設計書§15の共通規則を適用します。`.
 
 bare `gh api`は引き続きDenyです。Global Advisoriesはrepository相対の固定helper path、`view`または`list`、固定option順、GHSA IDまたは固定ecosystem/packageだけを一般`python3` Denyより前の専用判定でAskへ進めます。helperは固定GET argvと最小環境を生成し、pagination URLを再利用せず検証済みcursorからendpointを再構築し、上限・UTF-8・schema・control characterを検査して固定projectionだけを出力します。
 
-通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR/Actions run、任意repositoryはDenyします。
+通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`astral-sh/ruff-action`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR/Actions run、任意repositoryはDenyします。
 
 Issue #51では合成JSONによる単体テストだけを行いました。Issue #52ではbare `WebFetch` Askへの設定変更後に、`code.claude.com`と`laravel.com`でWebFetchが成功し、未登録subdomainの`sub.code.claude.com`が`Host not allowed`で拒否されることを人間が確認済みです。`/status`、`/permissions`、`/hooks`による設定ソースとHook登録、timeout 5秒の確認、およびbare `WebFetch` denyへのフォールバックとaskへの再適用も完了しています。その他の境界条件は、個別の結果が記録されるまで確認済みとは扱いません。
 

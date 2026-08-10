@@ -294,6 +294,8 @@ HookはProject settingsの`.claude/settings.json`へ登録する。現行の公�
 
 PreToolUse Hookは、Python 3.10以上の標準ライブラリだけで実装する。外部packageや追加のComposer・npm依存は導入しない。Claude Codeを起動するWSL hostで`command -v python3`と`python3 --version`を確認する。
 
+GitHub Actions CIではPython 3.12単独で回帰testを実行する。これは実行要件であるPython 3.10以上の全versionをCIで保証するものではない。
+
 実装方針は次のとおりとする。
 
 - 実装言語：Python 3.10以上
@@ -712,12 +714,14 @@ python3 .claude/helpers/github_global_advisories.py list --ecosystem <composer|n
 
 ### 14.5 現行CI GitHub ActionsのReleaseとReleaseに紐づくTag
 
-通常のIssue・PR参照に対する`REPOSITORY = github.com/honda-dev-jp/review-app-laravel`は変更しない。外部repository例外は`.github/workflows/ci.yml`で実際に使用中の次の3件に対するRelease情報だけとする。
+通常のIssue・PR参照に対する`REPOSITORY = github.com/honda-dev-jp/review-app-laravel`は変更しない。外部repository例外は`.github/workflows/ci.yml`で実際に使用中の次の5件に対するRelease情報だけとする。
 
 ```text
 github.com/actions/checkout
 github.com/shivammathur/setup-php
 github.com/actions/setup-node
+github.com/actions/setup-python
+github.com/astral-sh/ruff-action
 ```
 
 canonical形は次の2つだけで、JSON fieldの順序も固定する。
@@ -1278,6 +1282,7 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-01 | Issue #52の実機確認結果を同期。設定ソース、Hook、Allow 0件とAsk、代表2host、未登録subdomain拒否、WebFetchのdenyフォールバックとaskへの再適用を記録 |
 | 2026-08-10 | Issue #89のMVP2公式host/path、有限package metadata、Global Advisories専用helper、現行CI Action Release/Release-linked Tag専用経路を追加。Allow 0件、bare `gh api` deny、通常repository固定を維持 |
 | 2026-08-10 | npm package rootの実機取得がWebFetchの10 MiB上限を超えたため、有限packageのliteral `/latest` exact pathだけへ変更。任意version・dist-tag、root、install、tarballのdenyを維持 |
+| 2026-08-10 | Issue #95のPython CI追加に合わせ、現行CI Action Release allowlistを5 repositoryへ同期。Python 3.10以上の実行要件とPython 3.12単独CI検証を区別して記録 |
 
 ## 27. 決定事項と実装前提
 

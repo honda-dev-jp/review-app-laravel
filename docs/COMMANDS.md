@@ -451,6 +451,31 @@ PHPUnitによるテスト実行コマンドをまとめる。
 
 認証、認可、レビュー投稿、削除処理など、データ更新を伴う機能はテストで確認する。
 
+## Claude Code用Python品質確認
+
+Claude Code用Python Hook・helperの回帰テストは、Sailを使用せずrepository rootから実行する。
+
+### Python unittest
+
+Hook・helperの回帰テストを実行する。
+
+```bash
+python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
+```
+
+### Ruff
+
+Ruffはproject dependencyへ追加せず、GitHub Actions CIを正本の実行環境とする。ローカルへのRuff導入手順は、この文書では定義しない。
+
+事前にRuff 0.15.21が利用可能な環境に限り、CIと同じ対象をcheck-onlyで確認できる。
+
+```bash
+ruff check .claude/hooks/pre_tool_use.py .claude/helpers/github_global_advisories.py .claude/hooks/tests/
+ruff format --check .claude/hooks/pre_tool_use.py .claude/helpers/github_global_advisories.py .claude/hooks/tests/
+```
+
+`ruff check --fix`や`ruff format`による自動変更は、CIでは実行しない。
+
 ## コード整形
 
 Laravel Pintによるコード整形コマンドをまとめる。
@@ -1105,6 +1130,9 @@ Pull Requestおよび`main` / `develop`ブランチへのpush時は、GitHub Act
 | PHPStan / Larastan | `./vendor/bin/sail php ./vendor/bin/phpstan analyse` | `vendor/bin/phpstan analyse --no-progress` |
 | Vite build | `./vendor/bin/sail npm run build` | `npm run build` |
 | PHPUnit | `./vendor/bin/sail test` | `php artisan test` |
+| Ruff lint | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff check`（ruff-action経由、Claude Code用Pythonの3 path） |
+| Ruff format check | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff format --check`（Claude Code用Pythonの3 path） |
+| Python unittest | `python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"` | 同左 |
 
 CIでは、Composer依存関係を`composer.lock`に基づいて`composer install`で導入し、npm依存関係を`package-lock.json`に基づいて`npm ci`で導入する。
 
