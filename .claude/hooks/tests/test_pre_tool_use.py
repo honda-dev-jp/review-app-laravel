@@ -6,11 +6,13 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import unittest
 from unittest import mock
 
 
 HOOK_PATH = Path(__file__).resolve().parents[1] / "pre_tool_use.py"
+PROJECT_ROOT = HOOK_PATH.parents[2]
 SPEC = importlib.util.spec_from_file_location("pre_tool_use", HOOK_PATH)
 assert SPEC is not None and SPEC.loader is not None
 hook = importlib.util.module_from_spec(SPEC)
@@ -48,6 +50,41 @@ def outcome(result: dict[str, object]) -> tuple[str, str]:
     specific = result["hookSpecificOutput"]
     assert isinstance(specific, dict)
     return str(specific["permissionDecision"]), str(specific["permissionDecisionReason"])
+
+
+class ProjectSourceSyncTests(unittest.TestCase):
+    def test_permission_baseline_and_hook_registration_are_unchanged(self) -> None:
+        settings = json.loads((PROJECT_ROOT / ".claude/settings.json").read_text())
+        permissions = settings["permissions"]
+        self.assertEqual(permissions["allow"], [])
+        self.assertEqual(
+            permissions["ask"],
+            ["Bash", "WebFetch", "Read(/.env.*)", "Read(/**/.env.*)"],
+        )
+        self.assertIn("Bash(gh api)", permissions["deny"])
+        self.assertIn("Bash(gh api *)", permissions["deny"])
+        hook_registration = settings["hooks"]["PreToolUse"][0]
+        self.assertEqual(hook_registration["matcher"], "Bash|WebFetch")
+
+    def test_package_metadata_sets_match_project_manifests(self) -> None:
+        composer = json.loads((PROJECT_ROOT / "composer.json").read_text())
+        composer_packages = (set(composer["require"]) - {"php"}) | set(composer["require-dev"])
+        self.assertEqual(hook.COMPOSER_METADATA_PACKAGES, composer_packages)
+
+        package = json.loads((PROJECT_ROOT / "package.json").read_text())
+        npm_packages = set(package["devDependencies"]) | {"typescript", "@playwright/test"}
+        self.assertEqual(hook.NPM_METADATA_PACKAGES, npm_packages)
+        self.assertEqual(hook.NPM_METADATA_PATHS, {f"/{name}/latest" for name in npm_packages})
+
+    def test_action_repositories_and_mysql_version_match_current_sources(self) -> None:
+        ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
+        repositories = {
+            f"github.com/{match}"
+            for match in re.findall(r"^\s*uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@", ci, re.MULTILINE)
+        }
+        self.assertEqual(hook.ACTION_RELEASE_REPOSITORIES, repositories)
+        self.assertIn("image: mysql:8.4.11", ci)
+        self.assertIn("image: 'mysql:8.4'", (PROJECT_ROOT / "compose.yaml").read_text())
 
 
 class InputValidationTests(unittest.TestCase):
@@ -266,6 +303,28 @@ class GeneralBashTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
+    def test_global_advisory_helper_has_only_canonical_forms(self) -> None:
+        allowed = (
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package laravel/framework",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem npm --package @playwright/test",
+        )
+        denied = (
+            "python3 .claude/helpers/github_global_advisories.py",
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-zzzz-zzzz-zzzz",
+            "python3 .claude/helpers/github_global_advisories.py list --package laravel/framework --ecosystem composer",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package other/package",
+            "python3 ./.claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 /tmp/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh --method POST",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
     def test_compound_redirect_substitution_and_control_syntax_are_denied(self) -> None:
         # 各shell構文は独立した迂回経路なので、1例へ集約せず個別の回帰を固定する。
         for command in (
@@ -426,6 +485,29 @@ class GitHubCliTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
+    def test_action_release_and_release_linked_tag_canonical_forms(self) -> None:
+        for repository in hook.ACTION_RELEASE_REPOSITORIES:
+            commands = (
+                f"gh release list --limit 20 --repo {repository} --json {hook.ACTION_RELEASE_LIST_JSON}",
+                f"gh release view v1.2.3 --repo {repository} --json {hook.ACTION_RELEASE_VIEW_JSON}",
+            )
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assertEqual(outcome(bash(command))[0], "ask")
+
+    def test_action_release_scope_cannot_expand(self) -> None:
+        commands = (
+            f"gh release list --limit 20 --repo github.com/other/action --json {hook.ACTION_RELEASE_LIST_JSON}",
+            f"gh release list --limit 21 --repo github.com/actions/checkout --json {hook.ACTION_RELEASE_LIST_JSON}",
+            "gh release view v1.2.3 --repo github.com/actions/checkout --json assets",
+            f"gh release download v1.2.3 --repo github.com/actions/checkout --json {hook.ACTION_RELEASE_VIEW_JSON}",
+            "gh api repos/actions/checkout/releases",
+            "gh repo view github.com/actions/checkout",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
     def test_gh_environment_overrides_are_denied_only_for_gh(self) -> None:
         # GH環境変数はghの暗黙接続先だけを制限し、pwdやGitまで止める過剰Denyを防ぐ。
         # `gh --version`も同じgh境界に置き、dispatch順の例外を作らない。
@@ -439,6 +521,17 @@ class GitHubCliTests(unittest.TestCase):
                 self.assertEqual(outcome(bash("git status --short", {name: "synthetic"}))[0], "ask")
                 self.assertEqual(outcome(bash("gh --version", {name: "synthetic"}))[0], "deny")
 
+    def test_action_release_rejects_output_affecting_environment(self) -> None:
+        command = (
+            "gh release list --limit 20 --repo github.com/actions/checkout "
+            f"--json {hook.ACTION_RELEASE_LIST_JSON}"
+        )
+        for name in hook.GH_RELEASE_ENVIRONMENT_OVERRIDES:
+            with self.subTest(name=name):
+                self.assertEqual(outcome(bash(command, {name: "synthetic"}))[0], "deny")
+                # unrelated Bashまで止めないことも固定し、環境検査の過剰Denyを防ぐ。
+                self.assertEqual(outcome(bash("pwd", {name: "synthetic"}))[0], "ask")
+
     def test_gh_environment_prefix_is_denied_without_exposing_value(self) -> None:
         # override値に機密情報が含まれても、専用の固定reason以外へ露出させない。
         result = bash(f"GH_REPO=synthetic gh issue view 51 --repo {hook.REPOSITORY}")
@@ -447,12 +540,95 @@ class GitHubCliTests(unittest.TestCase):
 
 
 class WebFetchTests(unittest.TestCase):
-    def test_all_fourteen_hosts_are_ask(self) -> None:
-        # 設計書の初期14hostと件数を同期し、意図しない追加・削除を顕在化させる。
-        self.assertEqual(len(hook.WEBFETCH_HOSTS), 14)
-        for host in hook.WEBFETCH_HOSTS:
+    def test_existing_fourteen_hosts_are_ask(self) -> None:
+        # 14件固定はIssue #89以前のhost単位境界の無断増減・再分類を検出するため。
+        self.assertEqual(len(hook.LEGACY_WEBFETCH_HOSTS), 14)
+        self.assertEqual(hook.WEBFETCH_HOSTS, hook.LEGACY_WEBFETCH_HOSTS | hook.RESTRICTED_WEBFETCH_HOSTS)
+        for host in hook.LEGACY_WEBFETCH_HOSTS:
             with self.subTest(host=host):
                 self.assertEqual(outcome(webfetch(f"https://{host}/docs"))[0], "ask")
+
+    def test_restricted_host_classification_cannot_fall_back_to_legacy(self) -> None:
+        expected = set(hook.WEBFETCH_EXACT_PATHS) | set(hook.WEBFETCH_PATH_PREFIXES) | {
+            "repo.packagist.org",
+            "registry.npmjs.org",
+        }
+        # 二重登録ではlegacy側の全path許可が先に効くため、分類移行漏れを拒否する。
+        self.assertFalse(hook.LEGACY_WEBFETCH_HOSTS & hook.RESTRICTED_WEBFETCH_HOSTS)
+        self.assertEqual(hook.RESTRICTED_WEBFETCH_HOSTS, expected)
+
+        # host集合だけへ将来hostを足す分類漏れを合成し、任意pathがAskへ倒れないことを固定する。
+        with mock.patch.object(hook, "WEBFETCH_HOSTS", hook.WEBFETCH_HOSTS | {"future.example.com"}):
+            self.assertEqual(outcome(webfetch("https://future.example.com/arbitrary"))[0], "deny")
+
+    def test_issue_89_documentation_paths_are_closed_world(self) -> None:
+        allowed = (
+            "https://developer.themoviedb.org/docs/getting-started",
+            "https://developer.themoviedb.org/reference/intro/getting-started",
+            "https://www.themoviedb.org/documentation/api/terms-of-use",
+            "https://www.themoviedb.org/about/logos-attribution",
+            "https://www.typescriptlang.org/docs/handbook/intro.html",
+            "https://www.typescriptlang.org/tsconfig/strict.html",
+            "https://playwright.dev/docs/intro",
+            "https://playwright.dev/docs/api/class-page",
+            "https://dev.mysql.com/doc/refman/8.4/en/",
+            "https://docs.docker.com/compose/how-tos/",
+        )
+        denied = (
+            "https://www.themoviedb.org/documentation/api/terms-of-use-extra",
+            "https://www.themoviedb.org/about",
+            "https://api.themoviedb.org/docs",
+            "https://image.tmdb.org/docs",
+            "https://www.typescriptlang.org/play",
+            "https://playwright.dev/docs/download",
+            "https://dev.mysql.com/doc/refman/9.0/en/",
+            "https://docs.docker.com/engine/",
+            "https://developer.themoviedb.org/docs/download/archive.zip",
+            "https://docs.docker.com/compose/archive.tar.gz",
+        )
+        for url in allowed:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "ask")
+        for url in denied:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
+
+    def test_dependency_metadata_paths_are_finite(self) -> None:
+        allowed = (
+            "https://repo.packagist.org/p2/laravel/framework.json",
+            "https://registry.npmjs.org/vite/latest",
+            "https://registry.npmjs.org/@playwright/test/latest",
+            "https://registry.npmjs.org/typescript/latest",
+        )
+        denied = (
+            "https://repo.packagist.org/p2/other/package.json",
+            "https://repo.packagist.org/packages.json",
+            # rootは巨大full packumentへ戻り、任意version/dist-tagはclosed worldを崩すため拒否する。
+            "https://registry.npmjs.org/typescript",
+            "https://registry.npmjs.org/typescript/",
+            "https://registry.npmjs.org/typescript/7.0.2",
+            "https://registry.npmjs.org/typescript/next",
+            "https://registry.npmjs.org/typescript/beta",
+            "https://registry.npmjs.org/typescript/latest/",
+            "https://registry.npmjs.org/typescript/latest/anything",
+            "https://registry.npmjs.org/@playwright/test",
+            "https://registry.npmjs.org/@playwright/test/",
+            "https://registry.npmjs.org/@playwright/test/1.62.1",
+            "https://registry.npmjs.org/@playwright/test/next",
+            "https://registry.npmjs.org/@playwright/test/latest/",
+            "https://registry.npmjs.org/@playwright/test/latest/anything",
+            "https://registry.npmjs.org/unknown-package/latest",
+            "https://registry.npmjs.org/@unknown/package/latest",
+            "https://registry.npmjs.org/@playwright%2ftest/latest",
+            "https://registry.npmjs.org/typescript/latest?metadata=full",
+            "https://registry.npmjs.org/typescript/latest#metadata",
+        )
+        for url in allowed:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "ask")
+        for url in denied:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
 
     def test_scheme_host_suffix_and_subdomain_checks(self) -> None:
         # suffix偽装、未登録subdomain、末尾dotは別々のhost回避表現として固定する。
@@ -487,18 +663,31 @@ class WebFetchTests(unittest.TestCase):
             with self.subTest(url=url, prompt=prompt):
                 self.assertEqual(outcome(webfetch(url, prompt))[0], "ask")
 
-    def test_url_secret_keywords_and_one_decode_are_denied(self) -> None:
-        # URLは外部記録され得るためkeywordをDenyし、1回decode後の表記も検出する。
-        # 2重encodeのAskは安全保証ではなく、Hook独自解釈を1回に限定する境界を固定する。
+    def test_percent_encoding_and_url_secret_keywords_are_denied(self) -> None:
+        # canonical URLではpercent encoding自体を使わず、single/double encodeの解釈差を閉じる。
         for url in (
             "https://code.claude.com/token-guide",
             "https://code.claude.com/docs?api_key=dummy",
             "https://code.claude.com/%74oken-guide",
             "https://code.claude.com/docs#private_key",
+            "https://code.claude.com/%2574oken-guide",
+            "https://playwright.dev/docs%2fapi/class-page",
+            "https://playwright.dev/docs/%ZZ",
         ):
             with self.subTest(url=url):
                 self.assertEqual(outcome(webfetch(url))[0], "deny")
-        self.assertEqual(outcome(webfetch("https://code.claude.com/%2574oken-guide"))[0], "ask")
+
+    def test_path_normalization_query_fragment_and_redirect_inputs_fail_closed(self) -> None:
+        for url in (
+            "https://playwright.dev/docs//intro",
+            "https://playwright.dev/docs/../intro",
+            "https://playwright.dev/docs/intro?download=true",
+            "https://playwright.dev/docs/intro#other",
+            "https://example.com/docs/intro",
+            "https://sub.playwright.dev/docs/intro",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
 
     def test_prompt_control_characters_are_denied(self) -> None:
         # URLだけでなくprompt側の制御文字も拒否し、未検査の複数行入力をAskへ流さない。
