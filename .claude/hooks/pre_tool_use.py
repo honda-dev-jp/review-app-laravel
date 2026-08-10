@@ -177,9 +177,13 @@ ADVISORY_ECOSYSTEM_PACKAGES = {
     "composer": COMPOSER_METADATA_PACKAGES,
     "npm": NPM_METADATA_PACKAGES,
 }
+# ci.ymlで実際に使用するAction repositoryと同期するclosed worldとし、
+# CI Action追加時のallowlist更新漏れを完全一致testで拒否する。
 ACTION_RELEASE_REPOSITORIES = {
     "github.com/actions/checkout",
     "github.com/actions/setup-node",
+    "github.com/actions/setup-python",
+    "github.com/astral-sh/ruff-action",
     "github.com/shivammathur/setup-php",
 }
 ACTION_RELEASE_LIST_JSON = "tagName,name,publishedAt,isDraft,isPrerelease"
