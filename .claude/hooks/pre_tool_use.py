@@ -354,7 +354,7 @@ def _validate_tool_fields(
             return deny("malformed")
         # Pythonではboolがintのsubclassなので、通常のisinstanceだけではtimeout=Trueも数値になる。
         # JSON Schema上のbooleanとnumberを混同しないため、明示的に拒否する。
-        if isinstance(value, bool) and allowed_fields[field] != bool:
+        if isinstance(value, bool) and allowed_fields[field] is not bool:
             return deny("malformed")
     return None
 
