@@ -78,6 +78,8 @@ class ProjectSourceSyncTests(unittest.TestCase):
 
     def test_action_repositories_and_mysql_version_match_current_sources(self) -> None:
         ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
+        # 双方向完全一致により、CI未使用repositoryへのRelease参照権限拡大と、
+        # Release監査経路を持たないActionのCI追加を両方防ぐ。
         repositories = {
             f"github.com/{match}"
             for match in re.findall(r"^\s*uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@", ci, re.MULTILINE)
