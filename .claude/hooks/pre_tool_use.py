@@ -10,7 +10,7 @@ import shlex
 import sys
 from pathlib import PurePosixPath
 from typing import IO, Mapping
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 
 # 拒否理由からcommand、URL、path、prompt、環境変数値が漏れないよう、
@@ -83,7 +83,7 @@ PR_JSON_FIELDS = {
     "statusCheckRollup",
     "url",
 }
-WEBFETCH_HOSTS = {
+LEGACY_WEBFETCH_HOSTS = frozenset({
     "code.claude.com",
     "laravel.com",
     "docs.github.com",
@@ -98,6 +98,100 @@ WEBFETCH_HOSTS = {
     "vite.dev",
     "nodejs.org",
     "www.xserver.ne.jp",
+})
+
+# Issue #89で追加するhostはpathもclosed worldにする。既存14hostは従来の
+# host固定を維持し、後続Issueへ無関係な権限変更を混在させない。
+WEBFETCH_EXACT_PATHS = {
+    "www.themoviedb.org": {
+        "/documentation/api/terms-of-use",
+        "/about/logos-attribution",
+    },
+    "playwright.dev": {
+        "/docs/intro",
+        "/docs/browsers",
+        "/docs/ci",
+        "/docs/docker",
+        "/docs/test-configuration",
+        "/docs/trace-viewer",
+        "/docs/release-notes",
+    },
+}
+WEBFETCH_PATH_PREFIXES = {
+    "developer.themoviedb.org": ("/docs/", "/reference/"),
+    "www.typescriptlang.org": (
+        "/docs/",
+        "/docs/handbook/",
+        "/docs/handbook/release-notes/",
+        "/tsconfig/",
+    ),
+    "playwright.dev": ("/docs/api/",),
+    "dev.mysql.com": ("/doc/refman/8.4/en/",),
+    "docs.docker.com": ("/compose/",),
+}
+
+COMPOSER_METADATA_PACKAGES = {
+    "askdkc/breezejp",
+    "barryvdh/laravel-ide-helper",
+    "fakerphp/faker",
+    "guzzlehttp/guzzle",
+    "larastan/larastan",
+    "laravel/breeze",
+    "laravel/framework",
+    "laravel/pint",
+    "laravel/sail",
+    "laravel/sanctum",
+    "laravel/tinker",
+    "mockery/mockery",
+    "nunomaduro/collision",
+    "phpunit/phpunit",
+    "spatie/laravel-ignition",
+}
+NPM_METADATA_PACKAGES = {
+    "@playwright/test",
+    "@tailwindcss/forms",
+    "alpinejs",
+    "autoprefixer",
+    "axios",
+    "laravel-vite-plugin",
+    "postcss",
+    "tailwindcss",
+    "typescript",
+    "vite",
+}
+# package rootのfull packumentはWebFetchの応答上限を超え得る。応答を抑え、
+# 任意version/dist-tagへ範囲を広げないため、literal `latest`だけに固定する。
+NPM_METADATA_PATHS = frozenset(f"/{package}/latest" for package in NPM_METADATA_PACKAGES)
+
+# restricted hostの分類はpath正本から導出する。分類されていないhostを
+# WEBFETCH_HOSTSへ単独追加できない形にし、将来の追加漏れをfail-closedにする。
+RESTRICTED_WEBFETCH_HOSTS = (
+    frozenset(WEBFETCH_EXACT_PATHS)
+    | frozenset(WEBFETCH_PATH_PREFIXES)
+    | {"repo.packagist.org", "registry.npmjs.org"}
+)
+WEBFETCH_HOSTS = LEGACY_WEBFETCH_HOSTS | RESTRICTED_WEBFETCH_HOSTS
+
+ADVISORY_HELPER = ".claude/helpers/github_global_advisories.py"
+ADVISORY_ECOSYSTEM_PACKAGES = {
+    "composer": COMPOSER_METADATA_PACKAGES,
+    "npm": NPM_METADATA_PACKAGES,
+}
+ACTION_RELEASE_REPOSITORIES = {
+    "github.com/actions/checkout",
+    "github.com/actions/setup-node",
+    "github.com/shivammathur/setup-php",
+}
+ACTION_RELEASE_LIST_JSON = "tagName,name,publishedAt,isDraft,isPrerelease"
+ACTION_RELEASE_VIEW_JSON = "tagName,name,publishedAt,isDraft,isPrerelease,url"
+GH_RELEASE_ENVIRONMENT_OVERRIDES = {
+    "GH_DEBUG",
+    "GH_FORCE_TTY",
+    "GH_PAGER",
+    "PAGER",
+    "NO_COLOR",
+    "CLICOLOR",
+    "CLICOLOR_FORCE",
 }
 SECRET_KEYWORDS = (
     "token",
@@ -190,6 +284,8 @@ COMPOSER_PACKAGE_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 NPM_PACKAGE_RE = re.compile(r"(?:@[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.-]+\Z")
 ENV_PREFIX_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+GHSA_ID_RE = re.compile(r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\Z")
+RELEASE_TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,99}\Z")
 
 
 def decision(kind: str, reason_key: str) -> dict[str, object]:
@@ -392,6 +488,54 @@ def _json_fields_are_allowed(raw: str, allowed: set[str]) -> bool:
     return bool(fields) and all(fields) and len(fields) == len(set(fields)) and set(fields) <= allowed
 
 
+def _evaluate_advisory_helper(command: str, tokens: list[str]) -> dict[str, object] | None:
+    """専用helperのrepository相対canonical形だけを一般python3 Denyより先に扱う。"""
+    prefix = ["python3", ADVISORY_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if len(tokens) == 4 and tokens[2] == "view" and GHSA_ID_RE.fullmatch(tokens[3]):
+        return ask()
+    if len(tokens) == 7 and tokens[2:4] == ["list", "--ecosystem"] and tokens[5] == "--package":
+        ecosystem, package = tokens[4], tokens[6]
+        if package in ADVISORY_ECOSYSTEM_PACKAGES.get(ecosystem, set()):
+            return ask()
+    return deny("unregistered")
+
+
+def _evaluate_action_release(command: str, tokens: list[str]) -> dict[str, object] | None:
+    """通常repository固定とは分離した、現行CI ActionのRelease専用経路。"""
+    if tokens[:2] != ["gh", "release"]:
+        return None
+
+    list_match = re.fullmatch(
+        r"gh release list --limit 20 --repo (github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+) "
+        r"--json ([A-Za-z,]+)",
+        command,
+    )
+    if list_match:
+        repository, fields = list_match.groups()
+        if repository not in ACTION_RELEASE_REPOSITORIES:
+            return deny("repository")
+        return ask() if fields == ACTION_RELEASE_LIST_JSON else deny("gh_option")
+
+    view_match = re.fullmatch(
+        r"gh release view ([A-Za-z0-9][A-Za-z0-9._+-]{0,99}) --repo "
+        r"(github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+) --json ([A-Za-z,]+)",
+        command,
+    )
+    if view_match:
+        tag, repository, fields = view_match.groups()
+        if repository not in ACTION_RELEASE_REPOSITORIES:
+            return deny("repository")
+        # parserとは別に最終値も検査し、regex変更時にtag境界が暗黙に広がるのを防ぐ。
+        if not RELEASE_TAG_RE.fullmatch(tag):
+            return deny("gh_option")
+        return ask() if fields == ACTION_RELEASE_VIEW_JSON else deny("gh_option")
+    return deny("unregistered")
+
+
 def _evaluate_gh(command: str, tokens: list[str], environ: Mapping[str, str]) -> dict[str, object]:
     # 暗黙の接続先変更を防ぐGH環境変数検査は、影響を受けるghだけへ適用する。
     # Gitや一般Bashまで過剰にDenyせず、値も比較・保存・出力しない。
@@ -401,6 +545,14 @@ def _evaluate_gh(command: str, tokens: list[str], environ: Mapping[str, str]) ->
     # 順序変更による回帰を防ぐため、version確認も同じ境界の内側で判定する。
     if command == "gh --version":
         return ask()
+
+    # 値に関係なく存在だけで拒否し、canonical commandの出力・実行挙動が
+    # callerのdebug、TTY、pager、color設定で変化するのを防ぐ。
+    if tokens[:2] == ["gh", "release"] and GH_RELEASE_ENVIRONMENT_OVERRIDES.intersection(environ):
+        return deny("gh_environment")
+    release_result = _evaluate_action_release(command, tokens)
+    if release_result is not None:
+        return release_result
 
     list_match = re.fullmatch(
         rf"gh (issue|pr) list --state (open|closed|all) --limit ([1-9]|[1-9][0-9]|100) --repo {re.escape(REPOSITORY)}",
@@ -457,6 +609,10 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
 
 
 def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
+    advisory_result = _evaluate_advisory_helper(command, tokens)
+    if advisory_result is not None:
+        return advisory_result
+
     if command in EXACT_GENERAL_COMMANDS:
         return ask()
 
@@ -578,6 +734,25 @@ def evaluate_bash(tool_input: dict[str, object], environ: Mapping[str, str]) -> 
     return _evaluate_general(command, tokens)
 
 
+def _webfetch_path_is_allowed(host: str, path: str) -> bool:
+    if host in LEGACY_WEBFETCH_HOSTS:
+        return True
+    if host not in RESTRICTED_WEBFETCH_HOSTS:
+        return False
+    if host == "repo.packagist.org":
+        return any(path == f"/p2/{package}.json" for package in COMPOSER_METADATA_PACKAGES)
+    if host == "registry.npmjs.org":
+        return path in NPM_METADATA_PATHS
+
+    exact = WEBFETCH_EXACT_PATHS.get(host, set())
+    if path in exact:
+        return True
+    prefixes = WEBFETCH_PATH_PREFIXES.get(host)
+    if prefixes is not None:
+        return any(path.startswith(prefix) for prefix in prefixes)
+    return False
+
+
 def evaluate_webfetch(tool_input: dict[str, object]) -> dict[str, object]:
     field_error = _validate_tool_fields(tool_input, WEBFETCH_FIELDS, {"url", "prompt"})
     if field_error:
@@ -604,10 +779,32 @@ def evaluate_webfetch(tool_input: dict[str, object]) -> dict[str, object]:
     # suffix判定ではなくhostの完全一致を要求する。
     if host not in WEBFETCH_HOSTS:
         return deny("host")
-    # 1回encodeされた秘密語は検出するが、複数回decodeしてHook独自のURL解釈を作らない。
-    # Claude Codeや接続先との解釈差はIssue #52の実機確認へ残す。
-    if _has_secret_keyword(url) or _has_secret_keyword(unquote(url)):
+
+    # URL解釈差を作らないため、percent encodingは正当・不正を問わずcanonical URLでは
+    # 使用しない。これによりencoded separator、double encoding、秘密語のencodeを同時に閉じる。
+    if "%" in url:
+        return deny("url")
+    path = parsed.path or "/"
+    if "\\" in path or "//" in path:
+        return deny("url")
+    segments = path.split("/")
+    if any(segment in {".", ".."} for segment in segments):
+        return deny("url")
+    if _has_secret_keyword(url):
         return deny("secret_url")
+
+    restricted_host = host in RESTRICTED_WEBFETCH_HOSTS
+    # #89で追加した有限pathはquery/fragmentで別resourceへ変化させない。
+    if restricted_host and (parsed.query or parsed.fragment):
+        return deny("url")
+    lowered_segments = {segment.casefold() for segment in segments}
+    if restricted_host and (
+        lowered_segments.intersection({"download", "downloads"})
+        or path.casefold().endswith((".zip", ".tar", ".tar.gz", ".tgz", ".gz", ".exe", ".dmg", ".pkg", ".deb", ".rpm", ".msi", ".whl"))
+    ):
+        return deny("url")
+    if not _webfetch_path_is_allowed(host, path):
+        return deny("url")
     # prompt中のtokenやcredentialは公式文書を調べる正常な用語でもあるためDenyしない。
     # 外部送信されない保証ではなく、安全候補もAskとして人間の最終確認へ残す。
     return ask()
