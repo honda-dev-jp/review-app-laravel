@@ -19,7 +19,9 @@ hook = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(hook)
 
 
-def payload(tool_name: str, tool_input: dict[str, object], **extra: object) -> dict[str, object]:
+def payload(
+    tool_name: str, tool_input: dict[str, object], **extra: object
+) -> dict[str, object]:
     value: dict[str, object] = {
         "session_id": "session-test",
         "transcript_path": "/tmp/synthetic-transcript.jsonl",
@@ -34,13 +36,19 @@ def payload(tool_name: str, tool_input: dict[str, object], **extra: object) -> d
     return value
 
 
-def bash(command: str, environ: dict[str, str] | None = None, **fields: object) -> dict[str, object]:
+def bash(
+    command: str, environ: dict[str, str] | None = None, **fields: object
+) -> dict[str, object]:
     tool_input: dict[str, object] = {"command": command}
     tool_input.update(fields)
-    return hook.evaluate_input(payload("Bash", tool_input), {} if environ is None else environ)
+    return hook.evaluate_input(
+        payload("Bash", tool_input), {} if environ is None else environ
+    )
 
 
-def webfetch(url: str, prompt: str = "Summarize this official page", **fields: object) -> dict[str, object]:
+def webfetch(
+    url: str, prompt: str = "Summarize this official page", **fields: object
+) -> dict[str, object]:
     tool_input: dict[str, object] = {"url": url, "prompt": prompt}
     tool_input.update(fields)
     return hook.evaluate_input(payload("WebFetch", tool_input), {})
@@ -49,7 +57,9 @@ def webfetch(url: str, prompt: str = "Summarize this official page", **fields: o
 def outcome(result: dict[str, object]) -> tuple[str, str]:
     specific = result["hookSpecificOutput"]
     assert isinstance(specific, dict)
-    return str(specific["permissionDecision"]), str(specific["permissionDecisionReason"])
+    return str(specific["permissionDecision"]), str(
+        specific["permissionDecisionReason"]
+    )
 
 
 class ProjectSourceSyncTests(unittest.TestCase):
@@ -68,13 +78,20 @@ class ProjectSourceSyncTests(unittest.TestCase):
 
     def test_package_metadata_sets_match_project_manifests(self) -> None:
         composer = json.loads((PROJECT_ROOT / "composer.json").read_text())
-        composer_packages = (set(composer["require"]) - {"php"}) | set(composer["require-dev"])
+        composer_packages = (set(composer["require"]) - {"php"}) | set(
+            composer["require-dev"]
+        )
         self.assertEqual(hook.COMPOSER_METADATA_PACKAGES, composer_packages)
 
         package = json.loads((PROJECT_ROOT / "package.json").read_text())
-        npm_packages = set(package["devDependencies"]) | {"typescript", "@playwright/test"}
+        npm_packages = set(package["devDependencies"]) | {
+            "typescript",
+            "@playwright/test",
+        }
         self.assertEqual(hook.NPM_METADATA_PACKAGES, npm_packages)
-        self.assertEqual(hook.NPM_METADATA_PATHS, {f"/{name}/latest" for name in npm_packages})
+        self.assertEqual(
+            hook.NPM_METADATA_PATHS, {f"/{name}/latest" for name in npm_packages}
+        )
 
     def test_action_repositories_and_mysql_version_match_current_sources(self) -> None:
         ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
@@ -82,7 +99,9 @@ class ProjectSourceSyncTests(unittest.TestCase):
         # Release監査経路を持たないActionのCI追加を両方防ぐ。
         repositories = {
             f"github.com/{match}"
-            for match in re.findall(r"^\s*uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@", ci, re.MULTILINE)
+            for match in re.findall(
+                r"^\s*uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@", ci, re.MULTILINE
+            )
         }
         self.assertEqual(hook.ACTION_RELEASE_REPOSITORIES, repositories)
         self.assertIn("image: mysql:8.4.11", ci)
@@ -118,10 +137,14 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
 
     def test_unknown_tool_is_denied(self) -> None:
-        self.assertEqual(outcome(hook.evaluate_input(payload("Read", {}), {}))[0], "deny")
+        self.assertEqual(
+            outcome(hook.evaluate_input(payload("Read", {}), {}))[0], "deny"
+        )
 
     def test_tool_input_must_be_object(self) -> None:
-        self.assertEqual(outcome(hook.evaluate_input(payload("Bash", "pwd"), {}))[0], "deny")
+        self.assertEqual(
+            outcome(hook.evaluate_input(payload("Bash", "pwd"), {}))[0], "deny"
+        )
 
     def test_known_optional_top_level_fields_are_accepted(self) -> None:
         item = payload(
@@ -141,7 +164,14 @@ class InputValidationTests(unittest.TestCase):
     def test_unknown_tool_input_fields_are_denied(self) -> None:
         for item in (
             payload("Bash", {"command": "pwd", "unknown": False}),
-            payload("WebFetch", {"url": "https://code.claude.com/docs", "prompt": "Summarize", "run_in_background": False}),
+            payload(
+                "WebFetch",
+                {
+                    "url": "https://code.claude.com/docs",
+                    "prompt": "Summarize",
+                    "run_in_background": False,
+                },
+            ),
         ):
             with self.subTest(item=item):
                 self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
@@ -151,7 +181,9 @@ class InputValidationTests(unittest.TestCase):
         for item in (
             payload("Bash", {"command": "pwd", "timeout": True}),
             payload("Bash", {"command": "pwd", "description": 1}),
-            payload("WebFetch", {"url": "https://code.claude.com/docs", "prompt": False}),
+            payload(
+                "WebFetch", {"url": "https://code.claude.com/docs", "prompt": False}
+            ),
         ):
             with self.subTest(item=item):
                 self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
@@ -167,7 +199,9 @@ class InputValidationTests(unittest.TestCase):
                 "run_in_background": False,
             },
         )
-        self.assertEqual(outcome(hook.evaluate_input(item, {})), ("ask", hook.REASONS["ask"]))
+        self.assertEqual(
+            outcome(hook.evaluate_input(item, {})), ("ask", hook.REASONS["ask"])
+        )
 
     def test_bash_background_execution_is_denied(self) -> None:
         self.assertEqual(outcome(bash("pwd", run_in_background=True))[0], "deny")
@@ -177,9 +211,13 @@ class InputValidationTests(unittest.TestCase):
         # 構造化Denyと秘密情報の非露出を同時に保証する。
         stdin = io.StringIO(json.dumps(payload("Bash", {"command": "pwd"})))
         stdout = io.StringIO()
-        with mock.patch.object(hook, "evaluate_input", side_effect=RuntimeError("sensitive input")):
+        with mock.patch.object(
+            hook, "evaluate_input", side_effect=RuntimeError("sensitive input")
+        ):
             self.assertEqual(hook.run(stdin, stdout, {}), 0)
-        self.assertEqual(outcome(json.loads(stdout.getvalue())), ("deny", hook.REASONS["internal"]))
+        self.assertEqual(
+            outcome(json.loads(stdout.getvalue())), ("deny", hook.REASONS["internal"])
+        )
         self.assertNotIn("sensitive input", stdout.getvalue())
 
     def test_stdout_contains_only_one_json_document(self) -> None:
@@ -224,16 +262,32 @@ class GeneralBashTests(unittest.TestCase):
         for command in ("ls app", "ls -la tests", "ls .env.example"):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("ls -a", "ls /tmp", "ls ../outside", "ls .env.local", "ls app tests"):
+        for command in (
+            "ls -a",
+            "ls /tmp",
+            "ls ../outside",
+            "ls .env.local",
+            "ls app tests",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_head_tail_and_wc_boundaries(self) -> None:
         # 最大200行の直内側と直外側を固定し、大量出力を許す方向への緩和を検出する。
-        for command in ("head -n 1 README.md", "head -n 200 README.md", "tail -n 20 app/Models/Item.php", "wc -l README.md"):
+        for command in (
+            "head -n 1 README.md",
+            "head -n 200 README.md",
+            "tail -n 20 app/Models/Item.php",
+            "wc -l README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("head -n 0 README.md", "tail -n 201 README.md", "head README.md", "wc -l README.md CLAUDE.md"):
+        for command in (
+            "head -n 0 README.md",
+            "tail -n 201 README.md",
+            "head README.md",
+            "wc -l README.md CLAUDE.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -247,19 +301,37 @@ class GeneralBashTests(unittest.TestCase):
 
     def test_find_canonical_forms_and_quote_requirement(self) -> None:
         # shell上で似たquote差も別入力として扱い、正規化による許可範囲拡大を防ぐ。
-        for command in ('find app -type f', 'find tests -name "*.php"', 'find resources -type f -name "*.blade.php"'):
+        for command in (
+            "find app -type f",
+            'find tests -name "*.php"',
+            'find resources -type f -name "*.blade.php"',
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("find tests -name '*.php'", "find tests -name *.php", "find app -delete", "find app -exec echo x ;"):
+        for command in (
+            "find tests -name '*.php'",
+            "find tests -name *.php",
+            "find app -delete",
+            "find app -exec echo x ;",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_sed_range_boundaries(self) -> None:
         # 200行ちょうどを許可し、201行と逆転rangeを拒否して出力上限を固定する。
-        for command in ("sed -n '1,1p' README.md", "sed -n '1,200p' README.md", "sed -n '50,249p' README.md"):
+        for command in (
+            "sed -n '1,1p' README.md",
+            "sed -n '1,200p' README.md",
+            "sed -n '50,249p' README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("sed -n '1,201p' README.md", "sed -n '5,4p' README.md", 'sed -n "1,20p" README.md', "sed -i 's/a/b/' README.md"):
+        for command in (
+            "sed -n '1,201p' README.md",
+            "sed -n '5,4p' README.md",
+            'sed -n "1,20p" README.md',
+            "sed -i 's/a/b/' README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -268,15 +340,29 @@ class GeneralBashTests(unittest.TestCase):
         for command in ("echo Laravel", 'echo "test value"'):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("echo -n test", "echo $HOME", 'echo "api_key"', "echo value > output"):
+        for command in (
+            "echo -n test",
+            "echo $HOME",
+            'echo "api_key"',
+            "echo value > output",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_dependency_read_commands_are_limited(self) -> None:
-        for command in ("composer show laravel/framework", "npm list vite", "npm list @vitejs/plugin-vue"):
+        for command in (
+            "composer show laravel/framework",
+            "npm list vite",
+            "npm list @vitejs/plugin-vue",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("composer show --all", "composer install", "npm list --all", "npm install"):
+        for command in (
+            "composer show --all",
+            "composer install",
+            "npm list --all",
+            "npm install",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -301,7 +387,15 @@ class GeneralBashTests(unittest.TestCase):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_explicit_and_unregistered_commands_are_denied(self) -> None:
-        for command in ("cat README.md", "awk x README.md", "python3 script.py", "php -r echo", "curl https://example.com", "mkdir tmp", "unknown-command"):
+        for command in (
+            "cat README.md",
+            "awk x README.md",
+            "python3 script.py",
+            "php -r echo",
+            "curl https://example.com",
+            "mkdir tmp",
+            "unknown-command",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -392,7 +486,12 @@ class GitTests(unittest.TestCase):
         for command in ("git log --oneline -n 1", "git log --oneline -n 50"):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("git log --oneline -n 0", "git log --oneline -n 51", "git log --oneline", "git log -n 1 --oneline"):
+        for command in (
+            "git log --oneline -n 0",
+            "git log --oneline -n 51",
+            "git log --oneline",
+            "git log -n 1 --oneline",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -415,7 +514,14 @@ class GitTests(unittest.TestCase):
     def test_unregistered_and_modifying_git_are_denied(self) -> None:
         # `git show`は読み取り形でも未登録、`git fetch`は通信とref更新を伴うため、
         # command名だけから安全性を推測せずclosed worldを維持する。
-        for command in ("git show", "git status", "git add README.md", "git commit", "git fetch", "git reset"):
+        for command in (
+            "git show",
+            "git status",
+            "git add README.md",
+            "git commit",
+            "git fetch",
+            "git reset",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -474,7 +580,9 @@ class GitHubCliTests(unittest.TestCase):
         )
         for command in commands:
             with self.subTest(command=command):
-                self.assertEqual(outcome(bash(command)), ("deny", hook.REASONS["gh_option"]))
+                self.assertEqual(
+                    outcome(bash(command)), ("deny", hook.REASONS["gh_option"])
+                )
 
     def test_repository_mismatch_and_unregistered_commands_are_denied(self) -> None:
         for command in (
@@ -516,12 +624,21 @@ class GitHubCliTests(unittest.TestCase):
         for name in ("GH_REPO", "GH_HOST"):
             with self.subTest(name=name):
                 self.assertEqual(
-                    outcome(bash(f"gh issue view 51 --repo {hook.REPOSITORY}", {name: "synthetic"}))[0],
+                    outcome(
+                        bash(
+                            f"gh issue view 51 --repo {hook.REPOSITORY}",
+                            {name: "synthetic"},
+                        )
+                    )[0],
                     "deny",
                 )
                 self.assertEqual(outcome(bash("pwd", {name: "synthetic"}))[0], "ask")
-                self.assertEqual(outcome(bash("git status --short", {name: "synthetic"}))[0], "ask")
-                self.assertEqual(outcome(bash("gh --version", {name: "synthetic"}))[0], "deny")
+                self.assertEqual(
+                    outcome(bash("git status --short", {name: "synthetic"}))[0], "ask"
+                )
+                self.assertEqual(
+                    outcome(bash("gh --version", {name: "synthetic"}))[0], "deny"
+                )
 
     def test_action_release_rejects_output_affecting_environment(self) -> None:
         command = (
@@ -545,23 +662,34 @@ class WebFetchTests(unittest.TestCase):
     def test_existing_fourteen_hosts_are_ask(self) -> None:
         # 14件固定はIssue #89以前のhost単位境界の無断増減・再分類を検出するため。
         self.assertEqual(len(hook.LEGACY_WEBFETCH_HOSTS), 14)
-        self.assertEqual(hook.WEBFETCH_HOSTS, hook.LEGACY_WEBFETCH_HOSTS | hook.RESTRICTED_WEBFETCH_HOSTS)
+        self.assertEqual(
+            hook.WEBFETCH_HOSTS,
+            hook.LEGACY_WEBFETCH_HOSTS | hook.RESTRICTED_WEBFETCH_HOSTS,
+        )
         for host in hook.LEGACY_WEBFETCH_HOSTS:
             with self.subTest(host=host):
                 self.assertEqual(outcome(webfetch(f"https://{host}/docs"))[0], "ask")
 
     def test_restricted_host_classification_cannot_fall_back_to_legacy(self) -> None:
-        expected = set(hook.WEBFETCH_EXACT_PATHS) | set(hook.WEBFETCH_PATH_PREFIXES) | {
-            "repo.packagist.org",
-            "registry.npmjs.org",
-        }
+        expected = (
+            set(hook.WEBFETCH_EXACT_PATHS)
+            | set(hook.WEBFETCH_PATH_PREFIXES)
+            | {
+                "repo.packagist.org",
+                "registry.npmjs.org",
+            }
+        )
         # 二重登録ではlegacy側の全path許可が先に効くため、分類移行漏れを拒否する。
         self.assertFalse(hook.LEGACY_WEBFETCH_HOSTS & hook.RESTRICTED_WEBFETCH_HOSTS)
         self.assertEqual(hook.RESTRICTED_WEBFETCH_HOSTS, expected)
 
         # host集合だけへ将来hostを足す分類漏れを合成し、任意pathがAskへ倒れないことを固定する。
-        with mock.patch.object(hook, "WEBFETCH_HOSTS", hook.WEBFETCH_HOSTS | {"future.example.com"}):
-            self.assertEqual(outcome(webfetch("https://future.example.com/arbitrary"))[0], "deny")
+        with mock.patch.object(
+            hook, "WEBFETCH_HOSTS", hook.WEBFETCH_HOSTS | {"future.example.com"}
+        ):
+            self.assertEqual(
+                outcome(webfetch("https://future.example.com/arbitrary"))[0], "deny"
+            )
 
     def test_issue_89_documentation_paths_are_closed_world(self) -> None:
         allowed = (
@@ -679,7 +807,9 @@ class WebFetchTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(outcome(webfetch(url))[0], "deny")
 
-    def test_path_normalization_query_fragment_and_redirect_inputs_fail_closed(self) -> None:
+    def test_path_normalization_query_fragment_and_redirect_inputs_fail_closed(
+        self,
+    ) -> None:
         for url in (
             "https://playwright.dev/docs//intro",
             "https://playwright.dev/docs/../intro",
@@ -698,7 +828,9 @@ class WebFetchTests(unittest.TestCase):
 
     def test_webfetch_unknown_field_is_denied(self) -> None:
         self.assertEqual(
-            outcome(webfetch("https://code.claude.com/docs", run_in_background=False))[0],
+            outcome(webfetch("https://code.claude.com/docs", run_in_background=False))[
+                0
+            ],
             "deny",
         )
 
