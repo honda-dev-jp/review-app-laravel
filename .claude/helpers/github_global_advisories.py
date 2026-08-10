@@ -15,7 +15,9 @@ from typing import Mapping, Sequence
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 
-GHSA_ID_RE = re.compile(r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\Z")
+GHSA_ID_RE = re.compile(
+    r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\Z"
+)
 # `&`、`?`、`%`、`/`等を受理せず、cursorが固定queryの構造を変えないようにする。
 CURSOR_RE = re.compile(r"[A-Za-z0-9._~=-]{1,512}\Z")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -92,7 +94,11 @@ def build_argv(endpoint: str) -> list[str]:
 def build_list_endpoint(ecosystem: str, package: str, cursor: str | None = None) -> str:
     if package not in PACKAGES.get(ecosystem, set()):
         raise PolicyError
-    values = [("ecosystem", ecosystem), ("affects", package), ("per_page", str(PER_PAGE))]
+    values = [
+        ("ecosystem", ecosystem),
+        ("affects", package),
+        ("per_page", str(PER_PAGE)),
+    ]
     if cursor is not None:
         if not CURSOR_RE.fullmatch(cursor):
             raise PolicyError
@@ -127,7 +133,10 @@ def _subprocess_environment() -> dict[str, str]:
 
 
 def _endpoint_is_allowed(endpoint: str) -> bool:
-    if re.fullmatch(r"/advisories/GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}", endpoint):
+    if re.fullmatch(
+        r"/advisories/GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}",
+        endpoint,
+    ):
         return True
     parsed = urlsplit(endpoint)
     if parsed.path != "/advisories" or not parsed.query or parsed.fragment:
@@ -139,7 +148,9 @@ def _endpoint_is_allowed(endpoint: str) -> bool:
     expected_keys = {"ecosystem", "affects", "per_page"}
     if "after" in query:
         expected_keys.add("after")
-    if set(query) != expected_keys or any(len(values) != 1 for values in query.values()):
+    if set(query) != expected_keys or any(
+        len(values) != 1 for values in query.values()
+    ):
         return False
     ecosystem, package = query["ecosystem"][0], query["affects"][0]
     cursor = query.get("after", [None])[0]
@@ -152,7 +163,11 @@ def _endpoint_is_allowed(endpoint: str) -> bool:
 def run_gh(argv: Sequence[str]) -> bytes:
     # 将来呼び出し元が増えても、外部processへ到達する直前の最終境界として
     # argv全体とliteral endpointを再検証する。
-    if len(argv) != 12 or list(argv) != build_argv(argv[2]) or not _endpoint_is_allowed(argv[2]):
+    if (
+        len(argv) != 12
+        or list(argv) != build_argv(argv[2])
+        or not _endpoint_is_allowed(argv[2])
+    ):
         raise PolicyError
     try:
         process = subprocess.Popen(
@@ -239,6 +254,7 @@ def split_response(raw: bytes) -> tuple[Mapping[str, str], object]:
         if not re.fullmatch(r"[a-z0-9-]+", lowered) or lowered in headers:
             raise PolicyError
         headers[lowered] = value.strip()
+
     def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
         value: dict[str, object] = {}
         for key, item in pairs:
@@ -290,10 +306,16 @@ def next_cursor(link_header: str | None, ecosystem: str, package: str) -> str | 
         or parsed.fragment
     ):
         raise PolicyError
-    if set(query) != {"ecosystem", "affects", "per_page", "after"} or any(len(values) != 1 for values in query.values()):
+    if set(query) != {"ecosystem", "affects", "per_page", "after"} or any(
+        len(values) != 1 for values in query.values()
+    ):
         raise PolicyError
     cursor = query["after"][0]
-    if query["ecosystem"][0] != ecosystem or query["affects"][0] != package or query["per_page"][0] != str(PER_PAGE):
+    if (
+        query["ecosystem"][0] != ecosystem
+        or query["affects"][0] != package
+        or query["per_page"][0] != str(PER_PAGE)
+    ):
         raise PolicyError
     if not CURSOR_RE.fullmatch(cursor):
         raise PolicyError
@@ -303,15 +325,29 @@ def next_cursor(link_header: str | None, ecosystem: str, package: str) -> str | 
 def _safe_string(value: object, *, nullable: bool = False) -> str | None:
     if nullable and value is None:
         return None
-    if not isinstance(value, str) or len(value) > MAX_STRING_CHARS or CONTROL_RE.search(value):
+    if (
+        not isinstance(value, str)
+        or len(value) > MAX_STRING_CHARS
+        or CONTROL_RE.search(value)
+    ):
         raise PolicyError
     return value
 
 
-def project_advisory(value: object, package_filter: tuple[str, str] | None = None) -> dict[str, object]:
+def project_advisory(
+    value: object, package_filter: tuple[str, str] | None = None
+) -> dict[str, object]:
     if not isinstance(value, dict):
         raise PolicyError
-    required = {"ghsa_id", "summary", "severity", "published_at", "updated_at", "withdrawn_at", "vulnerabilities"}
+    required = {
+        "ghsa_id",
+        "summary",
+        "severity",
+        "published_at",
+        "updated_at",
+        "withdrawn_at",
+        "vulnerabilities",
+    }
     if not required.issubset(value):
         raise PolicyError
     ghsa_id = _safe_string(value["ghsa_id"])
@@ -328,17 +364,25 @@ def project_advisory(value: object, package_filter: tuple[str, str] | None = Non
         if timestamp is not None and not TIMESTAMP_RE.fullmatch(timestamp):
             raise PolicyError
     vulnerabilities = value["vulnerabilities"]
-    if vulnerabilities is not None and (not isinstance(vulnerabilities, list) or len(vulnerabilities) > 100):
+    if vulnerabilities is not None and (
+        not isinstance(vulnerabilities, list) or len(vulnerabilities) > 100
+    ):
         raise PolicyError
     if vulnerabilities is None:
         projected_vulnerabilities: list[dict[str, object]] | None = None
     else:
         projected_vulnerabilities = []
     for vulnerability in vulnerabilities or []:
-        if not isinstance(vulnerability, dict) or not {"package", "vulnerable_version_range", "first_patched_version"}.issubset(vulnerability):
+        if not isinstance(vulnerability, dict) or not {
+            "package",
+            "vulnerable_version_range",
+            "first_patched_version",
+        }.issubset(vulnerability):
             raise PolicyError
         package = vulnerability["package"]
-        if package is not None and (not isinstance(package, dict) or not {"ecosystem", "name"}.issubset(package)):
+        if package is not None and (
+            not isinstance(package, dict) or not {"ecosystem", "name"}.issubset(package)
+        ):
             raise PolicyError
         if package is None:
             if package_filter is not None:
@@ -356,8 +400,12 @@ def project_advisory(value: object, package_filter: tuple[str, str] | None = Non
         projected_vulnerabilities.append(
             {
                 "package": projected_package,
-                "vulnerable_version_range": _safe_string(vulnerability["vulnerable_version_range"], nullable=True),
-                "first_patched_version": _safe_string(vulnerability["first_patched_version"], nullable=True),
+                "vulnerable_version_range": _safe_string(
+                    vulnerability["vulnerable_version_range"], nullable=True
+                ),
+                "first_patched_version": _safe_string(
+                    vulnerability["first_patched_version"], nullable=True
+                ),
             }
         )
     # server-side filterだけを信頼せず、要求packageと照合できるprojectionが
@@ -406,7 +454,11 @@ def fetch_view(ghsa_id: str) -> dict[str, object]:
 def parse_command(argv: Sequence[str]) -> tuple[str, tuple[str, ...]]:
     if len(argv) == 2 and argv[0] == "view" and GHSA_ID_RE.fullmatch(argv[1]):
         return "view", (argv[1],)
-    if len(argv) == 5 and list(argv[:2]) == ["list", "--ecosystem"] and argv[3] == "--package":
+    if (
+        len(argv) == 5
+        and list(argv[:2]) == ["list", "--ecosystem"]
+        and argv[3] == "--package"
+    ):
         ecosystem, package = argv[2], argv[4]
         if package in PACKAGES.get(ecosystem, set()):
             return "list", (ecosystem, package)
@@ -416,7 +468,11 @@ def parse_command(argv: Sequence[str]) -> tuple[str, tuple[str, ...]]:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         command, values = parse_command(sys.argv[1:] if argv is None else argv)
-        projected: object = fetch_view(values[0]) if command == "view" else fetch_list(values[0], values[1])
+        projected: object = (
+            fetch_view(values[0])
+            if command == "view"
+            else fetch_list(values[0], values[1])
+        )
         # ensure_asciiは検証済み文字列に加え、非ASCII・制御文字を端末へ直接
         # 出力しない多重防御として維持する（schema/control検査の代替ではない）。
         output = json.dumps(projected, ensure_ascii=True, separators=(",", ":")) + "\n"

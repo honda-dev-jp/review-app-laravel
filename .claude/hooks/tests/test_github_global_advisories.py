@@ -10,7 +10,9 @@ import unittest
 from unittest import mock
 
 
-HELPER_PATH = Path(__file__).resolve().parents[2] / "helpers" / "github_global_advisories.py"
+HELPER_PATH = (
+    Path(__file__).resolve().parents[2] / "helpers" / "github_global_advisories.py"
+)
 SPEC = importlib.util.spec_from_file_location("github_global_advisories", HELPER_PATH)
 assert SPEC is not None and SPEC.loader is not None
 helper = importlib.util.module_from_spec(SPEC)
@@ -95,7 +97,9 @@ class ArgumentAndArgvTests(unittest.TestCase):
 
     def test_command_parser_is_finite_and_ordered(self) -> None:
         self.assertEqual(
-            helper.parse_command(["list", "--ecosystem", "npm", "--package", "typescript"]),
+            helper.parse_command(
+                ["list", "--ecosystem", "npm", "--package", "typescript"]
+            ),
             ("list", ("npm", "typescript")),
         )
         self.assertEqual(
@@ -139,7 +143,9 @@ class ResponseValidationTests(unittest.TestCase):
 
     def test_nullable_global_advisory_schema_is_projected(self) -> None:
         # 公式schemaのnullable値を欠落・型不正と混同して正常応答を拒否しない。
-        self.assertIsNone(helper.project_advisory(advisory(vulnerabilities=None))["vulnerabilities"])
+        self.assertIsNone(
+            helper.project_advisory(advisory(vulnerabilities=None))["vulnerabilities"]
+        )
 
         nullable_package = advisory()
         nullable_package["vulnerabilities"][0]["package"] = None
@@ -158,7 +164,9 @@ class ResponseValidationTests(unittest.TestCase):
         self.assertIsNone(projected["vulnerabilities"][0]["vulnerable_version_range"])
         self.assertIsNone(projected["vulnerabilities"][0]["first_patched_version"])
         self.assertIsNone(projected["withdrawn_at"])
-        withdrawn = helper.project_advisory(advisory(withdrawn_at="2026-01-03T00:00:00Z"))
+        withdrawn = helper.project_advisory(
+            advisory(withdrawn_at="2026-01-03T00:00:00Z")
+        )
         self.assertEqual(withdrawn["withdrawn_at"], "2026-01-03T00:00:00Z")
 
     def test_package_filter_skips_nullable_unmatchable_vulnerabilities(self) -> None:
@@ -178,12 +186,20 @@ class ResponseValidationTests(unittest.TestCase):
             ("composer", "laravel/framework"),
         )
         self.assertEqual(len(projected["vulnerabilities"]), 1)
-        self.assertEqual(projected["vulnerabilities"][0]["package"]["name"], "laravel/framework")
+        self.assertEqual(
+            projected["vulnerabilities"][0]["package"]["name"], "laravel/framework"
+        )
 
     def test_package_filter_with_no_projected_match_fails_closed(self) -> None:
         for vulnerabilities in (
             None,
-            [{"package": None, "vulnerable_version_range": None, "first_patched_version": None}],
+            [
+                {
+                    "package": None,
+                    "vulnerable_version_range": None,
+                    "first_patched_version": None,
+                }
+            ],
             [
                 {
                     "package": {"ecosystem": "composer", "name": None},
@@ -201,7 +217,10 @@ class ResponseValidationTests(unittest.TestCase):
         ):
             with self.subTest(vulnerabilities=vulnerabilities):
                 with self.assertRaises(helper.PolicyError):
-                    helper.project_advisory(advisory(vulnerabilities=vulnerabilities), ("composer", "laravel/framework"))
+                    helper.project_advisory(
+                        advisory(vulnerabilities=vulnerabilities),
+                        ("composer", "laravel/framework"),
+                    )
 
     def test_missing_wrong_schema_and_control_characters_fail_closed(self) -> None:
         missing = advisory()
@@ -223,7 +242,9 @@ class ResponseValidationTests(unittest.TestCase):
                 with self.assertRaises(helper.PolicyError):
                     helper.project_advisory(value)
 
-    def test_raw_size_invalid_utf8_and_invalid_json_fail_before_projection(self) -> None:
+    def test_raw_size_invalid_utf8_and_invalid_json_fail_before_projection(
+        self,
+    ) -> None:
         values = (
             b"x" * (helper.MAX_RESPONSE_BYTES + 1),
             b"HTTP/2 200\r\ncontent-type: application/json\r\n\r\n\xff",
@@ -278,10 +299,10 @@ class ResponseValidationTests(unittest.TestCase):
 
 class PaginationTests(unittest.TestCase):
     def test_next_link_origin_path_query_and_cursor_are_validated(self) -> None:
-        valid = (
-            '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor-2>; rel="next"'
+        valid = '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor-2>; rel="next"'
+        self.assertEqual(
+            helper.next_cursor(valid, "composer", "laravel/framework"), "cursor-2"
         )
-        self.assertEqual(helper.next_cursor(valid, "composer", "laravel/framework"), "cursor-2")
         invalid = (
             '<https://example.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=x>; rel="next"',
             '<https://api.github.com/repos/x?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=x>; rel="next"',
@@ -295,9 +316,7 @@ class PaginationTests(unittest.TestCase):
                     helper.next_cursor(link, "composer", "laravel/framework")
 
     def test_pagination_rebuilds_argv_from_cursor_instead_of_reusing_link(self) -> None:
-        first_link = (
-            '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor-2>; rel="next"'
-        )
+        first_link = '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor-2>; rel="next"'
         calls: list[list[str]] = []
 
         def fake_run(argv: list[str]) -> bytes:
@@ -307,15 +326,25 @@ class PaginationTests(unittest.TestCase):
         with mock.patch.object(helper, "run_gh", side_effect=fake_run):
             result = helper.fetch_list("composer", "laravel/framework")
         self.assertEqual(len(result), 2)
-        self.assertEqual(calls[0], helper.build_argv(helper.build_list_endpoint("composer", "laravel/framework")))
-        self.assertEqual(calls[1], helper.build_argv(helper.build_list_endpoint("composer", "laravel/framework", "cursor-2")))
+        self.assertEqual(
+            calls[0],
+            helper.build_argv(
+                helper.build_list_endpoint("composer", "laravel/framework")
+            ),
+        )
+        self.assertEqual(
+            calls[1],
+            helper.build_argv(
+                helper.build_list_endpoint("composer", "laravel/framework", "cursor-2")
+            ),
+        )
 
     def test_more_than_maximum_pages_fails_closed(self) -> None:
         # 上限到達後もnextがあれば部分結果を成功扱いせず、request全体を拒否する。
-        link = (
-            '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor>; rel="next"'
-        )
-        with mock.patch.object(helper, "run_gh", return_value=response([advisory()], link)):
+        link = '<https://api.github.com/advisories?ecosystem=composer&affects=laravel%2Fframework&per_page=50&after=cursor>; rel="next"'
+        with mock.patch.object(
+            helper, "run_gh", return_value=response([advisory()], link)
+        ):
             with self.assertRaises(helper.PolicyError):
                 helper.fetch_list("composer", "laravel/framework")
 
@@ -329,7 +358,9 @@ class PaginationTests(unittest.TestCase):
 
 class MainTests(unittest.TestCase):
     def test_main_outputs_only_projected_json(self) -> None:
-        with mock.patch.object(helper, "fetch_view", return_value=helper.project_advisory(advisory())):
+        with mock.patch.object(
+            helper, "fetch_view", return_value=helper.project_advisory(advisory())
+        ):
             with mock.patch.object(helper.sys, "stdout") as stdout:
                 self.assertEqual(helper.main(["view", "GHSA-2345-6789-cfgh"]), 0)
         written = "".join(call.args[0] for call in stdout.write.call_args_list)
@@ -344,7 +375,9 @@ class MainTests(unittest.TestCase):
         self.assertNotIn("synthetic-sensitive-value", rendered)
 
     def test_unexpected_helper_error_is_also_fixed(self) -> None:
-        with mock.patch.object(helper, "fetch_view", side_effect=RuntimeError("raw sensitive response")):
+        with mock.patch.object(
+            helper, "fetch_view", side_effect=RuntimeError("raw sensitive response")
+        ):
             with mock.patch.object(helper.sys, "stderr") as stderr:
                 self.assertEqual(helper.main(["view", "GHSA-2345-6789-cfgh"]), 1)
         rendered = " ".join(str(call) for call in stderr.write.call_args_list)

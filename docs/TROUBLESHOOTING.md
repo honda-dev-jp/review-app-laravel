@@ -12,6 +12,8 @@ Laravel移植作業中に発生しやすい問題の確認手順をまとめる�
 - セキュリティ方針は `docs/SECURITY.md` を参照する
 - デプロイ方針は `docs/DEPLOYMENT.md` を参照する
 
+この文書に記載するコマンドは、人間がローカル環境で実行することを前提とする。`curl`や`rm`を含むコマンドの掲載はClaude Codeへの実行権限付与を意味せず、Claude Codeの権限は既存のHook、settings、allowlistに従う。
+
 ## 2. 基本の切り分け手順
 
 以下の順で確認する。
@@ -629,12 +631,190 @@ git log --oneline --decorate -5
 確認手順：
 
 - 失敗したjobとstepを確認する
-- Laravel Pint、PHPStan / Larastan、Vite build、PHPUnitのどこで失敗したか確認する
+- Laravel Pint、PHPStan / Larastan、Vite build、PHPUnit、Ruff lint、Ruff format check、Python unittestのどこで失敗したか確認する
 - ローカルで同等の確認を実行済みか確認する
 - 差分に起因する失敗と、一時的なrunner・外部要因を区別する
 - 再実行する場合も、失敗内容を確認せず繰り返さない
 
 CIが実行されることと、Rulesetでrequired status checksとして強制されることは別である。required status checksが未設定でも、運用上はCIがすべて成功するまでマージしない。
+
+### Python CIのRuff lintが失敗する
+
+Issue #95の初回CIでは、`Run Ruff lint`で次のE721を1件検出した。
+
+```text
+E721 Use `is` and `is not` for type comparisons
+```
+
+lint失敗時は、次の順で切り分ける。
+
+1. エラーコード、対象ファイル、対象行を確認する
+2. `--fix`で自動修正せず、対象ロジックと既存のWhyコメントを確認する
+3. 既存ロジックを維持できる必要最小限の修正だけを行う
+4. Python回帰テストを再実行する
+5. `git diff --check`と対象ファイルの差分を確認する
+6. 修正後のCIを再実行する
+
+```bash
+python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
+git diff --check
+git diff -- 対象ファイル
+```
+
+今回のE721は1行だけを修正し、Python回帰テスト成功後の再CIでRuff lintが成功した。
+
+### Python CIのRuff format checkが失敗する
+
+Issue #95の初回CIでは、lint修正後の`Run Ruff format check`で次の4ファイルが未整形として検出された。
+
+```text
+Would reformat:
+.claude/helpers/github_global_advisories.py
+.claude/hooks/pre_tool_use.py
+.claude/hooks/tests/test_github_global_advisories.py
+.claude/hooks/tests/test_pre_tool_use.py
+
+4 files would be reformatted
+```
+
+`Would reformat:`に表示された対象を確認し、先に意図した実装差分をcommitしてworking treeをcleanにしてからformatterを適用する。formatter差分と実装差分、Hook/helperのsecurity policy変更を同じコミットへ混在させない。
+
+formatter適用後は`git diff --stat`と`git diff`で機械的な整形だけであることを確認する。Hook/helperはsecurity-sensitiveなため、見た目だけで安全と判断せず、Ruffの再確認とPython回帰テストまで実行する。
+
+### ローカルにRuffがない場合の一時standalone利用
+
+まず、ローカルでRuffが利用可能か確認する。
+
+```bash
+command -v ruff
+```
+
+pathが表示された場合だけversionを確認する。
+
+```bash
+ruff --version
+```
+
+Issue #95対応時のローカル環境にはRuffが導入されていなかった。現行方針どおり、Ruffをproject dependencyへ追加せず、次も使用しない。
+
+```text
+pip install
+pipx install
+uv / uvx
+venv
+requirements.txt
+requirements-dev.txt
+```
+
+実測環境はLinux x86_64で、CIと同じRuff 0.15.21の公式GitHub Release assetを`/tmp`配下だけへ一時配置した。次の手順は`uname -m`が`x86_64`である環境を対象とする。
+
+Ruff versionは`.github/workflows/ci.yml`の指定を正本とし、CI側を更新した場合は、この手順のRelease URL、archive名、version確認時の期待値も同じversionへ読み替える。
+
+```bash
+uname -m
+```
+
+実測値:
+
+```text
+x86_64
+```
+
+固定versionのstandalone archiveを`/tmp`へ取得して展開する。binaryをrepository配下へ保存したり、PATHへ常設したり、Git管理へ追加したりしない。
+
+```bash
+curl -L \
+  https://github.com/astral-sh/ruff/releases/download/0.15.21/ruff-x86_64-unknown-linux-gnu.tar.gz \
+  -o /tmp/ruff-0.15.21.tar.gz
+```
+
+```bash
+tar -xzf /tmp/ruff-0.15.21.tar.gz -C /tmp
+```
+
+```bash
+/tmp/ruff-x86_64-unknown-linux-gnu/ruff --version
+```
+
+期待値:
+
+```text
+ruff 0.15.21
+```
+
+versionがCIと一致しない場合はformatterを実行しない。
+
+### Ruff formatterの対象限定実行
+
+Issue #95で未整形と判定された4ファイルだけへformatterを適用する。repository全体へ適用しない。
+
+```bash
+/tmp/ruff-x86_64-unknown-linux-gnu/ruff format \
+  .claude/helpers/github_global_advisories.py \
+  .claude/hooks/pre_tool_use.py \
+  .claude/hooks/tests/test_github_global_advisories.py \
+  .claude/hooks/tests/test_pre_tool_use.py
+```
+
+適用後は、同じ4ファイルのformat、Claude Code用Pythonのlint、既存回帰テストを確認する。
+
+```bash
+/tmp/ruff-x86_64-unknown-linux-gnu/ruff format --check \
+  .claude/helpers/github_global_advisories.py \
+  .claude/hooks/pre_tool_use.py \
+  .claude/hooks/tests/test_github_global_advisories.py \
+  .claude/hooks/tests/test_pre_tool_use.py
+```
+
+実測結果:
+
+```text
+4 files already formatted
+```
+
+```bash
+/tmp/ruff-x86_64-unknown-linux-gnu/ruff check \
+  .claude/helpers/github_global_advisories.py \
+  .claude/hooks/pre_tool_use.py \
+  .claude/hooks/tests/
+```
+
+実測結果:
+
+```text
+All checks passed!
+```
+
+```bash
+python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
+```
+
+実測結果:
+
+```text
+Ran 77 tests
+OK
+```
+
+最後に、変更対象、差分内容、空白エラーを確認する。
+
+```bash
+git status --short
+git diff --stat
+git diff
+git diff --check
+```
+
+ローカル確認後はformatter差分を独立したコミットとして確定し、作業ブランチをpushする。push後にGitHub Actions CIが再実行され、Python品質チェックがすべて成功したことを確認する。
+
+### 一時Ruffの後片付け
+
+作業、差分レビュー、回帰確認、GitHub Actions CIの成功確認がすべて完了したあとに限り、一時展開先とarchiveを削除する。
+
+```bash
+rm -rf /tmp/ruff-x86_64-unknown-linux-gnu
+rm -f /tmp/ruff-0.15.21.tar.gz
+```
 
 ## 41. Git異常時の共通停止原則
 
