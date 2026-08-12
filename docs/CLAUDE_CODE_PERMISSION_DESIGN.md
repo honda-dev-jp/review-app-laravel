@@ -733,6 +733,58 @@ gh release view <tag> --repo <固定repository> --json tagName,name,publishedAt,
 
 `<tag>`は1〜100文字の`[A-Za-z0-9._+-]`に限定し、先頭は英数字とする。`gh release view`がReleaseとして解決するtagだけが取得対象であり、`git tag`、Git ref API、任意Tag一覧は許可しない。任意repository、Issue/PR、Actions run、repository設定、asset field、body field、release download、source archive、未知option・fieldはdenyする。これはRelease/Release-linked Tag専用の別allowlistであり、通常の単一repository固定を汎用化するものではない。
 
+### 14.6 repository固有Dependabot alerts専用helper
+
+2026年8月12日にGitHub公式のDependabot alerts REST API、REST API versions、pagination、OAuth scopes、`gh api`を再確認した。repository alertsの一覧`GET /repos/{owner}/{repo}/dependabot/alerts`と個別`GET /repos/{owner}/{repo}/dependabot/alerts/{alert_number}`はpublic previewであり、推奨Acceptは`application/vnd.github+json`、実装時点のlatest supported API versionは`2026-03-10`である。fine-grained tokenではrepositoryの`Dependabot alerts: read`、OAuth app tokenとclassic PATではprivate/public repositoryに`security_events`、public repositoryだけなら`public_repo`が公式要件である。現在のcredentialは変更せず、人間による実機確認で実効permissionを確認する。権限不足、認証失敗、将来unsupported versionによる`410 Gone`ではscope変更、再認証、別credentialへのfallbackを行わない。
+
+bare `gh api`と`Bash(gh api *)`のdeny、bare Bash Ask、Allow 0件は維持する。例外は`.claude/helpers/github_dependabot_alerts.py`だけとし、一般`python3` denyより前に次の完全一致形をAsk候補として判定する。
+
+```text
+python3 .claude/helpers/github_dependabot_alerts.py list
+python3 .claude/helpers/github_dependabot_alerts.py view <alert_number>
+```
+
+`list`は可変入力なし、`view`は`[1-9][0-9]*`かつ`1〜9223372036854775807`のalert番号1件だけを受理する。`0`、符号、leading zero、小数、空白、過長値、追加引数・option、別helper表記を拒否する。owner、repository、hostname、endpoint、method、header、token、query、projection、jq等はcallerから受け取らない。
+
+repositoryは`honda-dev-jp/review-app-laravel`、methodはGET、一覧queryは`state=open&per_page=25`へ固定する。list初回、list次page、viewのargvは次の順序へ固定し、subprocess直前にも全体を再検証する。list/viewの両方で`--include`を使用する。
+
+```text
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts?state=open&per_page=25 --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts?state=open&per_page=25&after=<percent-encoded-cursor> --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts/<alert_number> --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+```
+
+`-f`、`-F`、`--paginate`、`--slurp`、`--jq`、`--template`、`--verbose`、`--input`、`--cache`、`--silent`、Authorization headerを使用しない。子processは`stdin=DEVNULL`、stdout/stderr PIPE、`shell=False`、`close_fds=True`、new session、非TTY、timeout 20秒とする。環境はOS accountから得たHOMEと次の固定値だけに置換し、caller環境を継承しない。
+
+```text
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+LC_ALL=C.UTF-8
+TERM=dumb
+NO_COLOR=1
+CLICOLOR=0
+CLICOLOR_FORCE=0
+GH_PAGER=cat
+PAGER=cat
+GH_PROMPT_DISABLED=1
+```
+
+このため`GH_HOST`、`GH_REPO`、`GH_DEBUG`、`GH_FORCE_TTY`、`GH_CONFIG_DIR`、`GH_TOKEN`、`GITHUB_TOKEN`等は子processへ渡らない。helperはtokenやcredentialを直接取得、保持、出力せず、`gh auth token`も使用しない。
+
+固定上限は`PER_PAGE=25`、`MAX_PAGES=6`、`MAX_ALERTS=150`、1 subprocess raw 512 KiB、1 JSON body UTF-8 480 KiB、helper全体raw 1 MiB、helper全体UTF-8 960 KiB、header 32 KiB、output UTF-8 256 KiB、string 4096 Unicode code point、cursor 512文字、CWE 50件、timeout 20秒とする。`25 * 6 = 150`であり、総byte上限がpage上限より先に働くことは意図したDoS境界である。stdout/stderrを同時にbounded readし、JSON parse前にraw上限を適用する。上限を自動拡張せず、部分結果を返さない。
+
+headerはASCII、bodyはUTF-8として分離し、HTTP status 200だけを受理する。複数response、redirect、duplicate/malformed/non-ASCII/oversize header、成功時のstderr、invalid UTF-8/JSON、duplicate JSON key、NaN/Infinityを拒否する。paginationは`Link`の`rel="next"`だけを追跡し、nextは最大1件とする。URLのscheme `https`、host `api.github.com`、port/userinfo/fragmentなし、path `/repos/honda-dev-jp/review-app-laravel/dependabot/alerts`、順序非依存のquery key集合`state`、`per_page`、`after`と固定値を検証する。`/repositories/{repository_id}/...`等の推測したcanonicalized pathは許可しない。
+
+`after`はstrict percent decode後に1〜512文字の`[A-Za-z0-9._~=-]+`として検証し、seen setで重複・循環を拒否する。Link URL自体は次requestへ使わず、安全にpercent encodeしたcursorから固定endpointとargvを再構築する。6ページ目でnextなしは成功、nextありは全体失敗とする。実Linkのpath/query/cursor形は人間の実機確認まで未確認として扱う。
+
+一覧projectionは`number`、`state`、`dependency.package.ecosystem/name`、`manifest_path`、`scope`、`relationship`、`security_advisory.ghsa_id/cve_id/severity/summary`、`security_vulnerability.vulnerable_version_range/first_patched_version.identifier`、`created_at`、`updated_at`、`fixed_at`だけとする。詳細はこれにadvisoryの`published_at`、`updated_at`、`withdrawn_at`、nullableな`cvss_severities.cvss_v3/cvss_v4`のnullableな`score`と`vector_string`、nullableかつ最大50件の`cwes.cwe_id/name`だけを加える。`security_advisory.cvss`、description、references、URL、全identifiers、raw advisory、assignees、dismissed comment、全vulnerabilitiesは出力しない。
+
+source schemaでは`security_vulnerability.package`と`severity`も必須検査し、dependency packageと一致させる。list stateは`open`、view stateは`open/fixed/dismissed/auto_dismissed`、ecosystemは`composer/npm`、scopeはnullまたは`development/runtime`、relationshipはnullまたは`unknown/direct/transitive/inconclusive`、severityは`low/medium/high/critical`に限定する。nullable field、timestamp、GHSA/CVE ID、first patched object/identifierを検査し、CVSS scoreはnullまたはfiniteな0.0〜10.0、vector stringはnullまたは安全なstringだけを受理する。未対応ecosystemが返った場合はfixed errorでfail-closedとし、人間がschemaと対象範囲を再確認するまで推測でenumを広げない。未知fieldは必須schemaが正常なら無視し、未知の長大description等へprojected string上限を誤適用しない。
+
+projected string、必要なJSON key、header、cursorではC0 U+0000〜U+001F、DEL U+007F、C1 U+0080〜U+009Fを明示拒否し、正常出力は`ensure_ascii=True`のcompact JSONとする。異常時はstdoutを空にし、exit code 1と固定stderr `Dependabot alert request rejected`だけを返す。raw body/header、`gh` stderr、endpoint、cursor、入力値、token、credentialを出力しない。
+
+`.claude/settings.json`はbare Bash Ask、bare `gh api` deny、Hookの専用判定だけで境界を構成できるため変更しない。Issue #89 helperのAPI version `2022-11-28`、C1処理、cursor・byte上限方式も遡及変更しない。#89はASCII header decode、projected stringの既存control検査、`ensure_ascii=True`により実効的な出力安全性とfail-closedを維持している。#90のrepository/state固定、API version、C1明示拒否、seen cursor、raw/UTF-8別上限、list/view共通`--include`はIssue #90の受け入れ条件に基づく意図的な差である。
+
 ## 15. Read権限と秘密情報保護
 
 現行のRead denyを維持する。
@@ -1239,6 +1291,9 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 - [gh release list](https://cli.github.com/manual/gh_release_list)
 - [gh release view](https://cli.github.com/manual/gh_release_view)
 - [REST API endpoints for global security advisories](https://docs.github.com/en/rest/security-advisories/global-advisories?apiVersion=2022-11-28)
+- [REST API endpoints for Dependabot alerts](https://docs.github.com/en/rest/dependabot/alerts?apiVersion=2026-03-10)
+- [Using pagination in the REST API](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api)
+- [Scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
 - [GitHub REST API OpenAPI description 2022-11-28](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.2022-11-28.yaml)
 - [REST API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions)
 
@@ -1283,10 +1338,11 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-10 | Issue #89のMVP2公式host/path、有限package metadata、Global Advisories専用helper、現行CI Action Release/Release-linked Tag専用経路を追加。Allow 0件、bare `gh api` deny、通常repository固定を維持 |
 | 2026-08-10 | npm package rootの実機取得がWebFetchの10 MiB上限を超えたため、有限packageのliteral `/latest` exact pathだけへ変更。任意version・dist-tag、root、install、tarballのdenyを維持 |
 | 2026-08-10 | Issue #95のPython CI追加に合わせ、現行CI Action Release allowlistを5 repositoryへ同期。Python 3.10以上の実行要件とPython 3.12単独CI検証を区別して記録 |
+| 2026-08-13 | Issue #90のrepository固有Dependabot alerts専用helperを追加。public preview API version 2026-03-10、固定list/view、pagination・byte・schema・projection・C1境界を記録し、Allow 0件とbare `gh api` denyを維持 |
 
 ## 27. 決定事項と実装前提
 
-Issue #50・#51・#52・#89の設計事項は次のとおり確定した。
+Issue #50・#51・#52・#89・#90の設計事項は次のとおり確定した。
 
 1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、Issue #52でbare `WebFetch`をdenyからaskへ移した。人間が設定ソース、Hook、代表hostの実WebFetch、未登録subdomain拒否、フォールバックと再適用を確認済みである。その他の実機検証は、個別の結果が記録されるまで確認済みとは扱わない。
 2. Hook matcherは`Bash`と`WebFetch`だけとし、公式例に沿う`command`文字列、timeout 5秒で同期実行する。
@@ -1297,7 +1353,7 @@ Issue #50・#51・#52・#89の設計事項は次のとおり確定した。
 7. 一般Bashもclosed worldとし、§10.2と§17のcanonical形だけをaskとする。その他はdenyする。複合command、redirect、command substitution、改行、環境変数prefixもdenyする。
 8. Git・GitHub CLI・WebFetchの自動allowは0件とする。既存14hostは従来のhost完全一致を維持し、Issue #89の追加hostは§12.5の有限pathまで検査する。#89追加pathはqueryとfragmentもdenyする。
 9. canonical URLはpercent encodingを使用せず、single/double encoding、不正percent sequence、encoded separator、backslash、double slash、dot segmentをdenyする。Hook自身はredirectを追跡しない。
-10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helperと現行CI Action Release/Release-linked Tagだけを§14.4・§14.5の専用経路へ分離する。
+10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helper、現行CI Action Release/Release-linked Tag、repository固有Dependabot alerts helperだけを§14.4〜§14.6の専用経路へ分離する。
 11. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
 12. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
 

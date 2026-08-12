@@ -14,10 +14,13 @@
 ├── README.md
 └── tests/
     ├── test_pre_tool_use.py
-    └── test_github_global_advisories.py
+    ├── test_github_global_advisories.py
+    └── test_github_dependabot_alerts.py
 ```
 
 Issue #89のGitHub Global Security Advisories専用実行本体は`.claude/helpers/github_global_advisories.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_global_advisories.py`に置きます。
+
+Issue #90のrepository固有Dependabot alerts専用実行本体は`.claude/helpers/github_dependabot_alerts.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_dependabot_alerts.py`に置きます。
 
 - 対象tool: `Bash`、`WebFetch`
 - matcher: `Bash|WebFetch`
@@ -107,6 +110,8 @@ gh issue list --state open --limit 20 --repo github.com/honda-dev-jp/review-app-
 gh issue view 51 --repo github.com/honda-dev-jp/review-app-laravel --json number,title,state,body,comments,labels,url
 python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package laravel/framework
 python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh
+python3 .claude/helpers/github_dependabot_alerts.py list
+python3 .claude/helpers/github_dependabot_alerts.py view 1
 gh release list --limit 20 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease
 gh release view v6.1.0 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease,url
 python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
@@ -141,6 +146,14 @@ pathを受け取るcommandへ設計書§15の共通規則を適用します。`.
 ### Issue #89専用GitHub経路
 
 bare `gh api`は引き続きDenyです。Global Advisoriesはrepository相対の固定helper path、`view`または`list`、固定option順、GHSA IDまたは固定ecosystem/packageだけを一般`python3` Denyより前の専用判定でAskへ進めます。helperは固定GET argvと最小環境を生成し、pagination URLを再利用せず検証済みcursorからendpointを再構築し、上限・UTF-8・schema・control characterを検査して固定projectionだけを出力します。
+
+### Issue #90専用GitHub経路
+
+bare `gh api`のDenyとAllow 0件を維持し、Dependabot alertsはrepository相対の`.claude/helpers/github_dependabot_alerts.py`だけを一般`python3` Denyより前の専用判定でAskへ進めます。canonical形は引数なしの`list`と、`[1-9][0-9]*`かつ`2^63-1`以下のalert番号1件を持つ`view`だけです。別path、追加option、repository・endpoint・method・query・header・projection指定はDenyします。
+
+helperは`honda-dev-jp/review-app-laravel`、GET、`state=open`、`per_page=25`、API version `2026-03-10`、Accept header、list/view共通の`--include`を固定します。最大6ページ・150件、1回/全体のrawとUTF-8 byte、header、output、string、cursor、CWE、timeoutの各上限を強制します。`Link`のnext URLは実行せず、`https://api.github.com`、固定path、固定queryを検証した`after` cursorだけから次argvを再構築します。
+
+必須schema、nullable、enum、package一致、duplicate JSON key、NaN/Infinity、C0/C1/DELを検査し、一覧と詳細の固定projectionだけをASCII JSONとして出力します。異常時はstdoutを空にし、stderrの`Dependabot alert request rejected`とexit code 1だけを返します。raw header/body、`gh` stderr、token、credentialは出力しません。Issue #89 helperのAPI version・既存境界は変更しません。
 
 通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`astral-sh/ruff-action`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR/Actions run、任意repositoryはDenyします。
 
@@ -191,7 +204,7 @@ python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
 
 - repository内file、transcript、`.env`の読み取り
 - HTTP通信、redirect追跡
-- subprocess、Git、GitHub CLIの実行（Issue #89の専用helperは別processとして固定`gh api`を実行する）
+- subprocess、Git、GitHub CLIの実行（Issue #89・#90の専用helperは別processとして固定`gh api`を実行する）
 - 入力JSON、URL、prompt、環境変数値の保存・出力
 - ログファイルの作成
 - 高度なshell解析や高度な秘密情報検出
