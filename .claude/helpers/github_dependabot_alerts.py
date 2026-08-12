@@ -58,10 +58,7 @@ class PolicyError(Exception):
 
 
 def parse_alert_number(value: str) -> int:
-    if (
-        len(value) > len(str(MAX_ALERT_NUMBER))
-        or not ALERT_NUMBER_RE.fullmatch(value)
-    ):
+    if len(value) > len(str(MAX_ALERT_NUMBER)) or not ALERT_NUMBER_RE.fullmatch(value):
         raise PolicyError
     number = int(value)
     if number > MAX_ALERT_NUMBER:
@@ -453,9 +450,7 @@ def project_alert(
     ):
         raise PolicyError
     states = (
-        {"open"}
-        if not detail
-        else {"open", "fixed", "dismissed", "auto_dismissed"}
+        {"open"} if not detail else {"open", "fixed", "dismissed", "auto_dismissed"}
     )
     state = _enum(source["state"], states)
 

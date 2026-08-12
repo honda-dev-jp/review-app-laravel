@@ -152,14 +152,11 @@ class CliAndArgvTests(unittest.TestCase):
             [
                 "gh",
                 "api",
-                f"{helper.REPOSITORY_PATH}?state=open&per_page=25"
-                "&after=cursor%3Dvalue",
+                f"{helper.REPOSITORY_PATH}?state=open&per_page=25&after=cursor%3Dvalue",
                 *suffix,
             ],
         )
-        self.assertEqual(
-            view, ["gh", "api", f"{helper.REPOSITORY_PATH}/7", *suffix]
-        )
+        self.assertEqual(view, ["gh", "api", f"{helper.REPOSITORY_PATH}/7", *suffix])
         for argv in (first, following, view):
             forbidden = {
                 "-f",
@@ -473,16 +470,16 @@ class HttpAndSchemaTests(unittest.TestCase):
         for score in (0, 0.0, 10, 10.0):
             with self.subTest(score=score):
                 value = alert()
-                value["security_advisory"]["cvss_severities"]["cvss_v3"][
-                    "score"
-                ] = score
+                value["security_advisory"]["cvss_severities"]["cvss_v3"]["score"] = (
+                    score
+                )
                 helper.project_alert(value, detail=True)
         for score in (True, -0.1, 10.1, float("nan"), float("inf")):
             with self.subTest(score=score):
                 value = alert()
-                value["security_advisory"]["cvss_severities"]["cvss_v3"][
-                    "score"
-                ] = score
+                value["security_advisory"]["cvss_severities"]["cvss_v3"]["score"] = (
+                    score
+                )
                 with self.assertRaises(helper.PolicyError):
                     helper.project_alert(value, detail=True)
         for count in (0, 50):
