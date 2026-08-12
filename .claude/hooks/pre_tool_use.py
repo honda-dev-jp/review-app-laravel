@@ -177,6 +177,8 @@ RESTRICTED_WEBFETCH_HOSTS = (
 WEBFETCH_HOSTS = LEGACY_WEBFETCH_HOSTS | RESTRICTED_WEBFETCH_HOSTS
 
 ADVISORY_HELPER = ".claude/helpers/github_global_advisories.py"
+DEPENDABOT_HELPER = ".claude/helpers/github_dependabot_alerts.py"
+MAX_DEPENDABOT_ALERT_NUMBER = 2**63 - 1
 ADVISORY_ECOSYSTEM_PACKAGES = {
     "composer": COMPOSER_METADATA_PACKAGES,
     "npm": NPM_METADATA_PACKAGES,
@@ -540,6 +542,28 @@ def _evaluate_advisory_helper(
     return deny("unregistered")
 
 
+def _evaluate_dependabot_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """一般python3 Denyより先にcanonical helperだけをAsk候補へ昇格する。"""
+    prefix = ["python3", DEPENDABOT_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if tokens == [*prefix, "list"]:
+        return ask()
+    if len(tokens) == 4 and tokens[2] == "view":
+        alert_number = tokens[3]
+        if (
+            len(alert_number) <= len(str(MAX_DEPENDABOT_ALERT_NUMBER))
+            and re.fullmatch(r"[1-9][0-9]*", alert_number)
+            and int(alert_number) <= MAX_DEPENDABOT_ALERT_NUMBER
+        ):
+            return ask()
+    return deny("unregistered")
+
+
 def _evaluate_action_release(
     command: str, tokens: list[str]
 ) -> dict[str, object] | None:
@@ -660,6 +684,10 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
 
 
 def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
+    dependabot_result = _evaluate_dependabot_helper(command, tokens)
+    if dependabot_result is not None:
+        return dependabot_result
+
     advisory_result = _evaluate_advisory_helper(command, tokens)
     if advisory_result is not None:
         return advisory_result
