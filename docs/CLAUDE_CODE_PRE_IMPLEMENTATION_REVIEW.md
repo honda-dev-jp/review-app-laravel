@@ -208,12 +208,21 @@ WebFetchは、人間が実装前検証に必要と判断した場合に限り、
 次は実行させません。
 
 - Issueの作成、編集、コメント、Close、再Open、削除
-- bare `gh api`（Issue #89のGlobal Advisories専用helperを除く）
+- bare `gh api`（Issue #89のGlobal Advisories専用helperとIssue #90のrepository固有Dependabot alerts専用helperを除く）
 - `gh auth token`
 - `gh auth status --show-token`
 - `gh pr view`
 - `gh pr list`
 - その他、今回の読み取り許可対象ではないGitHub操作
+
+Dependabot alertsを実装前検証の資料として参照する場合は、人間が対象を明示し、次のrepository相対canonical形だけを使用します。
+
+```text
+python3 .claude/helpers/github_dependabot_alerts.py list
+python3 .claude/helpers/github_dependabot_alerts.py view <1〜9223372036854775807のalert番号>
+```
+
+一覧は`honda-dev-jp/review-app-laravel`の`state=open`だけ、詳細は人間指定の1件だけです。任意repository、endpoint、method、query、header、projection、optionを追加せず、raw responseや制御文字を再出力しません。これはbare `gh api`の解禁ではなく、PreToolUse Hookのcanonical Askと専用helperのfail-closed境界を通る例外です。
 
 ## Bash確認ルール
 

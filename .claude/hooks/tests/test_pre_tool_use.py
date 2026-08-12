@@ -421,6 +421,50 @@ class GeneralBashTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
+    def test_dependabot_helper_has_only_canonical_forms(self) -> None:
+        prefix = "python3 .claude/helpers/github_dependabot_alerts.py"
+        allowed = (
+            f"{prefix} list",
+            f"{prefix} view 1",
+            f"{prefix} view {hook.MAX_DEPENDABOT_ALERT_NUMBER}",
+        )
+        denied = (
+            prefix,
+            f"{prefix} view",
+            f"{prefix} view 0",
+            f"{prefix} view -1",
+            f"{prefix} view +1",
+            f"{prefix} view 01",
+            f"{prefix} view 1.0",
+            f"{prefix} view alpha",
+            f"{prefix} view {hook.MAX_DEPENDABOT_ALERT_NUMBER + 1}",
+            f"{prefix} view {'9' * 20}",
+            f"{prefix} list extra",
+            f"{prefix} view 1 --repo other/repository",
+            f"{prefix} view 1 --method POST",
+            "python3 ./.claude/helpers/github_dependabot_alerts.py list",
+            "python3 /tmp/github_dependabot_alerts.py list",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_dependabot_helper_compound_forms_and_bare_api_stay_denied(self) -> None:
+        canonical = "python3 .claude/helpers/github_dependabot_alerts.py list"
+        for command in (
+            f"{canonical} && pwd",
+            f"{canonical} | head",
+            f"{canonical} > output",
+            f"{canonical} $(pwd)",
+            f"GH_REPO=other/repository {canonical}",
+            "gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
     def test_compound_redirect_substitution_and_control_syntax_are_denied(self) -> None:
         # 各shell構文は独立した迂回経路なので、1例へ集約せず個別の回帰を固定する。
         for command in (

@@ -38,16 +38,18 @@ jobs:
         with:
           version: '0.15.21'
           args: check
+          # helper追加時のRuff対象漏れを防ぐ品質範囲であり、権限allowlistではない。
           src: >-
             .claude/hooks/pre_tool_use.py
-            .claude/helpers/github_global_advisories.py
+            .claude/helpers/
             .claude/hooks/tests/
 
       - name: Run Ruff format check
+        # helper追加時のRuff対象漏れを防ぐ品質範囲であり、権限allowlistではない。
         run: >-
           ruff format --check
           .claude/hooks/pre_tool_use.py
-          .claude/helpers/github_global_advisories.py
+          .claude/helpers/
           .claude/hooks/tests/
 
       - name: Run Python unittest
