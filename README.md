@@ -38,6 +38,9 @@ GitHub Actionsを使用し、Pull Requestおよび`main` / `develop`ブランチ
 - PHPStan / Larastan Level 4
 - Vite build
 - PHPUnit（MySQL環境）
+- Ruff lint
+- Ruff format check
+- Python unittest
 
 Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`を正本として、固定されたバージョンを使用します。
 

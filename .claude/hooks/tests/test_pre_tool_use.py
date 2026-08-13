@@ -6,18 +6,22 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import unittest
 from unittest import mock
 
 
 HOOK_PATH = Path(__file__).resolve().parents[1] / "pre_tool_use.py"
+PROJECT_ROOT = HOOK_PATH.parents[2]
 SPEC = importlib.util.spec_from_file_location("pre_tool_use", HOOK_PATH)
 assert SPEC is not None and SPEC.loader is not None
 hook = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(hook)
 
 
-def payload(tool_name: str, tool_input: dict[str, object], **extra: object) -> dict[str, object]:
+def payload(
+    tool_name: str, tool_input: dict[str, object], **extra: object
+) -> dict[str, object]:
     value: dict[str, object] = {
         "session_id": "session-test",
         "transcript_path": "/tmp/synthetic-transcript.jsonl",
@@ -32,13 +36,19 @@ def payload(tool_name: str, tool_input: dict[str, object], **extra: object) -> d
     return value
 
 
-def bash(command: str, environ: dict[str, str] | None = None, **fields: object) -> dict[str, object]:
+def bash(
+    command: str, environ: dict[str, str] | None = None, **fields: object
+) -> dict[str, object]:
     tool_input: dict[str, object] = {"command": command}
     tool_input.update(fields)
-    return hook.evaluate_input(payload("Bash", tool_input), {} if environ is None else environ)
+    return hook.evaluate_input(
+        payload("Bash", tool_input), {} if environ is None else environ
+    )
 
 
-def webfetch(url: str, prompt: str = "Summarize this official page", **fields: object) -> dict[str, object]:
+def webfetch(
+    url: str, prompt: str = "Summarize this official page", **fields: object
+) -> dict[str, object]:
     tool_input: dict[str, object] = {"url": url, "prompt": prompt}
     tool_input.update(fields)
     return hook.evaluate_input(payload("WebFetch", tool_input), {})
@@ -47,7 +57,58 @@ def webfetch(url: str, prompt: str = "Summarize this official page", **fields: o
 def outcome(result: dict[str, object]) -> tuple[str, str]:
     specific = result["hookSpecificOutput"]
     assert isinstance(specific, dict)
-    return str(specific["permissionDecision"]), str(specific["permissionDecisionReason"])
+    return str(specific["permissionDecision"]), str(
+        specific["permissionDecisionReason"]
+    )
+
+
+class ProjectSourceSyncTests(unittest.TestCase):
+    def test_permission_baseline_and_hook_registration_are_unchanged(self) -> None:
+        settings = json.loads((PROJECT_ROOT / ".claude/settings.json").read_text())
+        permissions = settings["permissions"]
+        self.assertEqual(permissions["allow"], [])
+        self.assertEqual(
+            permissions["ask"],
+            ["Bash", "WebFetch", "Read(/.env.*)", "Read(/**/.env.*)"],
+        )
+        self.assertIn("Bash(gh api)", permissions["deny"])
+        self.assertIn("Bash(gh api *)", permissions["deny"])
+        for subcommand in ("rerun", "cancel", "delete", "download", "watch"):
+            self.assertIn(f"Bash(gh run {subcommand})", permissions["deny"])
+            self.assertIn(f"Bash(gh run {subcommand} *)", permissions["deny"])
+        hook_registration = settings["hooks"]["PreToolUse"][0]
+        self.assertEqual(hook_registration["matcher"], "Bash|WebFetch")
+
+    def test_package_metadata_sets_match_project_manifests(self) -> None:
+        composer = json.loads((PROJECT_ROOT / "composer.json").read_text())
+        composer_packages = (set(composer["require"]) - {"php"}) | set(
+            composer["require-dev"]
+        )
+        self.assertEqual(hook.COMPOSER_METADATA_PACKAGES, composer_packages)
+
+        package = json.loads((PROJECT_ROOT / "package.json").read_text())
+        npm_packages = set(package["devDependencies"]) | {
+            "typescript",
+            "@playwright/test",
+        }
+        self.assertEqual(hook.NPM_METADATA_PACKAGES, npm_packages)
+        self.assertEqual(
+            hook.NPM_METADATA_PATHS, {f"/{name}/latest" for name in npm_packages}
+        )
+
+    def test_action_repositories_and_mysql_version_match_current_sources(self) -> None:
+        ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text()
+        # 双方向完全一致により、CI未使用repositoryへのRelease参照権限拡大と、
+        # Release監査経路を持たないActionのCI追加を両方防ぐ。
+        repositories = {
+            f"github.com/{match}"
+            for match in re.findall(
+                r"^\s*uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@", ci, re.MULTILINE
+            )
+        }
+        self.assertEqual(hook.ACTION_RELEASE_REPOSITORIES, repositories)
+        self.assertIn("image: mysql:8.4.11", ci)
+        self.assertIn("image: 'mysql:8.4'", (PROJECT_ROOT / "compose.yaml").read_text())
 
 
 class InputValidationTests(unittest.TestCase):
@@ -79,10 +140,14 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
 
     def test_unknown_tool_is_denied(self) -> None:
-        self.assertEqual(outcome(hook.evaluate_input(payload("Read", {}), {}))[0], "deny")
+        self.assertEqual(
+            outcome(hook.evaluate_input(payload("Read", {}), {}))[0], "deny"
+        )
 
     def test_tool_input_must_be_object(self) -> None:
-        self.assertEqual(outcome(hook.evaluate_input(payload("Bash", "pwd"), {}))[0], "deny")
+        self.assertEqual(
+            outcome(hook.evaluate_input(payload("Bash", "pwd"), {}))[0], "deny"
+        )
 
     def test_known_optional_top_level_fields_are_accepted(self) -> None:
         item = payload(
@@ -102,7 +167,14 @@ class InputValidationTests(unittest.TestCase):
     def test_unknown_tool_input_fields_are_denied(self) -> None:
         for item in (
             payload("Bash", {"command": "pwd", "unknown": False}),
-            payload("WebFetch", {"url": "https://code.claude.com/docs", "prompt": "Summarize", "run_in_background": False}),
+            payload(
+                "WebFetch",
+                {
+                    "url": "https://code.claude.com/docs",
+                    "prompt": "Summarize",
+                    "run_in_background": False,
+                },
+            ),
         ):
             with self.subTest(item=item):
                 self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
@@ -112,7 +184,9 @@ class InputValidationTests(unittest.TestCase):
         for item in (
             payload("Bash", {"command": "pwd", "timeout": True}),
             payload("Bash", {"command": "pwd", "description": 1}),
-            payload("WebFetch", {"url": "https://code.claude.com/docs", "prompt": False}),
+            payload(
+                "WebFetch", {"url": "https://code.claude.com/docs", "prompt": False}
+            ),
         ):
             with self.subTest(item=item):
                 self.assertEqual(outcome(hook.evaluate_input(item, {}))[0], "deny")
@@ -128,7 +202,9 @@ class InputValidationTests(unittest.TestCase):
                 "run_in_background": False,
             },
         )
-        self.assertEqual(outcome(hook.evaluate_input(item, {})), ("ask", hook.REASONS["ask"]))
+        self.assertEqual(
+            outcome(hook.evaluate_input(item, {})), ("ask", hook.REASONS["ask"])
+        )
 
     def test_bash_background_execution_is_denied(self) -> None:
         self.assertEqual(outcome(bash("pwd", run_in_background=True))[0], "deny")
@@ -138,9 +214,13 @@ class InputValidationTests(unittest.TestCase):
         # 構造化Denyと秘密情報の非露出を同時に保証する。
         stdin = io.StringIO(json.dumps(payload("Bash", {"command": "pwd"})))
         stdout = io.StringIO()
-        with mock.patch.object(hook, "evaluate_input", side_effect=RuntimeError("sensitive input")):
+        with mock.patch.object(
+            hook, "evaluate_input", side_effect=RuntimeError("sensitive input")
+        ):
             self.assertEqual(hook.run(stdin, stdout, {}), 0)
-        self.assertEqual(outcome(json.loads(stdout.getvalue())), ("deny", hook.REASONS["internal"]))
+        self.assertEqual(
+            outcome(json.loads(stdout.getvalue())), ("deny", hook.REASONS["internal"])
+        )
         self.assertNotIn("sensitive input", stdout.getvalue())
 
     def test_stdout_contains_only_one_json_document(self) -> None:
@@ -185,16 +265,32 @@ class GeneralBashTests(unittest.TestCase):
         for command in ("ls app", "ls -la tests", "ls .env.example"):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("ls -a", "ls /tmp", "ls ../outside", "ls .env.local", "ls app tests"):
+        for command in (
+            "ls -a",
+            "ls /tmp",
+            "ls ../outside",
+            "ls .env.local",
+            "ls app tests",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_head_tail_and_wc_boundaries(self) -> None:
         # 最大200行の直内側と直外側を固定し、大量出力を許す方向への緩和を検出する。
-        for command in ("head -n 1 README.md", "head -n 200 README.md", "tail -n 20 app/Models/Item.php", "wc -l README.md"):
+        for command in (
+            "head -n 1 README.md",
+            "head -n 200 README.md",
+            "tail -n 20 app/Models/Item.php",
+            "wc -l README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("head -n 0 README.md", "tail -n 201 README.md", "head README.md", "wc -l README.md CLAUDE.md"):
+        for command in (
+            "head -n 0 README.md",
+            "tail -n 201 README.md",
+            "head README.md",
+            "wc -l README.md CLAUDE.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -208,19 +304,37 @@ class GeneralBashTests(unittest.TestCase):
 
     def test_find_canonical_forms_and_quote_requirement(self) -> None:
         # shell上で似たquote差も別入力として扱い、正規化による許可範囲拡大を防ぐ。
-        for command in ('find app -type f', 'find tests -name "*.php"', 'find resources -type f -name "*.blade.php"'):
+        for command in (
+            "find app -type f",
+            'find tests -name "*.php"',
+            'find resources -type f -name "*.blade.php"',
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("find tests -name '*.php'", "find tests -name *.php", "find app -delete", "find app -exec echo x ;"):
+        for command in (
+            "find tests -name '*.php'",
+            "find tests -name *.php",
+            "find app -delete",
+            "find app -exec echo x ;",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_sed_range_boundaries(self) -> None:
         # 200行ちょうどを許可し、201行と逆転rangeを拒否して出力上限を固定する。
-        for command in ("sed -n '1,1p' README.md", "sed -n '1,200p' README.md", "sed -n '50,249p' README.md"):
+        for command in (
+            "sed -n '1,1p' README.md",
+            "sed -n '1,200p' README.md",
+            "sed -n '50,249p' README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("sed -n '1,201p' README.md", "sed -n '5,4p' README.md", 'sed -n "1,20p" README.md', "sed -i 's/a/b/' README.md"):
+        for command in (
+            "sed -n '1,201p' README.md",
+            "sed -n '5,4p' README.md",
+            'sed -n "1,20p" README.md',
+            "sed -i 's/a/b/' README.md",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -229,15 +343,29 @@ class GeneralBashTests(unittest.TestCase):
         for command in ("echo Laravel", 'echo "test value"'):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("echo -n test", "echo $HOME", 'echo "api_key"', "echo value > output"):
+        for command in (
+            "echo -n test",
+            "echo $HOME",
+            'echo "api_key"',
+            "echo value > output",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_dependency_read_commands_are_limited(self) -> None:
-        for command in ("composer show laravel/framework", "npm list vite", "npm list @vitejs/plugin-vue"):
+        for command in (
+            "composer show laravel/framework",
+            "npm list vite",
+            "npm list @vitejs/plugin-vue",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("composer show --all", "composer install", "npm list --all", "npm install"):
+        for command in (
+            "composer show --all",
+            "composer install",
+            "npm list --all",
+            "npm install",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -262,9 +390,135 @@ class GeneralBashTests(unittest.TestCase):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
     def test_explicit_and_unregistered_commands_are_denied(self) -> None:
-        for command in ("cat README.md", "awk x README.md", "python3 script.py", "php -r echo", "curl https://example.com", "mkdir tmp", "unknown-command"):
+        for command in (
+            "cat README.md",
+            "awk x README.md",
+            "python3 script.py",
+            "php -r echo",
+            "curl https://example.com",
+            "mkdir tmp",
+            "unknown-command",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_global_advisory_helper_has_only_canonical_forms(self) -> None:
+        allowed = (
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package laravel/framework",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem npm --package @playwright/test",
+        )
+        denied = (
+            "python3 .claude/helpers/github_global_advisories.py",
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-zzzz-zzzz-zzzz",
+            "python3 .claude/helpers/github_global_advisories.py list --package laravel/framework --ecosystem composer",
+            "python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package other/package",
+            "python3 ./.claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 /tmp/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh --method POST",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_dependabot_helper_has_only_canonical_forms(self) -> None:
+        prefix = "python3 .claude/helpers/github_dependabot_alerts.py"
+        allowed = (
+            f"{prefix} list",
+            f"{prefix} view 1",
+            f"{prefix} view {hook.MAX_DEPENDABOT_ALERT_NUMBER}",
+        )
+        denied = (
+            prefix,
+            f"{prefix} view",
+            f"{prefix} view 0",
+            f"{prefix} view -1",
+            f"{prefix} view +1",
+            f"{prefix} view 01",
+            f"{prefix} view 1.0",
+            f"{prefix} view alpha",
+            f"{prefix} view {hook.MAX_DEPENDABOT_ALERT_NUMBER + 1}",
+            f"{prefix} view {'9' * 20}",
+            f"{prefix} list extra",
+            f"{prefix} view 1 --repo other/repository",
+            f"{prefix} view 1 --method POST",
+            "python3 ./.claude/helpers/github_dependabot_alerts.py list",
+            "python3 /tmp/github_dependabot_alerts.py list",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_dependabot_helper_compound_forms_and_bare_api_stay_denied(self) -> None:
+        canonical = "python3 .claude/helpers/github_dependabot_alerts.py list"
+        for command in (
+            f"{canonical} && pwd",
+            f"{canonical} | head",
+            f"{canonical} > output",
+            f"{canonical} $(pwd)",
+            f"GH_REPO=other/repository {canonical}",
+            "gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_actions_runs_helper_has_only_canonical_forms(self) -> None:
+        prefix = "python3 .claude/helpers/github_actions_runs.py"
+        allowed = (
+            f"{prefix} list",
+            f"{prefix} view 1",
+            f"{prefix} view {hook.MAX_ACTIONS_RUN_ID}",
+        )
+        denied = (
+            prefix,
+            f"{prefix} view",
+            f"{prefix} view 0",
+            f"{prefix} view 01",
+            f"{prefix} view +1",
+            f"{prefix} view -1",
+            f"{prefix} view 1.0",
+            f"{prefix} view  1",
+            f"{prefix} view {hook.MAX_ACTIONS_RUN_ID + 1}",
+            f"{prefix} list extra",
+            f"{prefix} view 1 extra",
+            f"{prefix} view 1 --repo other/repository",
+            "python3 ./.claude/helpers/github_actions_runs.py list",
+            "python3 /tmp/github_actions_runs.py list",
+            "python3 ~/.claude/helpers/github_actions_runs.py list",
+            "gh run list",
+            "gh run view 1",
+            f"{prefix} list | head",
+            f"{prefix} list > output",
+            f"{prefix} list && pwd",
+            f"({prefix} list)",
+            f"GH_REPO=other/repository {prefix} list",
+            f"{prefix} view $(pwd)",
+            f"{prefix} view $RUN_ID",
+            f"{prefix} view ${{RUN_ID}}",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_all_three_github_helpers_and_bare_api_keep_their_boundaries(self) -> None:
+        canonical = (
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_dependabot_alerts.py list",
+            "python3 .claude/helpers/github_actions_runs.py list",
+        )
+        for command in canonical:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        self.assertEqual(outcome(bash("gh api /repos/example/example"))[0], "deny")
 
     def test_compound_redirect_substitution_and_control_syntax_are_denied(self) -> None:
         # 各shell構文は独立した迂回経路なので、1例へ集約せず個別の回帰を固定する。
@@ -331,7 +585,12 @@ class GitTests(unittest.TestCase):
         for command in ("git log --oneline -n 1", "git log --oneline -n 50"):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "ask")
-        for command in ("git log --oneline -n 0", "git log --oneline -n 51", "git log --oneline", "git log -n 1 --oneline"):
+        for command in (
+            "git log --oneline -n 0",
+            "git log --oneline -n 51",
+            "git log --oneline",
+            "git log -n 1 --oneline",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -354,7 +613,14 @@ class GitTests(unittest.TestCase):
     def test_unregistered_and_modifying_git_are_denied(self) -> None:
         # `git show`は読み取り形でも未登録、`git fetch`は通信とref更新を伴うため、
         # command名だけから安全性を推測せずclosed worldを維持する。
-        for command in ("git show", "git status", "git add README.md", "git commit", "git fetch", "git reset"):
+        for command in (
+            "git show",
+            "git status",
+            "git add README.md",
+            "git commit",
+            "git fetch",
+            "git reset",
+        ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
@@ -413,7 +679,9 @@ class GitHubCliTests(unittest.TestCase):
         )
         for command in commands:
             with self.subTest(command=command):
-                self.assertEqual(outcome(bash(command)), ("deny", hook.REASONS["gh_option"]))
+                self.assertEqual(
+                    outcome(bash(command)), ("deny", hook.REASONS["gh_option"])
+                )
 
     def test_repository_mismatch_and_unregistered_commands_are_denied(self) -> None:
         for command in (
@@ -426,18 +694,61 @@ class GitHubCliTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
 
+    def test_action_release_and_release_linked_tag_canonical_forms(self) -> None:
+        for repository in hook.ACTION_RELEASE_REPOSITORIES:
+            commands = (
+                f"gh release list --limit 20 --repo {repository} --json {hook.ACTION_RELEASE_LIST_JSON}",
+                f"gh release view v1.2.3 --repo {repository} --json {hook.ACTION_RELEASE_VIEW_JSON}",
+            )
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assertEqual(outcome(bash(command))[0], "ask")
+
+    def test_action_release_scope_cannot_expand(self) -> None:
+        commands = (
+            f"gh release list --limit 20 --repo github.com/other/action --json {hook.ACTION_RELEASE_LIST_JSON}",
+            f"gh release list --limit 21 --repo github.com/actions/checkout --json {hook.ACTION_RELEASE_LIST_JSON}",
+            "gh release view v1.2.3 --repo github.com/actions/checkout --json assets",
+            f"gh release download v1.2.3 --repo github.com/actions/checkout --json {hook.ACTION_RELEASE_VIEW_JSON}",
+            "gh api repos/actions/checkout/releases",
+            "gh repo view github.com/actions/checkout",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
     def test_gh_environment_overrides_are_denied_only_for_gh(self) -> None:
         # GH環境変数はghの暗黙接続先だけを制限し、pwdやGitまで止める過剰Denyを防ぐ。
         # `gh --version`も同じgh境界に置き、dispatch順の例外を作らない。
         for name in ("GH_REPO", "GH_HOST"):
             with self.subTest(name=name):
                 self.assertEqual(
-                    outcome(bash(f"gh issue view 51 --repo {hook.REPOSITORY}", {name: "synthetic"}))[0],
+                    outcome(
+                        bash(
+                            f"gh issue view 51 --repo {hook.REPOSITORY}",
+                            {name: "synthetic"},
+                        )
+                    )[0],
                     "deny",
                 )
                 self.assertEqual(outcome(bash("pwd", {name: "synthetic"}))[0], "ask")
-                self.assertEqual(outcome(bash("git status --short", {name: "synthetic"}))[0], "ask")
-                self.assertEqual(outcome(bash("gh --version", {name: "synthetic"}))[0], "deny")
+                self.assertEqual(
+                    outcome(bash("git status --short", {name: "synthetic"}))[0], "ask"
+                )
+                self.assertEqual(
+                    outcome(bash("gh --version", {name: "synthetic"}))[0], "deny"
+                )
+
+    def test_action_release_rejects_output_affecting_environment(self) -> None:
+        command = (
+            "gh release list --limit 20 --repo github.com/actions/checkout "
+            f"--json {hook.ACTION_RELEASE_LIST_JSON}"
+        )
+        for name in hook.GH_RELEASE_ENVIRONMENT_OVERRIDES:
+            with self.subTest(name=name):
+                self.assertEqual(outcome(bash(command, {name: "synthetic"}))[0], "deny")
+                # unrelated Bashまで止めないことも固定し、環境検査の過剰Denyを防ぐ。
+                self.assertEqual(outcome(bash("pwd", {name: "synthetic"}))[0], "ask")
 
     def test_gh_environment_prefix_is_denied_without_exposing_value(self) -> None:
         # override値に機密情報が含まれても、専用の固定reason以外へ露出させない。
@@ -447,12 +758,106 @@ class GitHubCliTests(unittest.TestCase):
 
 
 class WebFetchTests(unittest.TestCase):
-    def test_all_fourteen_hosts_are_ask(self) -> None:
-        # 設計書の初期14hostと件数を同期し、意図しない追加・削除を顕在化させる。
-        self.assertEqual(len(hook.WEBFETCH_HOSTS), 14)
-        for host in hook.WEBFETCH_HOSTS:
+    def test_existing_fourteen_hosts_are_ask(self) -> None:
+        # 14件固定はIssue #89以前のhost単位境界の無断増減・再分類を検出するため。
+        self.assertEqual(len(hook.LEGACY_WEBFETCH_HOSTS), 14)
+        self.assertEqual(
+            hook.WEBFETCH_HOSTS,
+            hook.LEGACY_WEBFETCH_HOSTS | hook.RESTRICTED_WEBFETCH_HOSTS,
+        )
+        for host in hook.LEGACY_WEBFETCH_HOSTS:
             with self.subTest(host=host):
                 self.assertEqual(outcome(webfetch(f"https://{host}/docs"))[0], "ask")
+
+    def test_restricted_host_classification_cannot_fall_back_to_legacy(self) -> None:
+        expected = (
+            set(hook.WEBFETCH_EXACT_PATHS)
+            | set(hook.WEBFETCH_PATH_PREFIXES)
+            | {
+                "repo.packagist.org",
+                "registry.npmjs.org",
+            }
+        )
+        # 二重登録ではlegacy側の全path許可が先に効くため、分類移行漏れを拒否する。
+        self.assertFalse(hook.LEGACY_WEBFETCH_HOSTS & hook.RESTRICTED_WEBFETCH_HOSTS)
+        self.assertEqual(hook.RESTRICTED_WEBFETCH_HOSTS, expected)
+
+        # host集合だけへ将来hostを足す分類漏れを合成し、任意pathがAskへ倒れないことを固定する。
+        with mock.patch.object(
+            hook, "WEBFETCH_HOSTS", hook.WEBFETCH_HOSTS | {"future.example.com"}
+        ):
+            self.assertEqual(
+                outcome(webfetch("https://future.example.com/arbitrary"))[0], "deny"
+            )
+
+    def test_issue_89_documentation_paths_are_closed_world(self) -> None:
+        allowed = (
+            "https://developer.themoviedb.org/docs/getting-started",
+            "https://developer.themoviedb.org/reference/intro/getting-started",
+            "https://www.themoviedb.org/documentation/api/terms-of-use",
+            "https://www.themoviedb.org/about/logos-attribution",
+            "https://www.typescriptlang.org/docs/handbook/intro.html",
+            "https://www.typescriptlang.org/tsconfig/strict.html",
+            "https://playwright.dev/docs/intro",
+            "https://playwright.dev/docs/api/class-page",
+            "https://dev.mysql.com/doc/refman/8.4/en/",
+            "https://docs.docker.com/compose/how-tos/",
+        )
+        denied = (
+            "https://www.themoviedb.org/documentation/api/terms-of-use-extra",
+            "https://www.themoviedb.org/about",
+            "https://api.themoviedb.org/docs",
+            "https://image.tmdb.org/docs",
+            "https://www.typescriptlang.org/play",
+            "https://playwright.dev/docs/download",
+            "https://dev.mysql.com/doc/refman/9.0/en/",
+            "https://docs.docker.com/engine/",
+            "https://developer.themoviedb.org/docs/download/archive.zip",
+            "https://docs.docker.com/compose/archive.tar.gz",
+        )
+        for url in allowed:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "ask")
+        for url in denied:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
+
+    def test_dependency_metadata_paths_are_finite(self) -> None:
+        allowed = (
+            "https://repo.packagist.org/p2/laravel/framework.json",
+            "https://registry.npmjs.org/vite/latest",
+            "https://registry.npmjs.org/@playwright/test/latest",
+            "https://registry.npmjs.org/typescript/latest",
+        )
+        denied = (
+            "https://repo.packagist.org/p2/other/package.json",
+            "https://repo.packagist.org/packages.json",
+            # rootは巨大full packumentへ戻り、任意version/dist-tagはclosed worldを崩すため拒否する。
+            "https://registry.npmjs.org/typescript",
+            "https://registry.npmjs.org/typescript/",
+            "https://registry.npmjs.org/typescript/7.0.2",
+            "https://registry.npmjs.org/typescript/next",
+            "https://registry.npmjs.org/typescript/beta",
+            "https://registry.npmjs.org/typescript/latest/",
+            "https://registry.npmjs.org/typescript/latest/anything",
+            "https://registry.npmjs.org/@playwright/test",
+            "https://registry.npmjs.org/@playwright/test/",
+            "https://registry.npmjs.org/@playwright/test/1.62.1",
+            "https://registry.npmjs.org/@playwright/test/next",
+            "https://registry.npmjs.org/@playwright/test/latest/",
+            "https://registry.npmjs.org/@playwright/test/latest/anything",
+            "https://registry.npmjs.org/unknown-package/latest",
+            "https://registry.npmjs.org/@unknown/package/latest",
+            "https://registry.npmjs.org/@playwright%2ftest/latest",
+            "https://registry.npmjs.org/typescript/latest?metadata=full",
+            "https://registry.npmjs.org/typescript/latest#metadata",
+        )
+        for url in allowed:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "ask")
+        for url in denied:
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
 
     def test_scheme_host_suffix_and_subdomain_checks(self) -> None:
         # suffix偽装、未登録subdomain、末尾dotは別々のhost回避表現として固定する。
@@ -487,18 +892,33 @@ class WebFetchTests(unittest.TestCase):
             with self.subTest(url=url, prompt=prompt):
                 self.assertEqual(outcome(webfetch(url, prompt))[0], "ask")
 
-    def test_url_secret_keywords_and_one_decode_are_denied(self) -> None:
-        # URLは外部記録され得るためkeywordをDenyし、1回decode後の表記も検出する。
-        # 2重encodeのAskは安全保証ではなく、Hook独自解釈を1回に限定する境界を固定する。
+    def test_percent_encoding_and_url_secret_keywords_are_denied(self) -> None:
+        # canonical URLではpercent encoding自体を使わず、single/double encodeの解釈差を閉じる。
         for url in (
             "https://code.claude.com/token-guide",
             "https://code.claude.com/docs?api_key=dummy",
             "https://code.claude.com/%74oken-guide",
             "https://code.claude.com/docs#private_key",
+            "https://code.claude.com/%2574oken-guide",
+            "https://playwright.dev/docs%2fapi/class-page",
+            "https://playwright.dev/docs/%ZZ",
         ):
             with self.subTest(url=url):
                 self.assertEqual(outcome(webfetch(url))[0], "deny")
-        self.assertEqual(outcome(webfetch("https://code.claude.com/%2574oken-guide"))[0], "ask")
+
+    def test_path_normalization_query_fragment_and_redirect_inputs_fail_closed(
+        self,
+    ) -> None:
+        for url in (
+            "https://playwright.dev/docs//intro",
+            "https://playwright.dev/docs/../intro",
+            "https://playwright.dev/docs/intro?download=true",
+            "https://playwright.dev/docs/intro#other",
+            "https://example.com/docs/intro",
+            "https://sub.playwright.dev/docs/intro",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(outcome(webfetch(url))[0], "deny")
 
     def test_prompt_control_characters_are_denied(self) -> None:
         # URLだけでなくprompt側の制御文字も拒否し、未検査の複数行入力をAskへ流さない。
@@ -507,7 +927,9 @@ class WebFetchTests(unittest.TestCase):
 
     def test_webfetch_unknown_field_is_denied(self) -> None:
         self.assertEqual(
-            outcome(webfetch("https://code.claude.com/docs", run_in_background=False))[0],
+            outcome(webfetch("https://code.claude.com/docs", run_in_background=False))[
+                0
+            ],
             "deny",
         )
 

@@ -294,6 +294,8 @@ HookはProject settingsの`.claude/settings.json`へ登録する。現行の公�
 
 PreToolUse Hookは、Python 3.10以上の標準ライブラリだけで実装する。外部packageや追加のComposer・npm依存は導入しない。Claude Codeを起動するWSL hostで`command -v python3`と`python3 --version`を確認する。
 
+GitHub Actions CIではPython 3.12単独で回帰testを実行する。これは実行要件であるPython 3.10以上の全versionをCIで保証するものではない。
+
 実装方針は次のとおりとする。
 
 - 実装言語：Python 3.10以上
@@ -438,7 +440,7 @@ Hookは公式Schemaの`url`と`prompt`を分けて検査する。高度な秘密
 
 1. 入力構造、field、型を検査する。malformed URL、未知または不正な入力構造はdenyする。
 2. scheme、host、port、userinfoを解析する。`https`以外、許可外host、suffix偽装host、未登録subdomain、明示port、userinfoはdenyする。
-3. 元のURL文字列と、percent encodingを1回だけdecodeした文字列を、秘密情報らしきkeywordで大文字・小文字を区別せず検査する。URL側で検出した場合はdenyする。
+3. URLにpercent encoding、不正percent sequence、backslash、double slash、`.`または`..` path segmentがあればdenyする。canonical URLはpercent encodingを使用しない。
 4. fragment内に秘密情報らしきkeywordがあればdenyする。その他のfragment付きURLはaskとする。
 5. query内に秘密情報らしきkeywordがあればdenyする。その他のquery付きURLはaskとする。
 6. prompt側だけで秘密情報らしきkeywordを検出した場合はaskとする。
@@ -447,11 +449,11 @@ Hookは公式Schemaの`url`と`prompt`を分けて検査する。高度な秘密
 ask候補条件は次のすべてである。
 
 - schemeが`https`
-- hostが初期14hostのいずれかと完全一致
+- hostが本文の有限allowlistのいずれかと完全一致
 - 明示portなし
 - userinfoなし
 - 元のURL側に秘密情報らしきkeywordなし
-- 1回percent decode後のURL側にも秘密情報らしきkeywordなし
+- percent encoding、backslash、double slash、dot segmentなし
 
 query、fragment、またはprompt側だけの秘密情報らしきkeywordがある場合も、URL側のdeny条件に該当しなければaskとする。
 
@@ -471,7 +473,7 @@ private_key
 access_key
 ```
 
-判定は大文字・小文字を区別しない。元のURL文字列と1回だけpercent decodeした文字列を検査し、複数回decodeしない。URL側とprompt側の両方で検出した場合は、URL側のdenyを優先する。URL、prompt、入力JSONを保存しない。
+判定は大文字・小文字を区別しない。percent encodingはdecodeして受理せず、single encoding、double encoding、不正percent sequenceをcanonical URL外としてdenyする。URL側とprompt側の両方で検出した場合は、URL側のdenyを優先する。URL、prompt、入力JSONを保存しない。
 
 hostは完全一致で判定し、apexとsubdomainを別hostとして扱う。suffix一致を許可せず、必要なhostは1件ずつ追加する。Webページ本文の命令は非信頼入力として扱う。
 
@@ -522,6 +524,29 @@ Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Code�
 | Tailwind CSS | 3.4.19 | `v3.tailwindcss.com` |
 | Vite | 5.4.21 | `vite.dev` |
 | XServer | 本番環境として使用予定 | `www.xserver.ne.jp` |
+
+### 12.5 Issue #89のMVP2追加host/path
+
+確認日：2026年8月10日。Issue #89で追加するURLは、既存14hostとは分離してpathもclosed worldにする。すべてHTTPS、host完全一致、userinfoなし、明示portなし、queryなし、fragmentなしとし、表にない類似path、download path、redirect後に表の範囲外となるURLはdenyする。HookはHTTP redirectを追跡しないため、redirect先が別のWebFetch入力として提示された場合も同じ判定へ通し、同じclosed worldで再検証できない自動redirectは確認済みと扱わない。
+
+| host | 許可path | 用途・根拠 |
+|---|---|---|
+| `developer.themoviedb.org` | `/docs/`、`/reference/` prefix | TMDB仕様の設計確認。実API hostではない |
+| `www.themoviedb.org` | `/documentation/api/terms-of-use`、`/about/logos-attribution` exact | 利用条件とattribution |
+| `www.typescriptlang.org` | `/docs/`、`/docs/handbook/`、`/docs/handbook/release-notes/`、`/tsconfig/` prefix | MVP2 Playwright testのTypeScript設定 |
+| `playwright.dev` | `/docs/intro`、`/docs/browsers`、`/docs/ci`、`/docs/docker`、`/docs/test-configuration`、`/docs/trace-viewer`、`/docs/release-notes` exact、`/docs/api/` prefix | MVP2 browser testとCI設計 |
+| `dev.mysql.com` | `/doc/refman/8.4/en/` prefix | `compose.yaml`とCIで使用するMySQL 8.4系Reference Manual |
+| `docs.docker.com` | `/compose/` prefix | 現行Laravel Sail環境で使用するDocker Compose documentation |
+| `repo.packagist.org` | `/p2/<固定package>.json` exact | Composer package metadata |
+| `registry.npmjs.org` | `/<固定package>/latest` exact | npm latest version metadata |
+
+Packagistの固定packageは`composer.json`の`require`と`require-dev`にあるpackage名（`php`を除く）の有限集合とする。npmの固定packageは`package.json`の`devDependencies`にあるpackage名、およびMVP2で導入確定済みの`typescript`と`@playwright/test`の有限集合とする。Hook内の集合を実装上の正本とし、任意package名、tarball URL、package installは許可しない。
+
+npmのpackage rootが返すfull packumentは、`typescript`の実機確認でWebFetchの10 MiB応答上限を超えた。このためpackage rootは許可せず、固定packageのlatest version metadataへ応答を限定する。suffixはliteral `latest`だけとし、任意versionと任意dist-tagも許可しない。これにより取得可能なresourceを広げずに、MVP2で必要な現在のlatest metadataだけを参照する。
+
+HookではIssue #89以前の14hostを`LEGACY_WEBFETCH_HOSTS`へ明示固定し、path制限対象hostはexact/prefix/metadataのpath正本から`RESTRICTED_WEBFETCH_HOSTS`を導出する。全体の`WEBFETCH_HOSTS`はこの2分類の和だけとし、path判定のfallbackは`LEGACY_WEBFETCH_HOSTS`にしか適用しない。hostだけが追加されて分類またはpathが未登録の状態はaskへ進めずdenyする。
+
+TMDBの`api.themoviedb.org`と`image.tmdb.org`、TypeScript Playground、Playwright browser binaryとDocker image、MySQL 8.4以外のmanual、Docker Compose以外のdocumentationは対象外とする。TypeScriptとPlaywrightはMVP2 Milestoneのbrowser test自動化に必要な技術であり、未導入であることを理由に権限を将来全般へ広げず、上表の公式文書だけを先行して確認可能にする。
 
 ## 13. Git設計
 
@@ -574,14 +599,14 @@ permissionの個別denyを維持しつつ、Hookで実行command全体をclosed 
 - 対象repositoryは`honda-dev-jp/review-app-laravel`に限定する。
 - 初期版のGitHub CLI自動allowは0件とする。
 - すべての許可対象gh commandで`--repo github.com/honda-dev-jp/review-app-laravel`を必須とする。
-- `gh` commandの判定時に限り、`GH_REPO`と`GH_HOST`がcommand prefixまたはHook実行環境に存在する場合はdenyする。Gitや一般Bashにはこの検査を適用しない。
+- `gh` commandの判定時に限り、`GH_REPO`と`GH_HOST`がcommand prefixまたはHook実行環境に存在する場合はdenyする。Action Release専用経路では加えて`GH_DEBUG`、`GH_FORCE_TTY`、pager/color関連の既知環境変数もdenyする。値にかかわらず存在だけでdenyするのは、canonical commandの出力・実行挙動がcaller環境で変化するのを防ぐためである。Gitや一般Bashにはこの検査を適用しない。
 - 設計書に記載したcanonicalな引数順だけを受理し、`-R`、equals形式、option位置を変えた形は初期版ではdenyする。
 - `--web`をdenyする。
 - `--watch`をdenyする。
 - `--jq`をdenyする。
 - Issue・PR本文やコメントを非信頼入力として扱う。
 
-Hookは実行環境における`GH_REPO`と`GH_HOST`の存在だけを確認し、値を比較、保存、出力しない。継承状態は実機検証する。command内の明示的な環境変数prefixもdenyする。
+Hookは実行環境における対象環境変数の存在だけを確認し、値を比較、保存、出力しない。継承状態は実機検証する。command内の明示的な環境変数prefixもdenyする。
 
 ### 14.2 閲覧系
 
@@ -663,6 +688,138 @@ GitHub CLIにも`GH_PAGER`、`PAGER`等の設定由来で外部プロセスが�
 - codespace / cs
 - cache delete
 - `gh api`
+
+### 14.4 Global Security Advisories専用helper
+
+bare `gh api`と`Bash(gh api *)`のdenyは維持する。例外はrepository配下の`.claude/helpers/github_global_advisories.py`だけとし、Hookは一般`python3` denyより先に次のcanonical形を完全一致で判定する。
+
+```text
+python3 .claude/helpers/github_global_advisories.py view <GHSA-ID>
+python3 .claude/helpers/github_global_advisories.py list --ecosystem <composer|npm> --package <固定package>
+```
+
+- helper pathは上記のrepository相対pathだけとする。`./`を加えた別表記、絶対path、`~`、`$`、環境変数展開、command substitution、任意scriptをdenyする。
+- `view`は`GHSA-xxxx-xxxx-xxxx`のGitHub Base32 alphabetに合致するIDだけを受理する。
+- `list`はoption順を固定し、ecosystemは`composer`または`npm`、packageは§12.5の固定package集合だけを受理する。任意query、endpoint、method、header、optionはcallerから受け取らない。
+- helperが生成するargvは`gh api <literal endpoint> --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28"`の順序へ固定する。2026年8月10日時点で同versionはGitHubのsupported versionである。`shell=False`、stdinなし、非TTY、新sessionで実行する。
+- endpointは`/advisories`と`/advisories/<GHSA-ID>`だけとする。一覧queryは検証済みecosystem/package、固定`per_page=50`、検証済み`after` cursorからhelperが再構築する。
+- 子process環境はOS accountから得たHOME、固定PATH/locale/TERM/color/pager/non-interactive値だけとし、callerの`GH_HOST`、`GH_REPO`、`GH_DEBUG`、`GH_FORCE_TTY`、`GH_CONFIG_DIR`等を継承しない。tokenを取得、保持、出力する`gh auth token`は使わない。
+- `-f`、`-F`、`--paginate`、`--slurp`、`--jq`、`--template`、`--verbose`、`--input`、Authorization headerを使用しない。
+- responseは1回512 KiB、全体1 MiB、header 32 KiB、UTF-8 JSON出力256 KiB、1ページ50件、最大3ページ・150件、1 advisoryのvulnerability 100件、string 4096文字、timeout 20秒へ固定する。stdout/stderrを読みながらheader込み上限を適用し、JSON parse前にraw byteとUTF-8を検査する。
+- paginationは`Link`の`rel="next"`だけを解析し、scheme `https`、host `api.github.com`、明示port/userinfoなし、path `/advisories`、固定query key/valueを検証する。URL自体は実行せず、検証済み`after` cursorだけを抽出し、次のliteral endpoint argvを再構築する。最大3ページ後もnextがある場合は部分結果を出さずdenyする。
+- 必須schemaと型、GHSA ID、severity、timestamp、control characterを検査し、未知の追加fieldは無視する。GitHub公式schemaに合わせ、`withdrawn_at`、`vulnerabilities`、vulnerabilityの`package`、`package.name`、`vulnerable_version_range`、`first_patched_version`は`null`を受理する。package filter時は`package`または`package.name`が`null`で照合不能なvulnerabilityをスキップし、一致するprojected vulnerabilityが0件なら無関係な結果を返さずfail-closedにする。出力は`ghsa_id`、`summary`、`severity`、`published_at`、`updated_at`、`withdrawn_at`、vulnerabilityの`package.ecosystem`、`package.name`、`vulnerable_version_range`、`first_patched_version`だけへprojectionし、raw responseやcredentialを出力しない。
+- malformed response、invalid UTF-8、巨大response、schema不一致、subprocess失敗、timeoutは固定errorだけでfail-closedにする。Dependabot固有情報はIssue #90へ残す。
+
+このcanonical helper規約（repository相対の固定path、有限subcommand/option/value、共通shell denyより後かつ一般interpreter denyより前の専用判定、固定argv・環境・projection）は、Issue #90と#91で専用helperが必要になった場合にも再利用する。
+
+### 14.5 現行CI GitHub ActionsのReleaseとReleaseに紐づくTag
+
+通常のIssue・PR参照に対する`REPOSITORY = github.com/honda-dev-jp/review-app-laravel`は変更しない。外部repository例外は`.github/workflows/ci.yml`で実際に使用中の次の5件に対するRelease情報だけとする。
+
+```text
+github.com/actions/checkout
+github.com/shivammathur/setup-php
+github.com/actions/setup-node
+github.com/actions/setup-python
+github.com/astral-sh/ruff-action
+```
+
+canonical形は次の2つだけで、JSON fieldの順序も固定する。
+
+```text
+gh release list --limit 20 --repo <固定repository> --json tagName,name,publishedAt,isDraft,isPrerelease
+gh release view <tag> --repo <固定repository> --json tagName,name,publishedAt,isDraft,isPrerelease,url
+```
+
+`<tag>`は1〜100文字の`[A-Za-z0-9._+-]`に限定し、先頭は英数字とする。`gh release view`がReleaseとして解決するtagだけが取得対象であり、`git tag`、Git ref API、任意Tag一覧は許可しない。任意repository、Issue/PR、Actions run、repository設定、asset field、body field、release download、source archive、未知option・fieldはdenyする。これはRelease/Release-linked Tag専用の別allowlistであり、通常の単一repository固定を汎用化するものではない。
+
+### 14.6 repository固有Dependabot alerts専用helper
+
+2026年8月12日にGitHub公式のDependabot alerts REST API、REST API versions、pagination、OAuth scopes、`gh api`を再確認した。repository alertsの一覧`GET /repos/{owner}/{repo}/dependabot/alerts`と個別`GET /repos/{owner}/{repo}/dependabot/alerts/{alert_number}`はpublic previewであり、推奨Acceptは`application/vnd.github+json`、実装時点のlatest supported API versionは`2026-03-10`である。fine-grained tokenではrepositoryの`Dependabot alerts: read`、OAuth app tokenとclassic PATではprivate/public repositoryに`security_events`、public repositoryだけなら`public_repo`が公式要件である。現在のcredentialは変更せず、人間による実機確認で実効permissionを確認する。権限不足、認証失敗、将来unsupported versionによる`410 Gone`ではscope変更、再認証、別credentialへのfallbackを行わない。
+
+bare `gh api`と`Bash(gh api *)`のdeny、bare Bash Ask、Allow 0件は維持する。例外は`.claude/helpers/github_dependabot_alerts.py`だけとし、一般`python3` denyより前に次の完全一致形をAsk候補として判定する。
+
+```text
+python3 .claude/helpers/github_dependabot_alerts.py list
+python3 .claude/helpers/github_dependabot_alerts.py view <alert_number>
+```
+
+`list`は可変入力なし、`view`は`[1-9][0-9]*`かつ`1〜9223372036854775807`のalert番号1件だけを受理する。`0`、符号、leading zero、小数、空白、過長値、追加引数・option、別helper表記を拒否する。owner、repository、hostname、endpoint、method、header、token、query、projection、jq等はcallerから受け取らない。
+
+repositoryは`honda-dev-jp/review-app-laravel`、methodはGET、一覧queryは`state=open&per_page=25`へ固定する。list初回、list次page、viewのargvは次の順序へ固定し、subprocess直前にも全体を再検証する。list/viewの両方で`--include`を使用する。
+
+```text
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts?state=open&per_page=25 --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts?state=open&per_page=25&after=<percent-encoded-cursor> --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+gh api /repos/honda-dev-jp/review-app-laravel/dependabot/alerts/<alert_number> --hostname github.com --method GET --include --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2026-03-10"
+```
+
+`-f`、`-F`、`--paginate`、`--slurp`、`--jq`、`--template`、`--verbose`、`--input`、`--cache`、`--silent`、Authorization headerを使用しない。子processは`stdin=DEVNULL`、stdout/stderr PIPE、`shell=False`、`close_fds=True`、new session、非TTY、timeout 20秒とする。環境はOS accountから得たHOMEと次の固定値だけに置換し、caller環境を継承しない。
+
+```text
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+LC_ALL=C.UTF-8
+TERM=dumb
+NO_COLOR=1
+CLICOLOR=0
+CLICOLOR_FORCE=0
+GH_PAGER=cat
+PAGER=cat
+GH_PROMPT_DISABLED=1
+```
+
+このため`GH_HOST`、`GH_REPO`、`GH_DEBUG`、`GH_FORCE_TTY`、`GH_CONFIG_DIR`、`GH_TOKEN`、`GITHUB_TOKEN`等は子processへ渡らない。helperはtokenやcredentialを直接取得、保持、出力せず、`gh auth token`も使用しない。
+
+固定上限は`PER_PAGE=25`、`MAX_PAGES=6`、`MAX_ALERTS=150`、1 subprocess raw 512 KiB、1 JSON body UTF-8 480 KiB、helper全体raw 1 MiB、helper全体UTF-8 960 KiB、header 32 KiB、output UTF-8 256 KiB、string 4096 Unicode code point、cursor 512文字、CWE 50件、timeout 20秒とする。`25 * 6 = 150`であり、総byte上限がpage上限より先に働くことは意図したDoS境界である。stdout/stderrを同時にbounded readし、JSON parse前にraw上限を適用する。上限を自動拡張せず、部分結果を返さない。
+
+headerはASCII、bodyはUTF-8として分離し、HTTP status 200だけを受理する。複数response、redirect、duplicate/malformed/non-ASCII/oversize header、成功時のstderr、invalid UTF-8/JSON、duplicate JSON key、NaN/Infinityを拒否する。paginationは`Link`の`rel="next"`だけを追跡し、nextは最大1件とする。URLのscheme `https`、host `api.github.com`、port/userinfo/fragmentなし、path `/repos/honda-dev-jp/review-app-laravel/dependabot/alerts`、順序非依存のquery key集合`state`、`per_page`、`after`と固定値を検証する。`/repositories/{repository_id}/...`等の推測したcanonicalized pathは許可しない。
+
+`after`はstrict percent decode後に1〜512文字の`[A-Za-z0-9._~=-]+`として検証し、seen setで重複・循環を拒否する。Link URL自体は次requestへ使わず、安全にpercent encodeしたcursorから固定endpointとargvを再構築する。6ページ目でnextなしは成功、nextありは全体失敗とする。実Linkのpath/query/cursor形は人間の実機確認まで未確認として扱う。
+
+一覧projectionは`number`、`state`、`dependency.package.ecosystem/name`、`manifest_path`、`scope`、`relationship`、`security_advisory.ghsa_id/cve_id/severity/summary`、`security_vulnerability.vulnerable_version_range/first_patched_version.identifier`、`created_at`、`updated_at`、`fixed_at`だけとする。詳細はこれにadvisoryの`published_at`、`updated_at`、`withdrawn_at`、nullableな`cvss_severities.cvss_v3/cvss_v4`のnullableな`score`と`vector_string`、nullableかつ最大50件の`cwes.cwe_id/name`だけを加える。`security_advisory.cvss`、description、references、URL、全identifiers、raw advisory、assignees、dismissed comment、全vulnerabilitiesは出力しない。
+
+source schemaでは`security_vulnerability.package`と`severity`も必須検査し、dependency packageと一致させる。list stateは`open`、view stateは`open/fixed/dismissed/auto_dismissed`、ecosystemは`composer/npm`、scopeはnullまたは`development/runtime`、relationshipはnullまたは`unknown/direct/transitive/inconclusive`、severityは`low/medium/high/critical`に限定する。nullable field、timestamp、GHSA/CVE ID、first patched object/identifierを検査し、CVSS scoreはnullまたはfiniteな0.0〜10.0、vector stringはnullまたは安全なstringだけを受理する。未対応ecosystemが返った場合はfixed errorでfail-closedとし、人間がschemaと対象範囲を再確認するまで推測でenumを広げない。未知fieldは必須schemaが正常なら無視し、未知の長大description等へprojected string上限を誤適用しない。
+
+projected string、必要なJSON key、header、cursorではC0 U+0000〜U+001F、DEL U+007F、C1 U+0080〜U+009Fを明示拒否し、正常出力は`ensure_ascii=True`のcompact JSONとする。異常時はstdoutを空にし、exit code 1と固定stderr `Dependabot alert request rejected`だけを返す。raw body/header、`gh` stderr、endpoint、cursor、入力値、token、credentialを出力しない。
+
+`.claude/settings.json`はbare Bash Ask、bare `gh api` deny、Hookの専用判定だけで境界を構成できるため変更しない。Issue #89 helperのAPI version `2022-11-28`、C1処理、cursor・byte上限方式も遡及変更しない。#89はASCII header decode、projected stringの既存control検査、`ensure_ascii=True`により実効的な出力安全性とfail-closedを維持している。#90のrepository/state固定、API version、C1明示拒否、seen cursor、raw/UTF-8別上限、list/view共通`--include`はIssue #90の受け入れ条件に基づく意図的な差である。
+
+### 14.7 repository固有GitHub Actions run/job metadata専用helper
+
+Issue #91ではbare `gh run list/view`をAskへ広げず、repository相対の`.claude/helpers/github_actions_runs.py`だけを一般`python3` denyより前に判定する。canonical commandは次の2形だけとする。
+
+```text
+python3 .claude/helpers/github_actions_runs.py list
+python3 .claude/helpers/github_actions_runs.py view <run-id>
+```
+
+`list`は可変入力なし、`view`はASCIIの`[1-9][0-9]*`かつ`1〜9223372036854775807`のrun IDだけを受理する。leading zero、符号、小数、空白、非ASCII数字、過長値、別helper表記、追加引数・optionを拒否する。int64上限は入力の型境界であり、実在run IDの上限を意味しない。callerからrepository、limit、field、branch、commit、event、status、workflow、user、created、`--all`、`--jq`、`--template`等を受け取らない。
+
+helper内部のargvは次の順序へ完全固定し、subprocess直前にも全配列を再検証する。
+
+```text
+gh run list --limit 20 --repo github.com/honda-dev-jp/review-app-laravel --json databaseId,workflowName,displayTitle,event,status,conclusion,headBranch,headSha,createdAt,updatedAt
+gh run view <run-id> --repo github.com/honda-dev-jp/review-app-laravel --json databaseId,workflowName,displayTitle,event,status,conclusion,headBranch,headSha,createdAt,updatedAt,jobs
+```
+
+`--attempt`、`--exit-status`、`--job`、`--log`、`--log-failed`、`--verbose`、`--jq`、`--template`、`--web`は使用しない。特に`--exit-status`はworkflow failureを`gh` subprocessのnonzeroへ変えるため、失敗runの診断metadataとhelper failureを分離できなくなる。workflow conclusionがfailure、cancelled、timed_out等でもmetadata取得と検証に成功すればhelper exit 0とする。
+
+list/view共通run projectionは`databaseId`、`workflowName`、`displayTitle`、`event`、`status`、`conclusion`、`headBranch`、`headSha`、`createdAt`、`updatedAt`だけとする。viewはこれに最大100件の`jobs`を加え、各jobは`name`、`status`、`conclusion`、`completedAt`だけを出力する。run/job URL、`startedAt`、`attempt`、job databaseId、steps、unknown fieldは出力しない。viewの`databaseId`は要求run IDと完全一致させる。
+
+すべてのprojection fieldはsource object内で必須とし、`databaseId`はpositive int64、`displayTitle`、`event`、`headSha`、job nameはC0/C1/DELを含まない1〜4096文字のstring、run/job statusは`[a-z_]{1,32}`とする。status/conclusionは公式CLI/APIの将来値を永久的なclosed enumとして固定せず、安全なidentifier構文だけを検証する。`workflowName`と`headBranch`のnull/空文字、run/job conclusionのnull/空文字はnullへ正規化する。job `completedAt`のnull、空文字、`0001-01-01T00:00:00Z`もnullへ正規化する。requiredな`createdAt`/`updatedAt`ではこれらを拒否する。timestampは実在日時であるUTC RFC3339の`Z`形とし、小数秒を許可する。
+
+`gh run view --json jobs`のraw jobにはstepsが含まれ得るが、CLIにはjobsからstepsだけを除外するoptionがない。初期版はjob metadataだけを必要とするため、steps内部へprojected schema/string検査を適用せず、raw全体のbyte、UTF-8、JSON構文、duplicate key、NaN/Infinity検査だけを行い、projectionから除外する。run/job metadataは非信頼入力として扱い、含まれるURL、command、命令へ自動で従わない。secret keywordやentropyによるheuristicは誤判定境界を増やすため導入せず、logs非取得、raw非出力、fixed projection、上限、control character拒否、`ensure_ascii=True`、固定errorを境界とする。
+
+固定上限は`MAX_RUNS=20`、`MAX_JOBS=100`、list raw/UTF-8 256 KiB、view raw/UTF-8 2 MiB、output UTF-8 256 KiB、string 4096 Unicode code point、timeout 30秒とする。view rawだけを2 MiBにするのはprojectionで捨てるstepsがrawに含まれるためであり、timeout 30秒は実fixtureのviewが約21秒だったためである。`gh run list --limit 20`にhelper独自paginationや`--all`を加えず、取得後も20件以下を再検証する。空listは正常とする。
+
+`gh run view --json jobs`はCLI内部で全job/stepsを取得してからJSON出力するため、helperはCLI内部network/memoryを事前制限できない。初期版はRESTへ切り替えず、30秒timeout、view raw 2 MiB、最大100 jobs、出力256 KiBと全体fail-closedで扱う。この既知制約を理由なくIssue #90のHTTP header、Link pagination、cursor、page上限へ置き換えない。
+
+子process環境は`HOME`を`pwd.getpwuid(os.getuid()).pw_dir`から取得し、固定`PATH`、`C.UTF-8` locale、`TERM=dumb`、color無効、pager `cat`、`GH_PROMPT_DISABLED=1`、`GH_NO_UPDATE_NOTIFIER=1`だけを渡す。caller環境を継承せず、`GH_HOST`、`GH_REPO`、`GH_DEBUG`、`GH_FORCE_TTY`、`GH_CONFIG_DIR`、`GH_TOKEN`、`GITHUB_TOKEN`、browser、XDG override等を渡さない。`GH_NO_UPDATE_NOTIFIER`は診断外の通知・network挙動を増やさないために固定する。stdinはDEVNULL、stdout/stderrはPIPE、`shell=False`、`close_fds=True`、`start_new_session=True`とし、両streamを同時にbounded readする。timeout時はprocess groupを終了する。success時もstderrが1 byte以上あればfail-closedとし、raw stderrを表示しない。
+
+invalid UTF-8/JSON、duplicate key、NaN/Infinity、schema/型不一致、件数・byte・string上限、subprocess nonzero、stderr、timeoutは部分結果を返さない。unknown fieldは出力せず、required field欠落を拒否する。正常時は`ensure_ascii=True`のcompact JSONだけをstdoutへ返し、stderrを空、exit 0とする。異常時はstdoutを空、固定stderr `GitHub Actions run request rejected` 1行、exit 1とし、raw response、CLI stderr、入力値、token、credentialを漏らさない。
+
+`.claude/settings.json`はAllow 0件を維持し、`gh run rerun/cancel/delete/download/watch`の引数なし・引数あり形を明示Denyする。Hookでもbare `gh run`とunknown gh command/optionをDenyし、canonical helper 2形だけをAsk候補にする。PR差分レビューでは`gh pr checks`を先に使い、exit code 8をpendingとして扱う。checksだけで不足し、人間がrun IDを明示した場合だけcanonical viewを候補にする。Skill既定フローでhelperを自動実行せず、listはPR外push runを人間が明示した一般read-only調査へ残し、logs、rerun、URLアクセスへ自動遷移しない。
 
 ## 15. Read権限と秘密情報保護
 
@@ -794,10 +951,10 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 | Bash | 一般command | 自動allowなし | 明示deny、未登録、非canonical入力 | §10.2と§17のcanonical形 | 各境界値と1 token差を試験 |
 | WebFetch | URL scheme | なし | `http`、その他scheme | `https`かつ他のdeny条件なし | scheme大小・encodeを試験 |
 | WebFetch | `tool_input` | `url`と`prompt`だけで通常条件を満たす | 未知field（`run_in_background`を含む） | なし | 現行schemaと未知fieldを試験 |
-| WebFetch | host | なし | 許可外、suffix偽装、未登録subdomain | 初期14host完全一致 | apex・subdomain・末尾dotを試験 |
+| WebFetch | host/path | なし | 許可外、suffix偽装、未登録subdomain、#89の未登録path | 既存14hostまたは#89の有限host/path | apex・subdomain・類似path・末尾dotを試験 |
 | WebFetch | port・userinfo | なし | 明示port、userinfoあり | 明示portなし、userinfoなし | 443を含む明示portを試験 |
 | WebFetch | query・fragment | 両方なし | keywordを含むURL側 | keywordなしのqueryまたはfragment | 合成dummy値だけで試験 |
-| WebFetch | URL keyword | なし | 元URLまたは1回decode後にkeywordあり | 両方にkeywordなし | 大小文字・percent encodeを試験 |
+| WebFetch | URL canonical化 | なし | percent encoding、不正percent、backslash、double slash、dot segment、URL側keyword | canonical pathかつURL側keywordなし | single/double encodingと類似pathを試験 |
 | WebFetch | prompt keyword | なし | URL側にもkeywordあり | keywordなし、またはprompt側だけにkeywordあり | 合成promptで試験 |
 | WebFetch | redirect | 新しい呼び出しが通常条件を満たす | 新しい呼び出しがdeny条件 | 新しい呼び出しがask条件 | Issue #52の隔離環境で試験 |
 
@@ -939,7 +1096,7 @@ gh issue view 52 --repo github.com/other/repository
 ### 20.4 Web
 
 - WebFetchの自動allowが0件であること
-- 14hostすべては合成JSONでask候補として確認し、実通信は代表的な複数hostだけで設計どおりaskになること
+- 既存14hostとIssue #89の有限host/pathは合成JSONでask候補として確認し、実通信は代表的な複数URLだけで設計どおりaskになること
 - 許可外hostがdenyになること
 - suffix偽装hostがdenyになり、apexと未登録subdomainが別判定になること
 - redirect先を想定した別WebFetch入力が再検査されること
@@ -947,7 +1104,7 @@ gh issue view 52 --repo github.com/other/repository
 - 通常queryがaskになること
 - 通常fragmentがaskになり、fragment内keywordがdenyになること
 - URL側keywordがdenyになり、prompt側だけのkeywordがaskになること
-- 大文字小文字と、1回percent decode後のkeywordを合成dummy値で確認すること
+- 大文字小文字、single/double encoding、不正percent sequenceを合成dummy値で確認すること
 - malformed URLと未知の入力構造がdenyになること
 - WebFetchの公式入力に存在しない`run_in_background`を加えた合成入力がdenyになること
 - WebSearchがdenyになること
@@ -959,6 +1116,18 @@ Issue #52では、人間が次の範囲を実機確認した。
 - 未登録subdomainの`sub.code.claude.com`は、Hookにより`Host not allowed`で拒否された
 - bare `WebFetch`をaskからdenyへ戻してClaude Codeを再起動するとWebFetchが利用不可になった
 - bare `WebFetch`をaskへ戻して再起動するとWebFetchが再度成功した
+
+Issue #89の公式一次情報実機確認では、次の5 URLに限定して、PreToolUse Hookの通過、WebFetchのAsk表示、人間の「今回のみYes」、HTTP取得成功、ファイル保存なしまでを確認した。
+
+- `https://developer.themoviedb.org/docs/getting-started`
+- `https://www.themoviedb.org/documentation/api/terms-of-use`
+- `https://www.themoviedb.org/about/logos-attribution`
+- `https://www.typescriptlang.org/docs/`
+- `https://playwright.dev/docs/intro`
+
+`https://playwright.dev/docs/intro`では、ページ内のinstall commandを実行せず、package installとbrowser binary取得も行っていない。実機確認済みなのは上記5 URLだけであり、他の許可path、他のTMDB・TypeScript・Playwrightページ、未登録host/path、redirect、Deny系境界は、この確認結果だけを根拠に確認済みとは扱わない。
+
+Issue #89のnpm metadata実機確認では、`https://registry.npmjs.org/typescript`がHook判定と人間のAsk承認を通過した後、HTTP取得時にWebFetchの10 MiB応答上限を超えて失敗した。metadata確認、package install、tarball取得は行われていない。この結果を受け、応答サイズを抑えつつ任意version・dist-tagへclosed worldを広げないため、canonical pathを`/<固定package>/latest` exactへ変更した。再設計後は、非scoped packageの`https://registry.npmjs.org/typescript/latest`とscoped packageの`https://registry.npmjs.org/@playwright/test/latest`について、それぞれHookのAsk、人間の「今回のみYes」、HTTP 200、metadata取得まで実機で成功した。いずれもファイル保存、package install、tarball取得は行っていない。実通信で確認済みなのはこの代表2形状だけであり、残りの固定npm package、未登録package、package root、任意version・dist-tag、percent encoding変種の実通信・実Denyは確認済みと扱わない。
 
 上記以外のhost、redirect、query、fragment、keyword等の各境界条件は、この確認結果だけを根拠に確認済みとは扱わない。
 
@@ -1154,6 +1323,25 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 - [gh pr view](https://cli.github.com/manual/gh_pr_view)
 - [gh pr checks](https://cli.github.com/manual/gh_pr_checks)
 - [GitHub CLI reference](https://cli.github.com/manual/gh_help_reference)
+- [gh api](https://cli.github.com/manual/gh_api)
+- [gh release list](https://cli.github.com/manual/gh_release_list)
+- [gh release view](https://cli.github.com/manual/gh_release_view)
+- [REST API endpoints for global security advisories](https://docs.github.com/en/rest/security-advisories/global-advisories?apiVersion=2022-11-28)
+- [REST API endpoints for Dependabot alerts](https://docs.github.com/en/rest/dependabot/alerts?apiVersion=2026-03-10)
+- [Using pagination in the REST API](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api)
+- [Scopes for OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
+- [GitHub REST API OpenAPI description 2022-11-28](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.2022-11-28.yaml)
+- [REST API versions](https://docs.github.com/en/rest/about-the-rest-api/api-versions)
+
+### MVP2公式documentation
+
+- [TMDB Getting Started](https://developer.themoviedb.org/docs/getting-started)
+- [TMDB API Terms of Use](https://www.themoviedb.org/documentation/api/terms-of-use)
+- [TMDB Logos & Attribution](https://www.themoviedb.org/about/logos-attribution)
+- [TypeScript Documentation](https://www.typescriptlang.org/docs/)
+- [Playwright Installation](https://playwright.dev/docs/intro)
+- [MySQL 8.4 Reference Manual](https://dev.mysql.com/doc/refman/8.4/en/)
+- [Docker Compose](https://docs.docker.com/compose/)
 
 ### Git
 
@@ -1183,10 +1371,15 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-01 | Issue #52でbare `WebFetch`をdenyからaskへ移動。Allow 0件とbare `Bash` askを維持し、公式一次情報WebFetchの毎回承認、人間向け統合検証計画、フォールバックを文書へ同期 |
 | 2026-08-01 | 公式permissions仕様へ再同期。`Bash(run_in_background:true)`とgh PR変更系denyをpermissionsへ追加し、canonical tool名、local settingsの現行挙動、sandbox未導入の制約、Issue #52の実WebFetch確認結果を追記 |
 | 2026-08-01 | Issue #52の実機確認結果を同期。設定ソース、Hook、Allow 0件とAsk、代表2host、未登録subdomain拒否、WebFetchのdenyフォールバックとaskへの再適用を記録 |
+| 2026-08-10 | Issue #89のMVP2公式host/path、有限package metadata、Global Advisories専用helper、現行CI Action Release/Release-linked Tag専用経路を追加。Allow 0件、bare `gh api` deny、通常repository固定を維持 |
+| 2026-08-10 | npm package rootの実機取得がWebFetchの10 MiB上限を超えたため、有限packageのliteral `/latest` exact pathだけへ変更。任意version・dist-tag、root、install、tarballのdenyを維持 |
+| 2026-08-10 | Issue #95のPython CI追加に合わせ、現行CI Action Release allowlistを5 repositoryへ同期。Python 3.10以上の実行要件とPython 3.12単独CI検証を区別して記録 |
+| 2026-08-13 | Issue #90のrepository固有Dependabot alerts専用helperを追加。public preview API version 2026-03-10、固定list/view、pagination・byte・schema・projection・C1境界を記録し、Allow 0件とbare `gh api` denyを維持 |
+| 2026-08-13 | Issue #91のrepository固有Actions run/job metadata専用helperを追加。固定list/view、minimal projection、nullable・byte・job・subprocess境界を記録し、Allow 0件とbare `gh run` denyを維持 |
 
 ## 27. 決定事項と実装前提
 
-Issue #50・#51・#52の設計事項は次のとおり確定した。
+Issue #50・#51・#52・#89・#90・#91の設計事項は次のとおり確定した。
 
 1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、Issue #52でbare `WebFetch`をdenyからaskへ移した。人間が設定ソース、Hook、代表hostの実WebFetch、未登録subdomain拒否、フォールバックと再適用を確認済みである。その他の実機検証は、個別の結果が記録されるまで確認済みとは扱わない。
 2. Hook matcherは`Bash`と`WebFetch`だけとし、公式例に沿う`command`文字列、timeout 5秒で同期実行する。
@@ -1195,10 +1388,11 @@ Issue #50・#51・#52の設計事項は次のとおり確定した。
 5. Gitはclosed worldとし、初期自動allowを0件とする。§13.1の10形だけをask候補とし、その他はdenyする。
 6. GitHub CLIもclosed worldとし、初期自動allowを0件とする。state・limit・repositoryを固定したissue/pr listと、厳密に定義したissue/pr view、pr checksだけをask候補とする。status、`--jq`、未知option・fieldをdenyする。
 7. 一般Bashもclosed worldとし、§10.2と§17のcanonical形だけをaskとする。その他はdenyする。複合command、redirect、command substitution、改行、環境変数prefixもdenyする。
-8. Git・GitHub CLI・WebFetchの初期自動allowは0件とする。初期WebFetch Ask候補host allowlistは本文記載の14hostすべてとし、hostを完全一致で判定する。query、fragment、promptだけのkeywordは定義どおりaskとし、URL側keyword、許可外host、明示port、userinfo、malformed URLをdenyする。
-9. URLの秘密情報らしきkeywordは元文字列と1回percent decode後を検査し、複数回decodeしない。Hook自身はredirectを追跡しない。
-10. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
-11. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、pager対策、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
+8. Git・GitHub CLI・WebFetchの自動allowは0件とする。既存14hostは従来のhost完全一致を維持し、Issue #89の追加hostは§12.5の有限pathまで検査する。#89追加pathはqueryとfragmentもdenyする。
+9. canonical URLはpercent encodingを使用せず、single/double encoding、不正percent sequence、encoded separator、backslash、double slash、dot segmentをdenyする。Hook自身はredirectを追跡しない。
+10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helper、現行CI Action Release/Release-linked Tag、repository固有Dependabot alerts helper、repository固有Actions run/job metadata helperだけを§14.4〜§14.7の専用経路へ分離する。
+11. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
+12. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
 
 Issue #51ではbare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持した。Issue #52ではbare `Bash` askとGit・GitHub CLI・WebFetchの自動allow 0件を維持し、bare `WebFetch`だけをdenyからaskへ移した。Hookを通過したWebFetchもpermissionsのaskにより毎回人間が確認する。
 

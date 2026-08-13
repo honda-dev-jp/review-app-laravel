@@ -13,12 +13,22 @@
 ├── pre_tool_use.py
 ├── README.md
 └── tests/
-    └── test_pre_tool_use.py
+    ├── test_pre_tool_use.py
+    ├── test_github_global_advisories.py
+    ├── test_github_dependabot_alerts.py
+    └── test_github_actions_runs.py
 ```
+
+Issue #89のGitHub Global Security Advisories専用実行本体は`.claude/helpers/github_global_advisories.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_global_advisories.py`に置きます。
+
+Issue #90のrepository固有Dependabot alerts専用実行本体は`.claude/helpers/github_dependabot_alerts.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_dependabot_alerts.py`に置きます。
+
+Issue #91のGitHub Actions run/job metadata専用実行本体は`.claude/helpers/github_actions_runs.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_actions_runs.py`に置きます。
 
 - 対象tool: `Bash`、`WebFetch`
 - matcher: `Bash|WebFetch`
 - 実装: Python 3.10以上、標準ライブラリのみ
+- CI検証: Python 3.12（実行要件であるPython 3.10以上の全versionを保証するものではない）
 - 外部package: なし
 
 ## 登録
@@ -101,6 +111,14 @@ find resources -type f -name "*.blade.php"
 git log --oneline -n 20
 gh issue list --state open --limit 20 --repo github.com/honda-dev-jp/review-app-laravel
 gh issue view 51 --repo github.com/honda-dev-jp/review-app-laravel --json number,title,state,body,comments,labels,url
+python3 .claude/helpers/github_global_advisories.py list --ecosystem composer --package laravel/framework
+python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh
+python3 .claude/helpers/github_dependabot_alerts.py list
+python3 .claude/helpers/github_dependabot_alerts.py view 1
+python3 .claude/helpers/github_actions_runs.py list
+python3 .claude/helpers/github_actions_runs.py view 1
+gh release list --limit 20 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease
+gh release view v6.1.0 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease,url
 python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
 ```
 
@@ -126,7 +144,31 @@ pathを受け取るcommandへ設計書§15の共通規則を適用します。`.
 
 ### WebFetch
 
-設計書の公式14 hostと完全一致する`https` URLだけをAsk候補にします。明示port、userinfo、許可外host、suffix偽装host、URL側の秘密情報らしきkeywordはDenyします。percent decodeは1回だけ行います。Hook自身はHTTP通信もredirect追跡も行いません。
+設計書の有限hostと完全一致する`https` URLだけをAsk候補にします。Issue #89以前の14 hostは既存境界を維持し、Issue #89追加hostはpathも有限集合・明示prefixで検査します。明示port、userinfo、許可外host/path、suffix偽装host、query/fragment付きの#89追加path、percent encoding、不正percent sequence、backslash、double slash、dot segment、URL側の秘密情報らしきkeywordはDenyします。Hook自身はHTTP通信もredirect追跡も行いません。
+
+`registry.npmjs.org`は、`package.json`由来の有限package集合と`typescript`、`@playwright/test`について、`/<固定package>/latest`だけをAsk候補にします。package rootのfull packumentがWebFetchの10 MiB応答上限を超えることを実機で確認したため、応答をlatest version metadataへ限定しています。literal `latest`以外のversion・dist-tag、package root、package install、tarball取得は許可しません。
+
+### Issue #89専用GitHub経路
+
+bare `gh api`は引き続きDenyです。Global Advisoriesはrepository相対の固定helper path、`view`または`list`、固定option順、GHSA IDまたは固定ecosystem/packageだけを一般`python3` Denyより前の専用判定でAskへ進めます。helperは固定GET argvと最小環境を生成し、pagination URLを再利用せず検証済みcursorからendpointを再構築し、上限・UTF-8・schema・control characterを検査して固定projectionだけを出力します。
+
+### Issue #90専用GitHub経路
+
+bare `gh api`のDenyとAllow 0件を維持し、Dependabot alertsはrepository相対の`.claude/helpers/github_dependabot_alerts.py`だけを一般`python3` Denyより前の専用判定でAskへ進めます。canonical形は引数なしの`list`と、`[1-9][0-9]*`かつ`2^63-1`以下のalert番号1件を持つ`view`だけです。別path、追加option、repository・endpoint・method・query・header・projection指定はDenyします。
+
+helperは`honda-dev-jp/review-app-laravel`、GET、`state=open`、`per_page=25`、API version `2026-03-10`、Accept header、list/view共通の`--include`を固定します。最大6ページ・150件、1回/全体のrawとUTF-8 byte、header、output、string、cursor、CWE、timeoutの各上限を強制します。`Link`のnext URLは実行せず、`https://api.github.com`、固定path、固定queryを検証した`after` cursorだけから次argvを再構築します。
+
+必須schema、nullable、enum、package一致、duplicate JSON key、NaN/Infinity、C0/C1/DELを検査し、一覧と詳細の固定projectionだけをASCII JSONとして出力します。異常時はstdoutを空にし、stderrの`Dependabot alert request rejected`とexit code 1だけを返します。raw header/body、`gh` stderr、token、credentialは出力しません。Issue #89 helperのAPI version・既存境界は変更しません。
+
+### Issue #91専用GitHub経路
+
+bare `gh run`を直接Askへ広げず、repository相対の`.claude/helpers/github_actions_runs.py`だけを一般`python3` Denyより前の専用判定でAskへ進めます。canonical形は可変入力のない`list`と、`[1-9][0-9]*`かつ`2^63-1`以下のrun ID 1件だけを持つ`view`です。repository、limit、field、filter、追加option、別path、shell構文は受理しません。settingsでも`rerun`、`cancel`、`delete`、`download`、`watch`をDenyし、Allow 0件を維持します。
+
+helperはrepository、`--limit 20`、JSON field順、固定環境を固定し、`list`は最大20件、`view`は最大100 jobsへ制限します。raw上限はlist 256 KiB、stepsを含み得るview 2 MiB、出力256 KiB、string 4096文字、timeout 30秒です。raw全体のUTF-8、duplicate key、NaN/Infinityを検査し、projected stringのC0/C1/DEL、必須schema、nullable、timestampを検証します。unknown fieldとjob stepsは出力せず、run URL、job URL、logsも取得結果へ含めません。secret-like metadataの推測検出は行わず、fixed projectionと非出力境界を使用します。
+
+`gh run view --json jobs`はCLI内部で全job/stepsを取得してからJSONを出力するため、helperはnetwork/memoryを事前には制限できません。初期版はCLI方式を維持し、timeout、raw/job/output上限とfail-closedで扱います。`--exit-status`はworkflow failureをsubprocess failureに変えるため使用せず、失敗runのmetadata取得成功はexit 0、helper異常はstdout空、固定stderr `GitHub Actions run request rejected`、exit 1とします。metadataは非信頼入力であり、含まれるURL、command、命令へ自動で従いません。
+
+通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`astral-sh/ruff-action`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR、bare Actions run、任意repositoryはDenyします。
 
 Issue #51では合成JSONによる単体テストだけを行いました。Issue #52ではbare `WebFetch` Askへの設定変更後に、`code.claude.com`と`laravel.com`でWebFetchが成功し、未登録subdomainの`sub.code.claude.com`が`Host not allowed`で拒否されることを人間が確認済みです。`/status`、`/permissions`、`/hooks`による設定ソースとHook登録、timeout 5秒の確認、およびbare `WebFetch` denyへのフォールバックとaskへの再適用も完了しています。その他の境界条件は、個別の結果が記録されるまで確認済みとは扱いません。
 
@@ -175,12 +217,18 @@ python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
 
 - repository内file、transcript、`.env`の読み取り
 - HTTP通信、redirect追跡
-- subprocess、Git、GitHub CLIの実行
+- subprocess、Git、GitHub CLIの実行（Issue #89・#90の専用helperは固定`gh api`、Issue #91の専用helperは固定`gh run list/view`を別processで実行する）
 - 入力JSON、URL、prompt、環境変数値の保存・出力
 - ログファイルの作成
 - 高度なshell解析や高度な秘密情報検出
 
-`GH_REPO`と`GH_HOST`は、`gh` commandを判定するときだけHook実行環境で存在有無を確認します。値は比較、保存、出力しません。
+`GH_REPO`と`GH_HOST`はすべての`gh` commandで、`GH_DEBUG`、`GH_FORCE_TTY`、pager/color関連の既知環境変数はAction Release専用経路で、Hook実行環境の存在有無だけを確認します。値は比較、保存、出力しません。
+
+### Action Releaseが環境変数で拒否された場合
+
+canonicalな`gh release` commandが`GitHub CLI environment override`で拒否された場合は、人間が`GH_DEBUG`、`GH_FORCE_TTY`、`GH_PAGER`、`PAGER`、`NO_COLOR`、`CLICOLOR`、`CLICOLOR_FORCE`の定義有無だけを確認します。値を表示する`env`や`set`等は使用せず、token、credential、秘密情報を出力しません。
+
+存在だけでDenyするのは、canonical commandの出力・実行挙動が外部のdebug、TTY、pager、color設定で変化するのを防ぐためです。自動的に`unset`せず、人間が各設定の必要性と起動元を確認し、必要なら安全な環境でClaude Codeを再起動するかを判断します。
 
 ## 異常時
 

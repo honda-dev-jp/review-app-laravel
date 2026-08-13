@@ -10,7 +10,7 @@ import shlex
 import sys
 from pathlib import PurePosixPath
 from typing import IO, Mapping
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 
 # 拒否理由からcommand、URL、path、prompt、環境変数値が漏れないよう、
@@ -83,21 +83,127 @@ PR_JSON_FIELDS = {
     "statusCheckRollup",
     "url",
 }
-WEBFETCH_HOSTS = {
-    "code.claude.com",
-    "laravel.com",
-    "docs.github.com",
-    "cli.github.com",
-    "git-scm.com",
-    "getcomposer.org",
-    "docs.phpunit.de",
-    "phpstan.org",
-    "docs.npmjs.com",
-    "www.php.net",
-    "v3.tailwindcss.com",
-    "vite.dev",
-    "nodejs.org",
-    "www.xserver.ne.jp",
+LEGACY_WEBFETCH_HOSTS = frozenset(
+    {
+        "code.claude.com",
+        "laravel.com",
+        "docs.github.com",
+        "cli.github.com",
+        "git-scm.com",
+        "getcomposer.org",
+        "docs.phpunit.de",
+        "phpstan.org",
+        "docs.npmjs.com",
+        "www.php.net",
+        "v3.tailwindcss.com",
+        "vite.dev",
+        "nodejs.org",
+        "www.xserver.ne.jp",
+    }
+)
+
+# Issue #89で追加するhostはpathもclosed worldにする。既存14hostは従来の
+# host固定を維持し、後続Issueへ無関係な権限変更を混在させない。
+WEBFETCH_EXACT_PATHS = {
+    "www.themoviedb.org": {
+        "/documentation/api/terms-of-use",
+        "/about/logos-attribution",
+    },
+    "playwright.dev": {
+        "/docs/intro",
+        "/docs/browsers",
+        "/docs/ci",
+        "/docs/docker",
+        "/docs/test-configuration",
+        "/docs/trace-viewer",
+        "/docs/release-notes",
+    },
+}
+WEBFETCH_PATH_PREFIXES = {
+    "developer.themoviedb.org": ("/docs/", "/reference/"),
+    "www.typescriptlang.org": (
+        "/docs/",
+        "/docs/handbook/",
+        "/docs/handbook/release-notes/",
+        "/tsconfig/",
+    ),
+    "playwright.dev": ("/docs/api/",),
+    "dev.mysql.com": ("/doc/refman/8.4/en/",),
+    "docs.docker.com": ("/compose/",),
+}
+
+COMPOSER_METADATA_PACKAGES = {
+    "askdkc/breezejp",
+    "barryvdh/laravel-ide-helper",
+    "fakerphp/faker",
+    "guzzlehttp/guzzle",
+    "larastan/larastan",
+    "laravel/breeze",
+    "laravel/framework",
+    "laravel/pint",
+    "laravel/sail",
+    "laravel/sanctum",
+    "laravel/tinker",
+    "mockery/mockery",
+    "nunomaduro/collision",
+    "phpunit/phpunit",
+    "spatie/laravel-ignition",
+}
+NPM_METADATA_PACKAGES = {
+    "@playwright/test",
+    "@tailwindcss/forms",
+    "alpinejs",
+    "autoprefixer",
+    "axios",
+    "laravel-vite-plugin",
+    "postcss",
+    "tailwindcss",
+    "typescript",
+    "vite",
+}
+# package rootのfull packumentはWebFetchの応答上限を超え得る。応答を抑え、
+# 任意version/dist-tagへ範囲を広げないため、literal `latest`だけに固定する。
+NPM_METADATA_PATHS = frozenset(
+    f"/{package}/latest" for package in NPM_METADATA_PACKAGES
+)
+
+# restricted hostの分類はpath正本から導出する。分類されていないhostを
+# WEBFETCH_HOSTSへ単独追加できない形にし、将来の追加漏れをfail-closedにする。
+RESTRICTED_WEBFETCH_HOSTS = (
+    frozenset(WEBFETCH_EXACT_PATHS)
+    | frozenset(WEBFETCH_PATH_PREFIXES)
+    | {"repo.packagist.org", "registry.npmjs.org"}
+)
+WEBFETCH_HOSTS = LEGACY_WEBFETCH_HOSTS | RESTRICTED_WEBFETCH_HOSTS
+
+ADVISORY_HELPER = ".claude/helpers/github_global_advisories.py"
+DEPENDABOT_HELPER = ".claude/helpers/github_dependabot_alerts.py"
+ACTIONS_RUNS_HELPER = ".claude/helpers/github_actions_runs.py"
+MAX_DEPENDABOT_ALERT_NUMBER = 2**63 - 1
+MAX_ACTIONS_RUN_ID = 2**63 - 1
+ADVISORY_ECOSYSTEM_PACKAGES = {
+    "composer": COMPOSER_METADATA_PACKAGES,
+    "npm": NPM_METADATA_PACKAGES,
+}
+# ci.ymlで実際に使用するAction repositoryと同期するclosed worldとし、
+# CI Action追加時のallowlist更新漏れを完全一致testで拒否する。
+ACTION_RELEASE_REPOSITORIES = {
+    "github.com/actions/checkout",
+    "github.com/actions/setup-node",
+    "github.com/actions/setup-python",
+    "github.com/astral-sh/ruff-action",
+    "github.com/shivammathur/setup-php",
+}
+ACTION_RELEASE_LIST_JSON = "tagName,name,publishedAt,isDraft,isPrerelease"
+ACTION_RELEASE_VIEW_JSON = "tagName,name,publishedAt,isDraft,isPrerelease,url"
+GH_RELEASE_ENVIRONMENT_OVERRIDES = {
+    "GH_DEBUG",
+    "GH_FORCE_TTY",
+    "GH_PAGER",
+    "PAGER",
+    "NO_COLOR",
+    "CLICOLOR",
+    "CLICOLOR_FORCE",
 }
 SECRET_KEYWORDS = (
     "token",
@@ -190,6 +296,10 @@ COMPOSER_PACKAGE_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 NPM_PACKAGE_RE = re.compile(r"(?:@[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.-]+\Z")
 ENV_PREFIX_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+GHSA_ID_RE = re.compile(
+    r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\Z"
+)
+RELEASE_TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,99}\Z")
 
 
 def decision(kind: str, reason_key: str) -> dict[str, object]:
@@ -254,7 +364,7 @@ def _validate_tool_fields(
             return deny("malformed")
         # Pythonではboolがintのsubclassなので、通常のisinstanceだけではtimeout=Trueも数値になる。
         # JSON Schema上のbooleanとnumberを混同しないため、明示的に拒否する。
-        if isinstance(value, bool) and allowed_fields[field] != bool:
+        if isinstance(value, bool) and allowed_fields[field] is not bool:
             return deny("malformed")
     return None
 
@@ -286,7 +396,9 @@ def _path_is_safe(path: str) -> bool:
     # `config/.env.example`等へ例外を広げないため、path全体の完全一致を先に判定する。
     if lowered == ".env.example":
         return True
-    if lowered == ".env" or any(part == ".env" or part.startswith(".env.") for part in parts):
+    if lowered == ".env" or any(
+        part == ".env" or part.startswith(".env.") for part in parts
+    ):
         return False
 
     # 部分文字列で一律拒否するとCacheService.php等も誤検知する。
@@ -296,7 +408,10 @@ def _path_is_safe(path: str) -> bool:
         "storage/framework",
         "storage/app/private",
     )
-    if any(lowered == prefix or lowered.startswith(prefix + "/") for prefix in protected_prefixes):
+    if any(
+        lowered == prefix or lowered.startswith(prefix + "/")
+        for prefix in protected_prefixes
+    ):
         return False
 
     if any(part in {"sessions", "cache", "backup", "backups"} for part in parts):
@@ -338,7 +453,13 @@ def _common_shell_denial(command: str) -> dict[str, object] | None:
         return deny("compound")
     if "`" in command or "$(" in command or "$" in command:
         return deny("shell")
-    if "\\" in command or "~" in command or "{" in command or "}" in command or "!" in command:
+    if (
+        "\\" in command
+        or "~" in command
+        or "{" in command
+        or "}" in command
+        or "!" in command
+    ):
         return deny("shell")
     tokens = _split(command)
     if not tokens:
@@ -378,7 +499,11 @@ def _evaluate_git(command: str, tokens: list[str]) -> dict[str, object]:
 
     if len(tokens) == 5 and tokens[:2] == ["git", "grep"] and tokens[3] == "--":
         term, path = tokens[2], tokens[4]
-        if command != " ".join(tokens) or not SIMPLE_SEARCH_RE.fullmatch(term) or term.startswith("-"):
+        if (
+            command != " ".join(tokens)
+            or not SIMPLE_SEARCH_RE.fullmatch(term)
+            or term.startswith("-")
+        ):
             return deny("unregistered")
         return _path_decision(path) or ask()
 
@@ -389,10 +514,118 @@ def _json_fields_are_allowed(raw: str, allowed: set[str]) -> bool:
     # field順は意味を持たせない一方、重複と未知fieldは非canonicalとして拒否する。
     # `--jq`等の式言語を導入せず、レビュー可能なfield集合だけに閉じる。
     fields = raw.split(",")
-    return bool(fields) and all(fields) and len(fields) == len(set(fields)) and set(fields) <= allowed
+    return (
+        bool(fields)
+        and all(fields)
+        and len(fields) == len(set(fields))
+        and set(fields) <= allowed
+    )
 
 
-def _evaluate_gh(command: str, tokens: list[str], environ: Mapping[str, str]) -> dict[str, object]:
+def _evaluate_advisory_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """専用helperのrepository相対canonical形だけを一般python3 Denyより先に扱う。"""
+    prefix = ["python3", ADVISORY_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if len(tokens) == 4 and tokens[2] == "view" and GHSA_ID_RE.fullmatch(tokens[3]):
+        return ask()
+    if (
+        len(tokens) == 7
+        and tokens[2:4] == ["list", "--ecosystem"]
+        and tokens[5] == "--package"
+    ):
+        ecosystem, package = tokens[4], tokens[6]
+        if package in ADVISORY_ECOSYSTEM_PACKAGES.get(ecosystem, set()):
+            return ask()
+    return deny("unregistered")
+
+
+def _evaluate_dependabot_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """一般python3 Denyより先にcanonical helperだけをAsk候補へ昇格する。"""
+    prefix = ["python3", DEPENDABOT_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if tokens == [*prefix, "list"]:
+        return ask()
+    if len(tokens) == 4 and tokens[2] == "view":
+        alert_number = tokens[3]
+        if (
+            len(alert_number) <= len(str(MAX_DEPENDABOT_ALERT_NUMBER))
+            and re.fullmatch(r"[1-9][0-9]*", alert_number)
+            and int(alert_number) <= MAX_DEPENDABOT_ALERT_NUMBER
+        ):
+            return ask()
+    return deny("unregistered")
+
+
+def _evaluate_actions_runs_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """run ID以外を可変にせず、2つのcanonical helper形だけをAsk候補にする。"""
+    prefix = ["python3", ACTIONS_RUNS_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if tokens == [*prefix, "list"]:
+        return ask()
+    if len(tokens) == 4 and tokens[2] == "view":
+        run_id = tokens[3]
+        # leading zeroを拒否し、helperとHookでcanonical表現を一致させる。
+        if (
+            len(run_id) <= len(str(MAX_ACTIONS_RUN_ID))
+            and re.fullmatch(r"[1-9][0-9]*", run_id)
+            and int(run_id) <= MAX_ACTIONS_RUN_ID
+        ):
+            return ask()
+    return deny("unregistered")
+
+
+def _evaluate_action_release(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """通常repository固定とは分離した、現行CI ActionのRelease専用経路。"""
+    if tokens[:2] != ["gh", "release"]:
+        return None
+
+    list_match = re.fullmatch(
+        r"gh release list --limit 20 --repo (github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+) "
+        r"--json ([A-Za-z,]+)",
+        command,
+    )
+    if list_match:
+        repository, fields = list_match.groups()
+        if repository not in ACTION_RELEASE_REPOSITORIES:
+            return deny("repository")
+        return ask() if fields == ACTION_RELEASE_LIST_JSON else deny("gh_option")
+
+    view_match = re.fullmatch(
+        r"gh release view ([A-Za-z0-9][A-Za-z0-9._+-]{0,99}) --repo "
+        r"(github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+) --json ([A-Za-z,]+)",
+        command,
+    )
+    if view_match:
+        tag, repository, fields = view_match.groups()
+        if repository not in ACTION_RELEASE_REPOSITORIES:
+            return deny("repository")
+        # parserとは別に最終値も検査し、regex変更時にtag境界が暗黙に広がるのを防ぐ。
+        if not RELEASE_TAG_RE.fullmatch(tag):
+            return deny("gh_option")
+        return ask() if fields == ACTION_RELEASE_VIEW_JSON else deny("gh_option")
+    return deny("unregistered")
+
+
+def _evaluate_gh(
+    command: str, tokens: list[str], environ: Mapping[str, str]
+) -> dict[str, object]:
     # 暗黙の接続先変更を防ぐGH環境変数検査は、影響を受けるghだけへ適用する。
     # Gitや一般Bashまで過剰にDenyせず、値も比較・保存・出力しない。
     if "GH_REPO" in environ or "GH_HOST" in environ:
@@ -401,6 +634,17 @@ def _evaluate_gh(command: str, tokens: list[str], environ: Mapping[str, str]) ->
     # 順序変更による回帰を防ぐため、version確認も同じ境界の内側で判定する。
     if command == "gh --version":
         return ask()
+
+    # 値に関係なく存在だけで拒否し、canonical commandの出力・実行挙動が
+    # callerのdebug、TTY、pager、color設定で変化するのを防ぐ。
+    if tokens[:2] == [
+        "gh",
+        "release",
+    ] and GH_RELEASE_ENVIRONMENT_OVERRIDES.intersection(environ):
+        return deny("gh_environment")
+    release_result = _evaluate_action_release(command, tokens)
+    if release_result is not None:
+        return release_result
 
     list_match = re.fullmatch(
         rf"gh (issue|pr) list --state (open|closed|all) --limit ([1-9]|[1-9][0-9]|100) --repo {re.escape(REPOSITORY)}",
@@ -426,14 +670,22 @@ def _evaluate_gh(command: str, tokens: list[str], environ: Mapping[str, str]) ->
             return ask()
         if fields:
             allowed = ISSUE_JSON_FIELDS if kind == "issue" else PR_JSON_FIELDS
-            return ask() if _json_fields_are_allowed(fields, allowed) else deny("gh_option")
+            return (
+                ask()
+                if _json_fields_are_allowed(fields, allowed)
+                else deny("gh_option")
+            )
         return ask()
 
     if "--repo" in tokens:
         index = tokens.index("--repo")
         if index + 1 >= len(tokens) or tokens[index + 1] != REPOSITORY:
             return deny("repository")
-    if any(token in {"-R", "--jq", "--web", "--watch"} or token.startswith(("--repo=", "-R=")) for token in tokens):
+    if any(
+        token in {"-R", "--jq", "--web", "--watch"}
+        or token.startswith(("--repo=", "-R="))
+        for token in tokens
+    ):
         return deny("gh_option")
     return deny("unregistered")
 
@@ -442,7 +694,7 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
     # quote差を自動正規化すると許可範囲が文書上の形より広がるため、
     # 高度なshell parserを持たず、承認画面と同じdouble quote形へ固定する。
     patterns = (
-        r'find ([A-Za-z0-9_./-]+) -type f',
+        r"find ([A-Za-z0-9_./-]+) -type f",
         r'find ([A-Za-z0-9_./-]+) -name "([A-Za-z0-9_.*?-]+)"',
         r'find ([A-Za-z0-9_./-]+) -type f -name "([A-Za-z0-9_.*?-]+)"',
     )
@@ -457,6 +709,18 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
 
 
 def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
+    actions_result = _evaluate_actions_runs_helper(command, tokens)
+    if actions_result is not None:
+        return actions_result
+
+    dependabot_result = _evaluate_dependabot_helper(command, tokens)
+    if dependabot_result is not None:
+        return dependabot_result
+
+    advisory_result = _evaluate_advisory_helper(command, tokens)
+    if advisory_result is not None:
+        return advisory_result
+
     if command in EXACT_GENERAL_COMMANDS:
         return ask()
 
@@ -469,20 +733,36 @@ def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
 
     if len(tokens) == 2 and tokens[0] == "ls" and command == f"ls {tokens[1]}":
         return _path_decision(tokens[1]) or ask()
-    if len(tokens) == 3 and tokens[:2] == ["ls", "-la"] and command == f"ls -la {tokens[2]}":
+    if (
+        len(tokens) == 3
+        and tokens[:2] == ["ls", "-la"]
+        and command == f"ls -la {tokens[2]}"
+    ):
         return _path_decision(tokens[2]) or ask()
 
     if len(tokens) == 4 and tokens[0] in {"head", "tail"} and tokens[1] == "-n":
-        if command != " ".join(tokens) or not tokens[2].isdigit() or not 1 <= int(tokens[2]) <= 200:
+        if (
+            command != " ".join(tokens)
+            or not tokens[2].isdigit()
+            or not 1 <= int(tokens[2]) <= 200
+        ):
             return deny("unregistered")
         return _path_decision(tokens[3]) or ask()
 
     if len(tokens) == 3 and tokens[0] == "grep":
-        if command != " ".join(tokens) or not SIMPLE_SEARCH_RE.fullmatch(tokens[1]) or tokens[1].startswith("-"):
+        if (
+            command != " ".join(tokens)
+            or not SIMPLE_SEARCH_RE.fullmatch(tokens[1])
+            or tokens[1].startswith("-")
+        ):
             return deny("unregistered")
         return _path_decision(tokens[2]) or ask()
     if len(tokens) == 4 and tokens[:2] == ["grep", "-n"]:
-        if command != " ".join(tokens) or not SIMPLE_SEARCH_RE.fullmatch(tokens[2]) or tokens[2].startswith("-"):
+        if (
+            command != " ".join(tokens)
+            or not SIMPLE_SEARCH_RE.fullmatch(tokens[2])
+            or tokens[2].startswith("-")
+        ):
             return deny("unregistered")
         return _path_decision(tokens[3]) or ask()
 
@@ -497,16 +777,24 @@ def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
             return deny("unregistered")
         return _path_decision(tokens[2]) or ask()
 
-    sed_match = re.fullmatch(r"sed -n '([1-9][0-9]*),([1-9][0-9]*)p' ([A-Za-z0-9_./-]+)", command)
+    sed_match = re.fullmatch(
+        r"sed -n '([1-9][0-9]*),([1-9][0-9]*)p' ([A-Za-z0-9_./-]+)", command
+    )
     if sed_match:
-        start, end, path = int(sed_match.group(1)), int(sed_match.group(2)), sed_match.group(3)
+        start, end, path = (
+            int(sed_match.group(1)),
+            int(sed_match.group(2)),
+            sed_match.group(3),
+        )
         if end < start or end - start + 1 > 200:
             return deny("unregistered")
         return _path_decision(path) or ask()
     if tokens[0] == "sed":
         return deny("unregistered")
 
-    echo_match = re.fullmatch(r'echo (?:([A-Za-z0-9_.,:/@+-]+)|"([A-Za-z0-9_ .,:/@+-]+)")', command)
+    echo_match = re.fullmatch(
+        r'echo (?:([A-Za-z0-9_.,:/@+-]+)|"([A-Za-z0-9_ .,:/@+-]+)")', command
+    )
     if echo_match:
         literal = echo_match.group(1) or echo_match.group(2)
         return deny("secret_path") if _has_secret_keyword(literal) else ask()
@@ -514,11 +802,19 @@ def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
         return deny("unregistered")
 
     if len(tokens) == 3 and tokens[:2] == ["composer", "show"]:
-        if command == " ".join(tokens) and not tokens[2].startswith("-") and COMPOSER_PACKAGE_RE.fullmatch(tokens[2]):
+        if (
+            command == " ".join(tokens)
+            and not tokens[2].startswith("-")
+            and COMPOSER_PACKAGE_RE.fullmatch(tokens[2])
+        ):
             return ask()
         return deny("unregistered")
     if len(tokens) == 3 and tokens[:2] == ["npm", "list"]:
-        if command == " ".join(tokens) and not tokens[2].startswith("-") and NPM_PACKAGE_RE.fullmatch(tokens[2]):
+        if (
+            command == " ".join(tokens)
+            and not tokens[2].startswith("-")
+            and NPM_PACKAGE_RE.fullmatch(tokens[2])
+        ):
             return ask()
         return deny("unregistered")
 
@@ -529,7 +825,11 @@ def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
         (["./vendor/bin/sail", "php", "./vendor/bin/phpstan", "analyse"], 4, None),
     )
     for prefix, path_index, required_prefix in quality_shapes:
-        if len(tokens) == path_index + 1 and tokens[:path_index] == prefix and command == " ".join(tokens):
+        if (
+            len(tokens) == path_index + 1
+            and tokens[:path_index] == prefix
+            and command == " ".join(tokens)
+        ):
             path = tokens[path_index]
             if required_prefix and not path.startswith(required_prefix):
                 return deny("unregistered")
@@ -537,13 +837,20 @@ def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
 
     # Pintは`--test`がないとファイルを変更するため、確認専用形だけをAskへ進める。
     pint_prefix = ["./vendor/bin/sail", "php", "./vendor/bin/pint"]
-    if len(tokens) == 5 and tokens[:3] == pint_prefix and tokens[4] == "--test" and command == " ".join(tokens):
+    if (
+        len(tokens) == 5
+        and tokens[:3] == pint_prefix
+        and tokens[4] == "--test"
+        and command == " ".join(tokens)
+    ):
         return _path_decision(tokens[3]) or ask()
 
     return deny("unregistered")
 
 
-def evaluate_bash(tool_input: dict[str, object], environ: Mapping[str, str]) -> dict[str, object]:
+def evaluate_bash(
+    tool_input: dict[str, object], environ: Mapping[str, str]
+) -> dict[str, object]:
     field_error = _validate_tool_fields(tool_input, BASH_FIELDS, {"command"})
     if field_error:
         return field_error
@@ -578,6 +885,27 @@ def evaluate_bash(tool_input: dict[str, object], environ: Mapping[str, str]) -> 
     return _evaluate_general(command, tokens)
 
 
+def _webfetch_path_is_allowed(host: str, path: str) -> bool:
+    if host in LEGACY_WEBFETCH_HOSTS:
+        return True
+    if host not in RESTRICTED_WEBFETCH_HOSTS:
+        return False
+    if host == "repo.packagist.org":
+        return any(
+            path == f"/p2/{package}.json" for package in COMPOSER_METADATA_PACKAGES
+        )
+    if host == "registry.npmjs.org":
+        return path in NPM_METADATA_PATHS
+
+    exact = WEBFETCH_EXACT_PATHS.get(host, set())
+    if path in exact:
+        return True
+    prefixes = WEBFETCH_PATH_PREFIXES.get(host)
+    if prefixes is not None:
+        return any(path.startswith(prefix) for prefix in prefixes)
+    return False
+
+
 def evaluate_webfetch(tool_input: dict[str, object]) -> dict[str, object]:
     field_error = _validate_tool_fields(tool_input, WEBFETCH_FIELDS, {"url", "prompt"})
     if field_error:
@@ -596,7 +924,12 @@ def evaluate_webfetch(tool_input: dict[str, object]) -> dict[str, object]:
     except ValueError:
         return deny("url")
 
-    if parsed.scheme != "https" or not host or parsed.username is not None or parsed.password is not None:
+    if (
+        parsed.scheme != "https"
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         return deny("url")
     if port is not None or ":" in parsed.netloc:
         return deny("url")
@@ -604,16 +937,55 @@ def evaluate_webfetch(tool_input: dict[str, object]) -> dict[str, object]:
     # suffix判定ではなくhostの完全一致を要求する。
     if host not in WEBFETCH_HOSTS:
         return deny("host")
-    # 1回encodeされた秘密語は検出するが、複数回decodeしてHook独自のURL解釈を作らない。
-    # Claude Codeや接続先との解釈差はIssue #52の実機確認へ残す。
-    if _has_secret_keyword(url) or _has_secret_keyword(unquote(url)):
+
+    # URL解釈差を作らないため、percent encodingは正当・不正を問わずcanonical URLでは
+    # 使用しない。これによりencoded separator、double encoding、秘密語のencodeを同時に閉じる。
+    if "%" in url:
+        return deny("url")
+    path = parsed.path or "/"
+    if "\\" in path or "//" in path:
+        return deny("url")
+    segments = path.split("/")
+    if any(segment in {".", ".."} for segment in segments):
+        return deny("url")
+    if _has_secret_keyword(url):
         return deny("secret_url")
+
+    restricted_host = host in RESTRICTED_WEBFETCH_HOSTS
+    # #89で追加した有限pathはquery/fragmentで別resourceへ変化させない。
+    if restricted_host and (parsed.query or parsed.fragment):
+        return deny("url")
+    lowered_segments = {segment.casefold() for segment in segments}
+    if restricted_host and (
+        lowered_segments.intersection({"download", "downloads"})
+        or path.casefold().endswith(
+            (
+                ".zip",
+                ".tar",
+                ".tar.gz",
+                ".tgz",
+                ".gz",
+                ".exe",
+                ".dmg",
+                ".pkg",
+                ".deb",
+                ".rpm",
+                ".msi",
+                ".whl",
+            )
+        )
+    ):
+        return deny("url")
+    if not _webfetch_path_is_allowed(host, path):
+        return deny("url")
     # prompt中のtokenやcredentialは公式文書を調べる正常な用語でもあるためDenyしない。
     # 外部送信されない保証ではなく、安全候補もAskとして人間の最終確認へ残す。
     return ask()
 
 
-def evaluate_input(payload: object, environ: Mapping[str, str] | None = None) -> dict[str, object]:
+def evaluate_input(
+    payload: object, environ: Mapping[str, str] | None = None
+) -> dict[str, object]:
     top_level_error = _validate_top_level(payload)
     if top_level_error:
         return top_level_error
@@ -628,7 +1000,9 @@ def evaluate_input(payload: object, environ: Mapping[str, str] | None = None) ->
     return evaluate_webfetch(tool_input)
 
 
-def run(stdin: IO[str], stdout: IO[str], environ: Mapping[str, str] | None = None) -> int:
+def run(
+    stdin: IO[str], stdout: IO[str], environ: Mapping[str, str] | None = None
+) -> int:
     try:
         payload = json.loads(stdin.read())
         result = evaluate_input(payload, environ)
