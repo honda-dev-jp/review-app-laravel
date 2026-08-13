@@ -73,6 +73,9 @@ class ProjectSourceSyncTests(unittest.TestCase):
         )
         self.assertIn("Bash(gh api)", permissions["deny"])
         self.assertIn("Bash(gh api *)", permissions["deny"])
+        for subcommand in ("rerun", "cancel", "delete", "download", "watch"):
+            self.assertIn(f"Bash(gh run {subcommand})", permissions["deny"])
+            self.assertIn(f"Bash(gh run {subcommand} *)", permissions["deny"])
         hook_registration = settings["hooks"]["PreToolUse"][0]
         self.assertEqual(hook_registration["matcher"], "Bash|WebFetch")
 
@@ -464,6 +467,58 @@ class GeneralBashTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_actions_runs_helper_has_only_canonical_forms(self) -> None:
+        prefix = "python3 .claude/helpers/github_actions_runs.py"
+        allowed = (
+            f"{prefix} list",
+            f"{prefix} view 1",
+            f"{prefix} view {hook.MAX_ACTIONS_RUN_ID}",
+        )
+        denied = (
+            prefix,
+            f"{prefix} view",
+            f"{prefix} view 0",
+            f"{prefix} view 01",
+            f"{prefix} view +1",
+            f"{prefix} view -1",
+            f"{prefix} view 1.0",
+            f"{prefix} view  1",
+            f"{prefix} view {hook.MAX_ACTIONS_RUN_ID + 1}",
+            f"{prefix} list extra",
+            f"{prefix} view 1 extra",
+            f"{prefix} view 1 --repo other/repository",
+            "python3 ./.claude/helpers/github_actions_runs.py list",
+            "python3 /tmp/github_actions_runs.py list",
+            "python3 ~/.claude/helpers/github_actions_runs.py list",
+            "gh run list",
+            "gh run view 1",
+            f"{prefix} list | head",
+            f"{prefix} list > output",
+            f"{prefix} list && pwd",
+            f"({prefix} list)",
+            f"GH_REPO=other/repository {prefix} list",
+            f"{prefix} view $(pwd)",
+            f"{prefix} view $RUN_ID",
+            f"{prefix} view ${{RUN_ID}}",
+        )
+        for command in allowed:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        for command in denied:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_all_three_github_helpers_and_bare_api_keep_their_boundaries(self) -> None:
+        canonical = (
+            "python3 .claude/helpers/github_global_advisories.py view GHSA-2345-6789-cfgh",
+            "python3 .claude/helpers/github_dependabot_alerts.py list",
+            "python3 .claude/helpers/github_actions_runs.py list",
+        )
+        for command in canonical:
+            with self.subTest(command=command):
+                self.assertEqual(outcome(bash(command))[0], "ask")
+        self.assertEqual(outcome(bash("gh api /repos/example/example"))[0], "deny")
 
     def test_compound_redirect_substitution_and_control_syntax_are_denied(self) -> None:
         # 各shell構文は独立した迂回経路なので、1例へ集約せず個別の回帰を固定する。
