@@ -178,7 +178,9 @@ WEBFETCH_HOSTS = LEGACY_WEBFETCH_HOSTS | RESTRICTED_WEBFETCH_HOSTS
 
 ADVISORY_HELPER = ".claude/helpers/github_global_advisories.py"
 DEPENDABOT_HELPER = ".claude/helpers/github_dependabot_alerts.py"
+ACTIONS_RUNS_HELPER = ".claude/helpers/github_actions_runs.py"
 MAX_DEPENDABOT_ALERT_NUMBER = 2**63 - 1
+MAX_ACTIONS_RUN_ID = 2**63 - 1
 ADVISORY_ECOSYSTEM_PACKAGES = {
     "composer": COMPOSER_METADATA_PACKAGES,
     "npm": NPM_METADATA_PACKAGES,
@@ -564,6 +566,29 @@ def _evaluate_dependabot_helper(
     return deny("unregistered")
 
 
+def _evaluate_actions_runs_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """run ID以外を可変にせず、2つのcanonical helper形だけをAsk候補にする。"""
+    prefix = ["python3", ACTIONS_RUNS_HELPER]
+    if tokens[:2] != prefix:
+        return None
+    if command != " ".join(tokens):
+        return deny("unregistered")
+    if tokens == [*prefix, "list"]:
+        return ask()
+    if len(tokens) == 4 and tokens[2] == "view":
+        run_id = tokens[3]
+        # leading zeroを拒否し、helperとHookでcanonical表現を一致させる。
+        if (
+            len(run_id) <= len(str(MAX_ACTIONS_RUN_ID))
+            and re.fullmatch(r"[1-9][0-9]*", run_id)
+            and int(run_id) <= MAX_ACTIONS_RUN_ID
+        ):
+            return ask()
+    return deny("unregistered")
+
+
 def _evaluate_action_release(
     command: str, tokens: list[str]
 ) -> dict[str, object] | None:
@@ -684,6 +709,10 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
 
 
 def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
+    actions_result = _evaluate_actions_runs_helper(command, tokens)
+    if actions_result is not None:
+        return actions_result
+
     dependabot_result = _evaluate_dependabot_helper(command, tokens)
     if dependabot_result is not None:
         return dependabot_result

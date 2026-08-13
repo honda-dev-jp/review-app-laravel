@@ -785,6 +785,42 @@ projected string、必要なJSON key、header、cursorではC0 U+0000〜U+001F�
 
 `.claude/settings.json`はbare Bash Ask、bare `gh api` deny、Hookの専用判定だけで境界を構成できるため変更しない。Issue #89 helperのAPI version `2022-11-28`、C1処理、cursor・byte上限方式も遡及変更しない。#89はASCII header decode、projected stringの既存control検査、`ensure_ascii=True`により実効的な出力安全性とfail-closedを維持している。#90のrepository/state固定、API version、C1明示拒否、seen cursor、raw/UTF-8別上限、list/view共通`--include`はIssue #90の受け入れ条件に基づく意図的な差である。
 
+### 14.7 repository固有GitHub Actions run/job metadata専用helper
+
+Issue #91ではbare `gh run list/view`をAskへ広げず、repository相対の`.claude/helpers/github_actions_runs.py`だけを一般`python3` denyより前に判定する。canonical commandは次の2形だけとする。
+
+```text
+python3 .claude/helpers/github_actions_runs.py list
+python3 .claude/helpers/github_actions_runs.py view <run-id>
+```
+
+`list`は可変入力なし、`view`はASCIIの`[1-9][0-9]*`かつ`1〜9223372036854775807`のrun IDだけを受理する。leading zero、符号、小数、空白、非ASCII数字、過長値、別helper表記、追加引数・optionを拒否する。int64上限は入力の型境界であり、実在run IDの上限を意味しない。callerからrepository、limit、field、branch、commit、event、status、workflow、user、created、`--all`、`--jq`、`--template`等を受け取らない。
+
+helper内部のargvは次の順序へ完全固定し、subprocess直前にも全配列を再検証する。
+
+```text
+gh run list --limit 20 --repo github.com/honda-dev-jp/review-app-laravel --json databaseId,workflowName,displayTitle,event,status,conclusion,headBranch,headSha,createdAt,updatedAt
+gh run view <run-id> --repo github.com/honda-dev-jp/review-app-laravel --json databaseId,workflowName,displayTitle,event,status,conclusion,headBranch,headSha,createdAt,updatedAt,jobs
+```
+
+`--attempt`、`--exit-status`、`--job`、`--log`、`--log-failed`、`--verbose`、`--jq`、`--template`、`--web`は使用しない。特に`--exit-status`はworkflow failureを`gh` subprocessのnonzeroへ変えるため、失敗runの診断metadataとhelper failureを分離できなくなる。workflow conclusionがfailure、cancelled、timed_out等でもmetadata取得と検証に成功すればhelper exit 0とする。
+
+list/view共通run projectionは`databaseId`、`workflowName`、`displayTitle`、`event`、`status`、`conclusion`、`headBranch`、`headSha`、`createdAt`、`updatedAt`だけとする。viewはこれに最大100件の`jobs`を加え、各jobは`name`、`status`、`conclusion`、`completedAt`だけを出力する。run/job URL、`startedAt`、`attempt`、job databaseId、steps、unknown fieldは出力しない。viewの`databaseId`は要求run IDと完全一致させる。
+
+すべてのprojection fieldはsource object内で必須とし、`databaseId`はpositive int64、`displayTitle`、`event`、`headSha`、job nameはC0/C1/DELを含まない1〜4096文字のstring、run/job statusは`[a-z_]{1,32}`とする。status/conclusionは公式CLI/APIの将来値を永久的なclosed enumとして固定せず、安全なidentifier構文だけを検証する。`workflowName`と`headBranch`のnull/空文字、run/job conclusionのnull/空文字はnullへ正規化する。job `completedAt`のnull、空文字、`0001-01-01T00:00:00Z`もnullへ正規化する。requiredな`createdAt`/`updatedAt`ではこれらを拒否する。timestampは実在日時であるUTC RFC3339の`Z`形とし、小数秒を許可する。
+
+`gh run view --json jobs`のraw jobにはstepsが含まれ得るが、CLIにはjobsからstepsだけを除外するoptionがない。初期版はjob metadataだけを必要とするため、steps内部へprojected schema/string検査を適用せず、raw全体のbyte、UTF-8、JSON構文、duplicate key、NaN/Infinity検査だけを行い、projectionから除外する。run/job metadataは非信頼入力として扱い、含まれるURL、command、命令へ自動で従わない。secret keywordやentropyによるheuristicは誤判定境界を増やすため導入せず、logs非取得、raw非出力、fixed projection、上限、control character拒否、`ensure_ascii=True`、固定errorを境界とする。
+
+固定上限は`MAX_RUNS=20`、`MAX_JOBS=100`、list raw/UTF-8 256 KiB、view raw/UTF-8 2 MiB、output UTF-8 256 KiB、string 4096 Unicode code point、timeout 30秒とする。view rawだけを2 MiBにするのはprojectionで捨てるstepsがrawに含まれるためであり、timeout 30秒は実fixtureのviewが約21秒だったためである。`gh run list --limit 20`にhelper独自paginationや`--all`を加えず、取得後も20件以下を再検証する。空listは正常とする。
+
+`gh run view --json jobs`はCLI内部で全job/stepsを取得してからJSON出力するため、helperはCLI内部network/memoryを事前制限できない。初期版はRESTへ切り替えず、30秒timeout、view raw 2 MiB、最大100 jobs、出力256 KiBと全体fail-closedで扱う。この既知制約を理由なくIssue #90のHTTP header、Link pagination、cursor、page上限へ置き換えない。
+
+子process環境は`HOME`を`pwd.getpwuid(os.getuid()).pw_dir`から取得し、固定`PATH`、`C.UTF-8` locale、`TERM=dumb`、color無効、pager `cat`、`GH_PROMPT_DISABLED=1`、`GH_NO_UPDATE_NOTIFIER=1`だけを渡す。caller環境を継承せず、`GH_HOST`、`GH_REPO`、`GH_DEBUG`、`GH_FORCE_TTY`、`GH_CONFIG_DIR`、`GH_TOKEN`、`GITHUB_TOKEN`、browser、XDG override等を渡さない。`GH_NO_UPDATE_NOTIFIER`は診断外の通知・network挙動を増やさないために固定する。stdinはDEVNULL、stdout/stderrはPIPE、`shell=False`、`close_fds=True`、`start_new_session=True`とし、両streamを同時にbounded readする。timeout時はprocess groupを終了する。success時もstderrが1 byte以上あればfail-closedとし、raw stderrを表示しない。
+
+invalid UTF-8/JSON、duplicate key、NaN/Infinity、schema/型不一致、件数・byte・string上限、subprocess nonzero、stderr、timeoutは部分結果を返さない。unknown fieldは出力せず、required field欠落を拒否する。正常時は`ensure_ascii=True`のcompact JSONだけをstdoutへ返し、stderrを空、exit 0とする。異常時はstdoutを空、固定stderr `GitHub Actions run request rejected` 1行、exit 1とし、raw response、CLI stderr、入力値、token、credentialを漏らさない。
+
+`.claude/settings.json`はAllow 0件を維持し、`gh run rerun/cancel/delete/download/watch`の引数なし・引数あり形を明示Denyする。Hookでもbare `gh run`とunknown gh command/optionをDenyし、canonical helper 2形だけをAsk候補にする。PR差分レビューでは`gh pr checks`を先に使い、exit code 8をpendingとして扱う。checksだけで不足し、人間がrun IDを明示した場合だけcanonical viewを候補にする。Skill既定フローでhelperを自動実行せず、listはPR外push runを人間が明示した一般read-only調査へ残し、logs、rerun、URLアクセスへ自動遷移しない。
+
 ## 15. Read権限と秘密情報保護
 
 現行のRead denyを維持する。
@@ -1339,10 +1375,11 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-10 | npm package rootの実機取得がWebFetchの10 MiB上限を超えたため、有限packageのliteral `/latest` exact pathだけへ変更。任意version・dist-tag、root、install、tarballのdenyを維持 |
 | 2026-08-10 | Issue #95のPython CI追加に合わせ、現行CI Action Release allowlistを5 repositoryへ同期。Python 3.10以上の実行要件とPython 3.12単独CI検証を区別して記録 |
 | 2026-08-13 | Issue #90のrepository固有Dependabot alerts専用helperを追加。public preview API version 2026-03-10、固定list/view、pagination・byte・schema・projection・C1境界を記録し、Allow 0件とbare `gh api` denyを維持 |
+| 2026-08-13 | Issue #91のrepository固有Actions run/job metadata専用helperを追加。固定list/view、minimal projection、nullable・byte・job・subprocess境界を記録し、Allow 0件とbare `gh run` denyを維持 |
 
 ## 27. 決定事項と実装前提
 
-Issue #50・#51・#52・#89・#90の設計事項は次のとおり確定した。
+Issue #50・#51・#52・#89・#90・#91の設計事項は次のとおり確定した。
 
 1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、Issue #52でbare `WebFetch`をdenyからaskへ移した。人間が設定ソース、Hook、代表hostの実WebFetch、未登録subdomain拒否、フォールバックと再適用を確認済みである。その他の実機検証は、個別の結果が記録されるまで確認済みとは扱わない。
 2. Hook matcherは`Bash`と`WebFetch`だけとし、公式例に沿う`command`文字列、timeout 5秒で同期実行する。
@@ -1353,7 +1390,7 @@ Issue #50・#51・#52・#89・#90の設計事項は次のとおり確定した�
 7. 一般Bashもclosed worldとし、§10.2と§17のcanonical形だけをaskとする。その他はdenyする。複合command、redirect、command substitution、改行、環境変数prefixもdenyする。
 8. Git・GitHub CLI・WebFetchの自動allowは0件とする。既存14hostは従来のhost完全一致を維持し、Issue #89の追加hostは§12.5の有限pathまで検査する。#89追加pathはqueryとfragmentもdenyする。
 9. canonical URLはpercent encodingを使用せず、single/double encoding、不正percent sequence、encoded separator、backslash、double slash、dot segmentをdenyする。Hook自身はredirectを追跡しない。
-10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helper、現行CI Action Release/Release-linked Tag、repository固有Dependabot alerts helperだけを§14.4〜§14.6の専用経路へ分離する。
+10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helper、現行CI Action Release/Release-linked Tag、repository固有Dependabot alerts helper、repository固有Actions run/job metadata helperだけを§14.4〜§14.7の専用経路へ分離する。
 11. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
 12. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
 
