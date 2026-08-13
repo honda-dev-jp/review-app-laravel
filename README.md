@@ -135,6 +135,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 - [Claude Code実装前検証運用手順](docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
 - [Claude Codeレビュー運用手順](docs/CLAUDE_CODE_REVIEW.md)
 - [Claude Code権限設計](docs/CLAUDE_CODE_PERMISSION_DESIGN.md)
+- [AI共用ローカル成果物運用](docs/AI_LOCAL_ARTIFACTS.md)
 - [要件定義](docs/REQUIREMENTS.md)
 - [機能一覧](docs/FEATURES.md)
 - [画面遷移](docs/SCREEN_TRANSITIONS.md)
