@@ -904,6 +904,26 @@ git status
 git status --short
 ```
 
+### ignore rule確認
+
+指定pathへ適用されるignore ruleを、indexの追跡状態にかかわらず確認する。
+
+```bash
+git check-ignore -v --no-index <path>
+```
+
+`-v`は一致したruleの出典と内容を表示し、`--no-index`はすでにtrackedなpathもignore判定の対象にする。`--no-index`はindexへの誤混入を検出するoptionではないため、追跡状態は次の`git ls-files`で別に確認する。
+
+### pathの追跡状態確認
+
+指定path以下にindexで追跡されているpathがあるか確認する。
+
+```bash
+git ls-files -- <path>
+```
+
+`.ai-work/`固有の実行順序、期待値、異常時の停止条件は、[AI共用ローカル成果物運用](AI_LOCAL_ARTIFACTS.md)を参照する。
+
 ### ブランチ確認
 
 ローカルブランチを確認する。
