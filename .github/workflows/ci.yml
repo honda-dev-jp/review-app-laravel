@@ -43,6 +43,7 @@ jobs:
             .claude/hooks/pre_tool_use.py
             .claude/helpers/
             .claude/hooks/tests/
+            .claude/skills/save-local-artifact/scripts/save_local_artifact.py
 
       - name: Run Ruff format check
         # helper追加時のRuff対象漏れを防ぐ品質範囲であり、権限allowlistではない。
@@ -51,6 +52,7 @@ jobs:
           .claude/hooks/pre_tool_use.py
           .claude/helpers/
           .claude/hooks/tests/
+          .claude/skills/save-local-artifact/scripts/save_local_artifact.py
 
       - name: Run Python unittest
         run: python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"

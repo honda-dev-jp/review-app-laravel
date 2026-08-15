@@ -2,7 +2,7 @@
 
 ## 目的
 
-このディレクトリのHookは、Claude Codeが`Bash`または`WebFetch`を実行する直前に入力を追加検査します。Claude Codeはレビュー専用であり、このHookはpermissionsと人間の承認を補強するガードレールです。完全なセキュリティ境界ではありません。
+このディレクトリのHookは、Claude Codeが`Bash`または`WebFetch`を実行する直前に入力を追加検査します。Claude Codeは原則として読み取り専用であり、唯一の限定write exceptionである`/save-local-artifact`も含め、このHookはpermissions、人間の承認、各helperの検査を補強するガードレールです。Hook単体を完全なセキュリティ境界とは扱いません。
 
 権限判定の詳細な正本は、[Claude Code権限設計](../../docs/CLAUDE_CODE_PERMISSION_DESIGN.md)です。
 
@@ -14,6 +14,7 @@
 ├── README.md
 └── tests/
     ├── test_pre_tool_use.py
+    ├── test_save_local_artifact.py
     ├── test_github_global_advisories.py
     ├── test_github_dependabot_alerts.py
     └── test_github_actions_runs.py
@@ -24,6 +25,8 @@ Issue #89のGitHub Global Security Advisories専用実行本体は`.claude/helpe
 Issue #90のrepository固有Dependabot alerts専用実行本体は`.claude/helpers/github_dependabot_alerts.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_dependabot_alerts.py`に置きます。
 
 Issue #91のGitHub Actions run/job metadata専用実行本体は`.claude/helpers/github_actions_runs.py`に置き、回帰testは同じdiscover commandで実行される`.claude/hooks/tests/test_github_actions_runs.py`に置きます。
+
+Issue #88の限定保存helperは`.claude/skills/save-local-artifact/scripts/save_local_artifact.py`に置き、pure validation、trusted preflight、filesystem状態機械の回帰testは`.claude/hooks/tests/test_save_local_artifact.py`に置きます。
 
 - 対象tool: `Bash`、`WebFetch`
 - matcher: `Bash|WebFetch`
@@ -117,6 +120,8 @@ python3 .claude/helpers/github_dependabot_alerts.py list
 python3 .claude/helpers/github_dependabot_alerts.py view 1
 python3 .claude/helpers/github_actions_runs.py list
 python3 .claude/helpers/github_actions_runs.py view 1
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py preflight --category reports --filename example.md --content-base64url=<payload>
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py save --category reports --filename example.md --confirmation-digest <digest> --content-base64url=<payload>
 gh release list --limit 20 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease
 gh release view v6.1.0 --repo github.com/actions/checkout --json tagName,name,publishedAt,isDraft,isPrerelease,url
 python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
@@ -147,6 +152,21 @@ pathを受け取るcommandへ設計書§15の共通規則を適用します。`.
 設計書の有限hostと完全一致する`https` URLだけをAsk候補にします。Issue #89以前の14 hostは既存境界を維持し、Issue #89追加hostはpathも有限集合・明示prefixで検査します。明示port、userinfo、許可外host/path、suffix偽装host、query/fragment付きの#89追加path、percent encoding、不正percent sequence、backslash、double slash、dot segment、URL側の秘密情報らしきkeywordはDenyします。Hook自身はHTTP通信もredirect追跡も行いません。
 
 `registry.npmjs.org`は、`package.json`由来の有限package集合と`typescript`、`@playwright/test`について、`/<固定package>/latest`だけをAsk候補にします。package rootのfull packumentがWebFetchの10 MiB応答上限を超えることを実機で確認したため、応答をlatest version metadataへ限定しています。literal `latest`以外のversion・dist-tag、package root、package install、tarball取得は許可しません。
+
+### Issue #88限定保存経路
+
+一般`python3`のDenyを維持したまま、次の1行commandだけを一般`python3`判定より前でAsk候補にします。
+
+```text
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py preflight --category <reports|handoffs|scratch> --filename <name> --content-base64url=<payload>
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py save --category <reports|handoffs|scratch> --filename <name> --confirmation-digest <64-lower-hex> --content-base64url=<payload>
+```
+
+共通shell構文を先にDenyし、その後にhelper固定相対path、mode、token数、option順、category、filename、save時のdigest、payload alphabet、encoded上限2,048 ASCII byteをclosed worldで検査します。検証済み値からcommandを再構築し、元文字列との完全一致を要求するため、leading/trailing/double space、quote差、option順変更、重複、追加option、path変形はAskへ進みません。
+
+Hookはpayloadをdecodeせず、本文、UTF-8、Unicode、raw/normalized size、canonical pad bits、confirmation digest、repository root、filesystemを検査しません。非信頼本文を承認境界へ持ち込まず責務を重複させないため、Hookはcommand shapeとencoded上限に閉じ、これらはhelperを唯一の実装正本とします。一方、Ask候補自体をclosed worldに保つため、保存先、digest、payload shapeはhelperと重複してHookでも制限します。
+
+AskとDenyには既存の固定`permissionDecisionReason`だけを使用し、payload、digest、filename、raw commandを含めません。reasonは承認UIやログへ露出し得るためです。Hook error、起動失敗、異常終了、timeoutが表示された場合は保存を承認せず、下記「異常時」に従います。atomic publishとresidueの扱いは[AI共用ローカル成果物運用](../../docs/AI_LOCAL_ARTIFACTS.md)、技術的な全境界は権限設計書を正本とします。
 
 ### Issue #89専用GitHub経路
 
@@ -215,7 +235,7 @@ python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"
 
 ## Hook自身が行わないこと
 
-- repository内file、transcript、`.env`の読み取り
+- repository内file、transcript、`.env`、`.ai-work/`の読み取り
 - HTTP通信、redirect追跡
 - subprocess、Git、GitHub CLIの実行（Issue #89・#90の専用helperは固定`gh api`、Issue #91の専用helperは固定`gh run list/view`を別processで実行する）
 - 入力JSON、URL、prompt、環境変数値の保存・出力

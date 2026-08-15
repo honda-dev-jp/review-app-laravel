@@ -18,6 +18,16 @@ assert SPEC is not None and SPEC.loader is not None
 hook = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(hook)
 
+ARTIFACT_HELPER_PATH = (
+    PROJECT_ROOT / ".claude/skills/save-local-artifact/scripts/save_local_artifact.py"
+)
+ARTIFACT_HELPER_SPEC = importlib.util.spec_from_file_location(
+    "save_local_artifact_for_hook_sync", ARTIFACT_HELPER_PATH
+)
+assert ARTIFACT_HELPER_SPEC is not None and ARTIFACT_HELPER_SPEC.loader is not None
+artifact_helper = importlib.util.module_from_spec(ARTIFACT_HELPER_SPEC)
+ARTIFACT_HELPER_SPEC.loader.exec_module(artifact_helper)
+
 
 def payload(
     tool_name: str, tool_input: dict[str, object], **extra: object
@@ -62,6 +72,31 @@ def outcome(result: dict[str, object]) -> tuple[str, str]:
     )
 
 
+ARTIFACT_PREFIX = f"python3 {hook.SAVE_LOCAL_ARTIFACT_HELPER}"
+VALID_DIGEST = "a" * 64
+
+
+def artifact_preflight(
+    category: str = "reports", filename: str = "a.md", payload_value: str = ""
+) -> str:
+    return (
+        f"{ARTIFACT_PREFIX} preflight --category {category} "
+        f"--filename {filename} --content-base64url={payload_value}"
+    )
+
+
+def artifact_save(
+    category: str = "reports",
+    filename: str = "a.md",
+    digest: str = VALID_DIGEST,
+    payload_value: str = "",
+) -> str:
+    return (
+        f"{ARTIFACT_PREFIX} save --category {category} --filename {filename} "
+        f"--confirmation-digest {digest} --content-base64url={payload_value}"
+    )
+
+
 class ProjectSourceSyncTests(unittest.TestCase):
     def test_permission_baseline_and_hook_registration_are_unchanged(self) -> None:
         settings = json.loads((PROJECT_ROOT / ".claude/settings.json").read_text())
@@ -78,6 +113,24 @@ class ProjectSourceSyncTests(unittest.TestCase):
             self.assertIn(f"Bash(gh run {subcommand} *)", permissions["deny"])
         hook_registration = settings["hooks"]["PreToolUse"][0]
         self.assertEqual(hook_registration["matcher"], "Bash|WebFetch")
+
+    def test_save_local_artifact_hook_boundaries_match_helper(self) -> None:
+        self.assertEqual(
+            hook.SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES,
+            artifact_helper.MAX_ENCODED_BYTES,
+        )
+        self.assertEqual(
+            hook.SAVE_LOCAL_ARTIFACT_CATEGORIES,
+            artifact_helper.CATEGORIES,
+        )
+        self.assertEqual(
+            hook.SAVE_LOCAL_ARTIFACT_FILENAME_RE.pattern,
+            artifact_helper.FILENAME_RE.pattern,
+        )
+        self.assertEqual(
+            hook.SAVE_LOCAL_ARTIFACT_FILENAME_RE.flags,
+            artifact_helper.FILENAME_RE.flags,
+        )
 
     def test_package_metadata_sets_match_project_manifests(self) -> None:
         composer = json.loads((PROJECT_ROOT / "composer.json").read_text())
@@ -559,6 +612,243 @@ class GeneralBashTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertEqual(outcome(bash(f"ls {path}"))[0], "deny")
+
+
+class SaveLocalArtifactHookTests(unittest.TestCase):
+    def test_preflight_canonical_categories_filenames_and_boundaries_are_ask(
+        self,
+    ) -> None:
+        cases = (
+            ("reports", "a.md", ""),
+            ("handoffs", "a.txt", "YQ"),
+            ("scratch", "a" * 63 + ".txt", "YWJj"),
+        )
+        for category, filename, payload_value in cases:
+            with self.subTest(category=category, filename=filename):
+                self.assertEqual(
+                    outcome(
+                        bash(artifact_preflight(category, filename, payload_value))
+                    )[0],
+                    "ask",
+                )
+
+        maximum_payload = "A" * hook.SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES
+        self.assertEqual(
+            outcome(bash(artifact_preflight(payload_value=maximum_payload)))[0],
+            "ask",
+        )
+
+    def test_save_canonical_categories_extensions_empty_and_maximum_are_ask(
+        self,
+    ) -> None:
+        cases = (
+            ("reports", "a.md", ""),
+            ("handoffs", "a.txt", "YQ"),
+            ("scratch", "A-1_test.md", "YWJj"),
+        )
+        for category, filename, payload_value in cases:
+            with self.subTest(category=category, filename=filename):
+                self.assertEqual(
+                    outcome(
+                        bash(
+                            artifact_save(
+                                category,
+                                filename,
+                                VALID_DIGEST,
+                                payload_value,
+                            )
+                        )
+                    )[0],
+                    "ask",
+                )
+
+        maximum_payload = "A" * hook.SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES
+        self.assertEqual(
+            outcome(bash(artifact_save(payload_value=maximum_payload)))[0], "ask"
+        )
+
+    def test_encoded_payload_boundary_and_shape_are_closed_world(self) -> None:
+        maximum_payload = "A" * hook.SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES
+        oversized_payload = "A" * (hook.SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES + 1)
+        self.assertEqual(outcome(bash(artifact_preflight(payload_value="")))[0], "ask")
+        self.assertEqual(
+            outcome(bash(artifact_save(payload_value=maximum_payload)))[0], "ask"
+        )
+        self.assertEqual(
+            outcome(bash(artifact_preflight(payload_value=oversized_payload)))[0],
+            "deny",
+        )
+
+        invalid_payloads = (
+            "YQ=",
+            "+w",
+            "/w",
+            "Y Q",
+            "Y\tQ",
+            "Y\nQ",
+            "Y\rQ",
+            "Y.Q",
+        )
+        for index, payload_value in enumerate(invalid_payloads):
+            with self.subTest(case=index):
+                self.assertEqual(
+                    outcome(bash(artifact_preflight(payload_value=payload_value)))[0],
+                    "deny",
+                )
+
+    def test_category_is_closed_world_for_both_modes(self) -> None:
+        for category in hook.SAVE_LOCAL_ARTIFACT_CATEGORIES:
+            with self.subTest(category=category):
+                self.assertEqual(outcome(bash(artifact_preflight(category)))[0], "ask")
+                self.assertEqual(outcome(bash(artifact_save(category)))[0], "ask")
+        for category in ("unknown", ""):
+            with self.subTest(category=category):
+                self.assertEqual(outcome(bash(artifact_preflight(category)))[0], "deny")
+                self.assertEqual(outcome(bash(artifact_save(category)))[0], "deny")
+
+    def test_filename_regex_matches_helper_boundaries(self) -> None:
+        accepted = ("a.md", "a.txt", "A-1_test.md", "a" * 63 + ".txt")
+        rejected = (
+            ".md",
+            "../a.md",
+            "a/b.md",
+            "a\\b.md",
+            "a b.md",
+            "a..md",
+            "a.tar.md",
+            "a.MD",
+            "日本語.md",
+            "a" * 64 + ".txt",
+            "a\x00.md",
+        )
+        for filename in accepted:
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    outcome(bash(artifact_preflight(filename=filename)))[0], "ask"
+                )
+                self.assertEqual(
+                    outcome(bash(artifact_save(filename=filename)))[0], "ask"
+                )
+        for index, filename in enumerate(rejected):
+            with self.subTest(case=index):
+                self.assertEqual(
+                    outcome(bash(artifact_preflight(filename=filename)))[0], "deny"
+                )
+                self.assertEqual(
+                    outcome(bash(artifact_save(filename=filename)))[0], "deny"
+                )
+
+    def test_save_digest_is_exactly_64_lowercase_hex(self) -> None:
+        self.assertEqual(
+            outcome(bash(artifact_save(digest="0123456789abcdef" * 4)))[0],
+            "ask",
+        )
+        for digest in ("a" * 63, "a" * 65, "A" * 64, "g" * 64, ""):
+            with self.subTest(length=len(digest), uppercase=digest.isupper()):
+                self.assertEqual(outcome(bash(artifact_save(digest=digest)))[0], "deny")
+
+    def test_option_order_duplicates_missing_and_extra_are_denied(self) -> None:
+        commands = (
+            f"{ARTIFACT_PREFIX} preflight --filename a.md --category reports "
+            "--content-base64url=",
+            f"{ARTIFACT_PREFIX} save --category reports --confirmation-digest "
+            f"{VALID_DIGEST} --filename a.md --content-base64url=",
+            artifact_preflight() + " --category reports",
+            artifact_preflight() + " --filename a.md",
+            artifact_save() + f" --confirmation-digest {VALID_DIGEST}",
+            artifact_preflight() + " --content-base64url=",
+            artifact_save() + " --extra",
+            f"{ARTIFACT_PREFIX} preflight --category reports --filename a.md",
+        )
+        for index, command in enumerate(commands):
+            with self.subTest(case=index):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_whitespace_and_quote_variants_are_denied(self) -> None:
+        canonical_preflight = artifact_preflight(payload_value="YQ")
+        commands = (
+            " " + canonical_preflight,
+            canonical_preflight + " ",
+            canonical_preflight.replace(" preflight ", "  preflight "),
+            canonical_preflight.replace(
+                hook.SAVE_LOCAL_ARTIFACT_HELPER,
+                f"'{hook.SAVE_LOCAL_ARTIFACT_HELPER}'",
+            ),
+            canonical_preflight.replace("reports", "'reports'"),
+            canonical_preflight.replace("a.md", "'a.md'"),
+            canonical_preflight.replace(
+                "--content-base64url=YQ", "--content-base64url='YQ'"
+            ),
+            artifact_save().replace(VALID_DIGEST, f"'{VALID_DIGEST}'"),
+        )
+        for index, command in enumerate(commands):
+            with self.subTest(case=index):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_shell_injection_is_denied_before_helper_evaluation(self) -> None:
+        canonical = artifact_save(payload_value="YQ")
+        commands = (
+            canonical + "; echo x",
+            canonical + " && echo x",
+            canonical + " || echo x",
+            canonical + " | cat",
+            canonical + " > file",
+            canonical + " >> file",
+            canonical + " < file",
+            canonical + " <<EOF",
+            canonical + " $(pwd)",
+            canonical + " `pwd`",
+            f"({canonical})",
+            "VAR=value " + canonical,
+        )
+        for index, command in enumerate(commands):
+            with self.subTest(case=index):
+                decision, reason = outcome(bash(command))
+                self.assertEqual(decision, "deny")
+                self.assertIn(reason, {hook.REASONS["compound"], hook.REASONS["shell"]})
+
+    def test_helper_path_aliases_and_unknown_python_remain_denied(self) -> None:
+        path_variants = (
+            f"python3 ./{hook.SAVE_LOCAL_ARTIFACT_HELPER} preflight "
+            "--category reports --filename a.md --content-base64url=",
+            "python3 .claude/skills/save-local-artifact/scripts/../scripts/"
+            "save_local_artifact.py preflight --category reports --filename a.md "
+            "--content-base64url=",
+            "python3 /tmp/save_local_artifact.py preflight --category reports "
+            "--filename a.md --content-base64url=",
+            "python3 .claude/skills/save-local-artifact/save_local_artifact.py "
+            "preflight --category reports --filename a.md --content-base64url=",
+            "python3 other/save_local_artifact.py preflight --category reports "
+            "--filename a.md --content-base64url=",
+        )
+        general_python = (
+            "python3 -c pass",
+            "python3 random.py",
+            "python3 -m unittest",
+            f"{ARTIFACT_PREFIX} unknown --category reports --filename a.md "
+            "--content-base64url=",
+        )
+        for index, command in enumerate((*path_variants, *general_python)):
+            with self.subTest(case=index):
+                self.assertEqual(outcome(bash(command))[0], "deny")
+
+    def test_ask_and_deny_reasons_do_not_expose_payload_digest_or_command(self) -> None:
+        payload_marker = "SyntheticPayloadMarker_123"
+        digest_marker = "abcdef0123456789" * 4
+        ask_result = bash(
+            artifact_save(digest=digest_marker, payload_value=payload_marker)
+        )
+        deny_result = bash(
+            artifact_save(
+                digest=digest_marker,
+                payload_value=payload_marker + "=",
+            )
+        )
+        for result in (ask_result, deny_result):
+            serialized = json.dumps(result)
+            self.assertNotIn(payload_marker, serialized)
+            self.assertNotIn(digest_marker, serialized)
+            self.assertNotIn(ARTIFACT_PREFIX, serialized)
 
 
 class GitTests(unittest.TestCase):

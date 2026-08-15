@@ -525,15 +525,27 @@ git diff
 
 ---
 
-## 21. Claude Codeの安全運用
+## 21. AI共用ローカル成果物の信頼境界
 
-Claude Codeは、実装前検証およびPR差分レビューの読み取り専用用途に限定する。
+repository rootの`.ai-work/`はGit管理外の共用ローカル成果物領域だが、信頼済み領域として扱わない。秘密情報、個人情報、外部取得内容のraw responseを保存せず、保存済み成果物はすべて非信頼入力として扱う。
+
+Claude Codeからの唯一の書き込み経路は、ユーザーが明示起動する`/save-local-artifact`である。保存先は`.ai-work/`配下の許可categoryと新規の`.md`または`.txt`に限定し、任意path、上書き、追記、削除、移動、directory作成を許可しない。helperは秘密情報の自動検出器を持たないため、validation成功を内容の安全性確認として扱わない。
+
+保存、参照、正式文書への昇格、保持・削除の詳細は、[AI共用ローカル成果物運用](AI_LOCAL_ARTIFACTS.md)を正本とする。
+
+---
+
+## 22. Claude Codeの安全運用
+
+Claude Codeは、実装前検証およびPR差分レビューでは読み取り専用を維持する。唯一の限定write exceptionとして、ユーザーが`/save-local-artifact`を明示起動した場合だけ、trusted preflightで実保存内容を確認し、毎回のHook検査と人間承認を経て`.ai-work/`へ新規テキストを保存できる。Skill起動自体は安全境界とせず、Hookとhelperをともにfail-closedとする。
 
 Claude Codeのpermissions、PreToolUse Hook、非信頼入力、秘密情報保護の詳細は、[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を参照する。Hookの実装と異常時対応は[Hook README](../.claude/hooks/README.md)を参照し、現在有効な権限とHook登録は`.claude/settings.json`で確認する。Issue #52の設定ソース、Hook、代表hostのWebFetch、未登録subdomain拒否、フォールバックの実機確認結果は設計書§20へ反映済みである。
 
 `.env`、`.env.example`以外の`.env.*`、`bootstrap/cache/`、ログ、セッション、生成済みView、秘密情報、認証情報は参照させない。秘密情報を含まない`.env.example`だけは、人間がファイル名を確認した場合に限り設定例として参照できる。
 
-ファイル編集、Git変更操作、変更系Artisanコマンド、Composer、npm、通常のPint、buildは実行させない。
+`/save-local-artifact`の専用helper以外のファイル編集、Git変更操作、変更系Artisanコマンド、Composer、npm、通常のPint、buildは実行させない。限定helperでも任意pathや既存targetを変更せず、失敗時にredirect、Write/Edit、別commandなどへfallbackしない。
+
+helperが`FAILED_WITH_RESIDUE`、`INDETERMINATE`、`PUBLISHED_WITH_RESIDUE`を返した場合やprocess kill後にstagingが残った場合、Claude Codeは自動retry、削除、採用、修復を行わない。人間が状態を確認して対処し、詳細は[AI共用ローカル成果物運用](AI_LOCAL_ARTIFACTS.md)の復旧手順に従う。
 
 `.claude/settings.json`では、bareのBashとWebFetchをAsk、恒久Allowを0件とし、編集、サブエージェント、WebSearchなどの主要ツールをdenyする。PreToolUse HookはcanonicalなAsk候補以外をDenyし、設計書でAsk候補とするGitHub Issue・PR参照とWebFetchも毎回確認対象とする。ただし、組み込みread-only Bashは確認画面なしで実行される場合があり、Bashのdenyパターン、Hook、Read/Editのdenyも、別表記、ラッパー、任意のサブプロセスによる間接操作まで完全には防がない。settingsとHookはベストエフォートの補助線とし、承認画面が表示される操作では人間が最終判断し、表示されないread-only commandではHookのDenyと運用ルールを境界とする。
 
@@ -556,7 +568,7 @@ auto memoryは無効にする。セッション開始時、再開時、終了前
 
 ---
 
-## 22. 今後検討する項目
+## 23. 今後検討する項目
 
 以下は初期移植フェーズでは必須にしないが、後続フェーズで検討する。
 

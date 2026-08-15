@@ -24,6 +24,9 @@ _ide_helper.php
 .agentx/
 .agents/
 
+# Shared AI local work artifacts
+/.ai-work/
+
 # Claude Code local settings
 .claude/settings.local.json
 
