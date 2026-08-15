@@ -29,7 +29,7 @@ nested `.ai-work/`は共用成果物の保存先にしない。repository内に�
 
 ## 3. 初期対応filesystem
 
-初期対応環境は、WSL distributionのLinux filesystem上に物理配置されたrepositoryとする。Windows fixed driveがmountされる`/mnt/c`、`/mnt/d`等の`/mnt/<drive>/`配下に物理配置されたrepositoryは対象外とする。
+初期対応環境は、WSL distributionのLinux filesystem上に物理配置されたrepositoryとする。Windows fixed driveがmountされる`/mnt/c`、`/mnt/d`等の`/mnt/<single ASCII letter>`そのもの、およびその配下に物理配置されたrepositoryは対象外とする。
 
 Windows mount上ではUnix permission、symlink、hard link、atomic publish等の前提がLinux filesystemと異なる可能性があるため、初期対応環境を分ける。
 
@@ -40,7 +40,7 @@ git rev-parse --show-toplevel
 pwd -P
 ```
 
-`pwd -P`の結果がrepository rootを示し、`/mnt/<drive>/`配下ではないことを確認する。異なるdirectoryで実行した場合や、物理pathが対象外にある場合は初期化しない。
+`pwd -P`の結果がrepository rootを示し、`/mnt/<single ASCII letter>`そのものでもその配下でもないことを確認する。異なるdirectoryで実行した場合や、物理pathが対象外にある場合は初期化しない。
 
 このpath確認は#87の運用上の初期判定であり、symlink、hard link、permission、atomic publish等の個別filesystem capabilityを技術的に証明するものではない。Issue #88では、helperが依存する機能を使い捨て環境と実装側の検査で確認し、利用できない場合はfail-closedとする。
 
@@ -156,6 +156,10 @@ git status --short
 
 保存はユーザーが明示的に依頼し、人間が保存前の内容を確認した場合だけ行う。保存先はrepository rootの`.ai-work/`配下に限定する。
 
+Claude Codeから保存できる唯一の経路は、ユーザーが明示起動する`/save-local-artifact`である。`reports`、`handoffs`、`scratch`のいずれかとbasenameだけのfilenameを指定し、`.md`または`.txt`を新規作成する。任意path、上書き、追記、削除、移動、rename、directory作成には使用しない。
+
+Skillは、専用helperの`preflight`で正規化後のcategory、filename、byte数、confirmation digest、本文全文を表示し、人間の明示確認後にだけ同じ入力で`save`へ進む。preflightとsaveはそれぞれHook検査と人間承認を受ける。Skillから起動したという事実だけを安全境界とせず、最終的なvalidationとfilesystem境界はhelperを正本とする。
+
 次を保存しない。
 
 - `.env`および禁止対象から取得した情報
@@ -225,27 +229,36 @@ Unicode normalization（NFC / NFD / NFKC / NFKD）は行わず、許可された
 
 削除主体を人間とするのは、正規成果物やユーザー指定filenameの意図しない消失を防ぐためである。
 
-将来のIssue #88 helperに限り、helper自身が作成した予約prefix付きstagingを、publish成功後または失敗時のcleanupとして削除できる。この予約prefixはユーザー指定の最終filename規則から到達不能であることを不変条件とする。具体的なprefix、生成方法、cleanup実装は#88で定義する。
+Issue #88 helperに限り、現在processが`O_CREAT | O_EXCL`で作成に成功した予約prefix `.__claude_save_staging_`付きstagingを、publish成功後またはlink前失敗時のcleanup対象にできる。このprefixはユーザー指定の最終filename規則から到達不能である。prefixが一致する既存entryを自分のstagingと推定せず、自動削除しない。
 
 この例外はhelper自身のstagingだけを対象とし、3 category配下の正規成果物、ユーザー指定filename、既存targetの削除、移動、rename、整理を許可しない。
 
 ## 12. Issue #88との責務境界
 
-Issue #87は、保存場所、filesystem前提、人間初期化、Git管理外運用、信頼境界、文字方針、保持・削除を定義する。
+Issue #87は、保存場所、filesystem前提、人間初期化、Git管理外運用、信頼境界、文字方針、保持・削除を定義した。本書はそれらの運用正本を維持する。
 
-Issue #87完了時点では、Claude Codeへ`.ai-work/`の書き込み経路を追加しない。現行の読み取り専用・ファイル作成禁止を維持し、`CLAUDE.md`、permissions、PreToolUse Hook、既存レビューSkillを変更しない。Codex側の権限設定も変更しない。
+Issue #88は、Claude Codeの原則read-onlyを維持しながら、`.ai-work/`だけへの限定保存経路を追加する。`.claude/settings.json`のAllow 0件、bare Bash Ask、Edit・Write・NotebookEdit Deny、`disableSkillShellExecution: true`は変更せず、専用Skill、PreToolUse Hook、helper、人間の毎回承認を組み合わせる。
 
-Issue #88は、#87が`develop`へマージされた後、最新の`develop`から別の作業として開始し、次を扱う。
+限定保存の技術的な権限・command・atomic publish・状態機械は[Claude Code権限設計](CLAUDE_CODE_PERMISSION_DESIGN.md)を正本とする。既存の`/pre-implementation-review`と`/pr-diff-review`は従来どおり結果をチャットへ返し、自動保存しない。
 
-- Claude Codeの限定保存Skillとhelper
-- permissionsとPreToolUse Hookの限定変更
-- directory・filesystem capabilityのfail-closed検証
-- 文字検証、size上限、no-overwrite、atomic publish
-- helper自身の予約stagingに限定したcleanup
+helperは`.ai-work/`やcategoryを作成・chmod・owner修復しない。秘密情報の自動検出器も持たないため、helperのvalidation成功は保存内容に秘密情報や個人情報がないことを保証しない。
 
-Issue #87では、これらを実装しない。
+## 13. staging residueと人間向け復旧
 
-## 13. 検証手順
+`FAILED_WITH_RESIDUE`、`INDETERMINATE`、`PUBLISHED_WITH_RESIDUE`、またはprocess kill後に予約prefix付きentryが残った場合、AIは自動retry、自動削除、自動採用、自動上書き、自動修復を行わない。同じcategoryへの後続saveは、residueがある間fail-closedする。
+
+人間は、作業を再開する前に次を確認する。
+
+1. helperが報告したstatusとcategoryを記録し、対象category内の予約prefix付きentryについて、名前、種類、owner、modeを確認する
+2. `INDETERMINATE`では、finalとstagingの双方が存在し得る前提で、finalの存在、種類、owner、mode、byte数、必要な場合は人間が意図した内容との一致を確認する
+3. `PUBLISHED_WITH_RESIDUE`では、finalが期待した新規成果物であることと、stagingまたはcleanup durabilityの状態を確認する
+4. `FAILED_WITH_RESIDUE`またはprocess kill後は、finalが作成されていないかも含めて状態を確認する
+5. 残すべき情報を確認した後、不要と判断したresidueだけを人間が明示的に削除する。状態確認なしに固定の削除commandを実行しない
+6. 削除後にcategoryのentry、owner、modeを再確認し、予約prefix付きentryがなく、directory条件を満たすことを確認する
+
+`INDETERMINATE`でfinalのdurabilityや内容を確定できない場合は、成功または失敗と断定せず、stagingを証拠として保持して停止する。AIがcleanupしないのは、他processのentryや状態確認に必要なinodeを誤って失うことを防ぐためである。
+
+## 14. 検証手順
 
 実装後の検証は人間が次の順序で行う。
 
@@ -262,11 +275,11 @@ Issue #87では、これらを実装しない。
 
 AIは異常状態、sample、symlink、directoryを作成・削除しない。実機確認結果が期待値と異なる場合は、結果を確認済みとして扱わず停止する。
 
-## 14. 異常時
+## 15. 異常時
 
 次の場合は、作成、削除、置換、chmod、自動修復、Gitへの追加を行わず停止する。
 
-- repositoryの物理pathが`/mnt/<drive>/`配下にある、または初期対応filesystemか判断できない
+- repositoryの物理pathが`/mnt/<single ASCII letter>`そのものまたはその配下にある、または初期対応filesystemか判断できない
 - `.ai-work`が通常ファイル、symlink、dangling symlinkである
 - `.ai-work/`または3 categoryが一部だけ存在する
 - directoryの種類、owner、modeが条件を満たさない
