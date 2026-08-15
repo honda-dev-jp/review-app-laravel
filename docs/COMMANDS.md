@@ -470,8 +470,8 @@ Ruffはproject dependencyへ追加せず、GitHub Actions CIを正本の実行�
 事前にRuff 0.15.21が利用可能な環境に限り、CIと同じ対象をcheck-onlyで確認できる。
 
 ```bash
-ruff check .claude/hooks/pre_tool_use.py .claude/helpers/ .claude/hooks/tests/
-ruff format --check .claude/hooks/pre_tool_use.py .claude/helpers/ .claude/hooks/tests/
+ruff check .claude/hooks/pre_tool_use.py .claude/helpers/ .claude/hooks/tests/ .claude/skills/save-local-artifact/scripts/save_local_artifact.py
+ruff format --check .claude/hooks/pre_tool_use.py .claude/helpers/ .claude/hooks/tests/ .claude/skills/save-local-artifact/scripts/save_local_artifact.py
 ```
 
 `ruff check --fix`や`ruff format`による自動変更は、CIでは実行しない。
@@ -1150,8 +1150,8 @@ Pull Requestおよび`main` / `develop`ブランチへのpush時は、GitHub Act
 | PHPStan / Larastan | `./vendor/bin/sail php ./vendor/bin/phpstan analyse` | `vendor/bin/phpstan analyse --no-progress` |
 | Vite build | `./vendor/bin/sail npm run build` | `npm run build` |
 | PHPUnit | `./vendor/bin/sail test` | `php artisan test` |
-| Ruff lint | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff check`（ruff-action経由、Claude Code用Hook本体、helpers配下、hooks/tests配下） |
-| Ruff format check | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff format --check`（Claude Code用Hook本体、helpers配下、hooks/tests配下） |
+| Ruff lint | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff check`（ruff-action経由、Claude Code用Hook本体、helpers配下、hooks/tests配下、save-local-artifact helper） |
+| Ruff format check | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff format --check`（Claude Code用Hook本体、helpers配下、hooks/tests配下、save-local-artifact helper） |
 | Python unittest | `python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"` | 同左 |
 
 CIでは、Composer依存関係を`composer.lock`に基づいて`composer install`で導入し、npm依存関係を`package-lock.json`に基づいて`npm ci`で導入する。

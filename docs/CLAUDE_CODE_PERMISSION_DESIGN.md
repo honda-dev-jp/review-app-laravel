@@ -2,13 +2,13 @@
 
 ## 1. 目的
 
-この文書は、Issue #50「Claude Codeの公式情報参照と読み取りコマンドの許可運用を改善する」における、Claude Codeのpermissions、PreToolUse Hook、および人間による承認の設計を定義する。
+この文書は、Claude Codeのpermissions、PreToolUse Hook、専用Skill・helper、および人間による承認の設計を定義する。
 
-目的は、Claude Codeを読み取り専用のセカンドオピニオンとして維持しながら、公式一次情報の参照と限定した読み取り系コマンドを、Hookと人間の承認で安全に制御することである。
+目的は、Claude Codeを原則読み取り専用のセカンドオピニオンとして維持しながら、公式一次情報の参照、限定した読み取り系コマンド、およびIssue #88の`.ai-work/`限定保存だけを、Hook、専用helper、人間の承認で安全に制御することである。
 
 本プロジェクトの第一目的はLaravelの学習である。Claude Codeの権限整備は、安全な実装前検証とコードレビューに必要な最小範囲へ限定して早期完了し、pager対策等の追加改善は実運用上の必要性を確認してから後続Issueで扱う。
 
-この文書は設計書であり、`.claude/settings.json`やHookの実装済み状態を示すものではない。現行設定と実装予定を混同しないため、初期版の自動allowは0件と明記し、実装予定の判定は「ask候補」「deny補強候補」と表記する。
+この文書は技術設計の正本であり、現行設定・実装済み境界と後続候補を区別して記載する。現在有効なpermissionsとHook登録は`.claude/settings.json`、Hook実装は`.claude/hooks/pre_tool_use.py`、限定保存helperの最終validationは`.claude/skills/save-local-artifact/scripts/save_local_artifact.py`を確認する。自動allowは0件とし、未実装の判定だけを「候補」と表記する。
 
 ## 2. 適用範囲
 
@@ -24,12 +24,13 @@
 - Agentの禁止
 - PHPUnit、PHPStan、Pint、`route:list`
 - PreToolUse HookによるBashとWebFetchの追加検査
+- `/save-local-artifact` Skillと専用helperによる`.ai-work/`への限定保存
 - 人間による実機検証とフォールバック
 
 次は対象外とする。
 
 - Claude Codeによるアプリケーション実装・修正
-- Hook以外の新しい自動化機構
+- Issue #88の専用Skill・helper以外の新しい自動化機構
 - sandboxの導入
 - MCP権限の再設計
 - Issue・PR・GitHub上のデータを変更する自動化
@@ -43,7 +44,7 @@ Claude Codeは次の用途に限定する。
 - 設計レビュー
 - PR差分レビュー
 
-Claude Codeにはアプリケーション実装、ファイル修正、Git変更、Issue・PR変更を行わせない。Claude Codeの出力は補助情報であり、採否、実装開始、承認、マージの最終判断は人間が行う。
+Claude Codeにはアプリケーション実装、任意のファイル修正、Git変更、Issue・PR変更を行わせない。唯一の限定write exceptionは、ユーザーが`/save-local-artifact`を明示起動した場合の`.ai-work/`への新規テキスト保存である。Claude Codeの出力は補助情報であり、採否、実装開始、保存、承認、マージの最終判断は人間が行う。
 
 ## 4. 前提資料と公式一次情報
 
@@ -57,6 +58,9 @@ Claude Codeにはアプリケーション実装、ファイル修正、Git変更
 - `.claude/settings.json`
 - `.claude/skills/pre-implementation-review/SKILL.md`
 - `.claude/skills/pr-diff-review/SKILL.md`
+- `.claude/skills/save-local-artifact/SKILL.md`
+- `.claude/skills/save-local-artifact/scripts/save_local_artifact.py`
+- `docs/AI_LOCAL_ARTIFACTS.md`
 - `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md`
 - `docs/CLAUDE_CODE_REVIEW.md`
 - `docs/SECURITY.md`
@@ -79,6 +83,7 @@ Claude Codeにはアプリケーション実装、ファイル修正、Git変更
 - denyとaskでは`Bash(run_in_background:true)`のように、tool入力のtop-level scalar parameterを完全一致で制御できる。初期Hookのdenyに加えてpermissionsにも同ruleを置き、Hook障害時の防御を重ねる。
 - permission ruleとHook matcherはUI上の表示名ではなくcanonical tool名へ一致する。未知のtool名をdenyまたはaskへ指定すると起動警告が出るため、推測でtool名を追加せず、Tools referenceと起動警告を照合する。
 - ReadとEditのdenyは組み込みツールと認識可能な一部Bash操作へ適用されるが、任意のサブプロセスによる間接アクセスをOSレベルで完全には防がない。
+- Project Skillは`.claude/skills/<name>/SKILL.md`に置く。`disable-model-invocation: true`はClaudeによる自動起動を無効化し、`allowed-tools`はSkill実行中のtoolを事前承認する。Issue #88では前者を設定し、後者を省略する。
 
 ## 5. 脅威モデル
 
@@ -134,6 +139,9 @@ permissions
 PreToolUse Hook
   └─ 実行直前の入力を決定論的に追加検査する
 
+専用helper
+  └─ contentとfilesystemの最終境界をfail-closedで検査する
+
 人間の承認
   └─ 最終判断を行う
 ```
@@ -145,6 +153,8 @@ PreToolUse Hook
 | Plan mode | 調査・レビュー中心の進行を補助 | BashやReadの権限判定を置き換えない |
 | permissions | 既知のツール・コマンドをallow、ask、denyへ分類 | Bashの別表記や間接操作を完全には表現できない |
 | PreToolUse Hook | raw入力を実行直前に追加検査 | Hook自体の異常終了は常にfail-closedではない |
+| 専用Skill | ユーザー向けの2段階workflowを案内 | Skillからの起動自体は技術的な安全境界ではない |
+| 専用helper | 正規化、digest、root、directory、atomic publishを検査 | 保存内容に秘密情報がないことは自動判定しない |
 | 人間 | 対象、コマンド、承認、結果を最終確認 | 誤承認を防ぐため手順と表示の確認が必要 |
 
 ## 7. Plan mode運用
@@ -205,6 +215,8 @@ Issue #52ではbare `WebFetch`だけをdenyからaskへ移し、現行設定を�
 - Deny：bare `WebFetch`以外の既存ruleを維持し、WebSearch、Agent、Edit、Write、NotebookEditを引き続きdeny。公式仕様で直接表現できる`Bash(run_in_background:true)`と、既存のIssue変更系denyに欠けていたgh PR変更系denyを追加
 
 Git・GitHub CLI・WebFetchの自動allowは0件を維持する。Issue #52の人間による実機確認では、設定ソースとHook登録、代表hostのWebFetch、未登録subdomainの拒否、bare `WebFetch` denyへのフォールバックとaskへの再適用まで確認済みである。確認済みの具体的な結果は§20に記録する。§20に列挙したその他の境界条件は、個別の確認結果が記録されるまで未確認として扱う。
+
+Issue #88では`.claude/settings.json`を変更しない。Allow 0件、bare `Bash` Ask、Edit・Write・NotebookEdit Deny、`disableSkillShellExecution: true`、`Bash|WebFetch` matcherを維持したまま、Hookで専用helperの2形だけを一般`python3` Denyより前のAsk候補にできるためである。Skillに`allowed-tools`を設定せず、preflightとsaveのBashを毎回通常の承認対象とする。
 
 ## 9. PreToolUse Hook
 
@@ -313,7 +325,7 @@ GitHub Actions CIではPython 3.12単独で回帰testを実行する。これは
 
 Hook内では次を行わない。
 
-- repository内ファイル、transcript、`.env`の読み取り
+- repository内ファイル、transcript、`.env`、`.ai-work/`の読み取り
 - HTTP通信とredirect追跡
 - subprocess、Git、GitHub CLIの実行
 - 高度なshell parserと高度な秘密情報検出
@@ -397,13 +409,99 @@ malformed JSON、必須field不足、型不正、未知の`tool_name`、`tool_in
 2. `run_in_background: true`、NUL、想定外の制御文字、コマンド置換を検出したらdenyする。
 3. redirect、pipe、複合演算子、改行、環境変数prefixを検出したらdenyする。
 4. `git`なら§13、`gh`なら§14のclosed world規則でaskまたはdenyを決定する。`GH_REPO`・`GH_HOST`は`gh`判定時だけ検査する。
-5. 一般Bashの明示denyに一致したらdenyする。
-6. §10.2または§17のcanonical形に完全一致したらaskにする。
-7. それ以外はdenyする。
+5. 一般command判定では、Issue #88のsave-local-artifact専用canonical形、既存の専用Python helperの順に、一般`python3` Denyより前で評価する。
+6. §10.2または§17の固定形に完全一致したらaskにする。
+7. 一般Bashの明示denyと一般`python3`に一致したらdenyする。
+8. 残りのpath付き一般commandをclosed worldで評価し、それ以外はdenyする。
 
 ### 10.5 文字列の扱い
 
 完全一致判定前に、shellとして意味を変える正規化を行わない。余分な空白、quote、escape、option順序、aliasは別コマンドとして扱う。Unicodeの類似文字や制御文字も許可形へ正規化せずdenyする。
+
+### 10.6 `.ai-work/`限定保存
+
+#### Skillと人間確認
+
+Project Skillは`.claude/skills/save-local-artifact/SKILL.md`に置き、nameを`save-local-artifact`、`disable-model-invocation: true`とする。副作用を持つworkflowをClaudeに自動起動させず、ユーザーの`/save-local-artifact`明示起動だけを運用上の入口にする。`allowed-tools`は設定しない。Skill起動でtool permissionを事前承認せず、preflightとsaveをそれぞれ通常のBashとしてHook検査と人間承認へ進めるためである。
+
+Skill provenanceは安全境界ではない。Skill外から同じcanonical commandが提示されてもHookでAskとなり、helperが同じvalidationを行う。既存の`/pre-implementation-review`と`/pr-diff-review`は従来どおり結果をチャットへ返し、保存Skillを自動起動しない。
+
+Skillは保存目的、category、filename、本文を確認してから、必ずpreflightを先に実行する。人間はモデルの要約・転記ではなく、trusted helperの実際のtool出力そのものを直接確認する。モデルの説明だけを境界にすると、人間が確認した本文とhelperがpreflightした本文の同一性保証がモデルへの信頼へ戻るためである。
+
+人間はtool出力のcategory、filename、`normalized-byte-count`、`confirmation-digest` 64文字全部、fixed framing内のnormalized content全文を`----- END NORMALIZED CONTENT -----`まで確認する。byte countは補助情報であり本文確認を代替しない。truncate、省略、欠落、途中終了、折り畳み等がある場合や、UI・実行環境上でtool出力そのものを直接確認できない場合はsaveへ進まない。digestが全文をbindしていても、ENDまで表示されなければ人間は全文を確認していないためである。
+
+save承認画面では固定helper path、mode、category、filename、canonical command shapeに加え、preflightで確認したconfirmation digestと`--confirmation-digest`の64文字すべてを照合する。digestはpreflightとsaveを結ぶ唯一のステートレスなbindingであり、部分比較を正式な確認手順にすると運用上のbinding強度を落とすためである。payload全文の意味内容を承認画面で目視decodeすることは要求せず、本文はtrusted preflight出力、同一性はdigest bindingとsave helperの再計算で確認する。save成功後のsaved byte countとdigest照合は事後確認であり、save前の64文字比較を代替しない。
+
+同一sessionで複数回preflightした場合は、save直前に人間が確認した最新preflightだけを有効とする。category、filename、本文が変わった場合、または対象結果を取り違えた可能性がある場合は、以前のdigestを再利用せずpreflightからやり直す。同一filenameで異なる内容を複数回preflightした際に、古いdigestと新しい本文を取り違えることを防ぐためである。
+
+#### Hookのclosed world
+
+Ask候補は次の2形だけである。
+
+```text
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py preflight --category <reports|handoffs|scratch> --filename <name> --content-base64url=<payload>
+python3 .claude/skills/save-local-artifact/scripts/save_local_artifact.py save --category <reports|handoffs|scratch> --filename <name> --confirmation-digest <64-lower-hex> --content-base64url=<payload>
+```
+
+Hookは共通shell構文を先にDenyし、固定相対helper path、mode、token数、option順、category、filename regex `[A-Za-z0-9][A-Za-z0-9_-]{0,62}\.(?:md|txt)`、save時の64 lowercase hex digest、payloadのbase64url alphabetとencoded上限2,048 ASCII byteを検査する。検証済み値からcommandを再構築し、元commandとの完全一致だけをAskへ進める。一般`python3`、absolute/別表記path、quote差、空白差、重複・追加・並べ替えoptionはDenyする。
+
+Hookはpayloadをdecodeせず、reasonへpayload、digest、filename、raw commandを含めない。承認画面へ到達するcommand shapeを狭めるHookと、content・filesystemを検査するhelperを二重化することで、一方だけの責務へ境界を広げない。
+
+#### transport、文字、confirmation digest
+
+payloadはUTF-8本文のunpadded base64urlで、emptyを許可する。helperはalphabetとencoded上限に加え、strict decode後にunpadded base64urlへ再encodeして入力との完全一致を確認する。主たるE2E制約をencoded 2,048 ASCII byte、従属上限をraw decoded 1,536 byteとCRLF・CRからLFへの正規化後1,536 byteとし、rawとnormalizedを独立に検査する。
+
+1,536は3の倍数であり、unpadded base64url長は`1,536 × 4 / 3 = 2,048`となる。raw 1,537 byteのencoded長は2,048を超えるため、encoded上限内の最大rawは1,536 byteである。normalized上限も同じ1,536 byteへ固定する。payloadがcanonical Bash commandの単一argvへ直接含まれ、Claude Code E2E transportの完全性に左右されるため、encoded上限を主とする。
+
+2026年8月14日、WSL Linux filesystem上の当該repositoryでcategoryを`scratch`、preflightだけ、saveなしとしてE2E測定した。結果は次のとおりである。
+
+| 段階 | 人間側raw | 人間側encoded | helper到達raw | helper到達encoded | 結果 |
+|---|---:|---:|---:|---:|---|
+| 1 | 768 | 1,024 | 768 | 1,024 | PASS |
+| 2 | 1,536 | 2,048 | 1,536 | 2,048 | PASS / 採用値 |
+| 3 | 3,072 | 4,096 | 3,069 | 4,092 | FAIL |
+| 旧最大 | 65,536 | 87,382 | - | - | Claude Code tool call発行不能 |
+
+段階1・2ではtool call発行、HookからAskへの到達、人間承認、helper実行、期待した`normalized-byte-count`、欠落・truncateなしを確認した。段階3ではPowerShell上のpayload長とclipboard長がともに4,096であることを確認した一方、helper到達時にbase64url 4文字、raw 3 byteが欠落した。欠落後もpayload自体がcanonical base64urlだったため、Hookのshape・長さ検査とhelperの再encode一致検査だけではtransport欠落を検出できない。
+
+2,048は「2,049以上で必ず失敗する」物理境界ではない。E2Eで内容完全性まで実証できた最大値をclosed-world / fail-closedの安全側運用上限として採用する。したがってtrusted preflightでは`normalized-byte-count`、confirmation digest、本文全文をEND framingまで人間が直接確認する。将来上限を引き上げる場合も、同じE2E手順でtool call発行からhelper到達までの完全性を再実証する。
+
+helperとHookは責務分離のため上限定数を独立定義するが、両者のencoded上限は同じ値でなければならず、source-sync回帰testでdriftを検出する。save承認画面でbase64url payload全文の意味内容を読むことは上限決定基準にせず、command shapeと64文字digestを確認対象とする。
+
+UTF-8 strict、LF・TAB許可、NUL・ESC・DEL・LF/TAB以外のC0・C1・U+FEFF・U+2028・U+2029拒否とする。Unicode normalizationと末尾LFの追加・削除は行わない。文字運用は[AI共用ローカル成果物運用](AI_LOCAL_ARTIFACTS.md)を正本とする。
+
+confirmation digestはSHA-256の64 lowercase hexで、次を入力とする。
+
+```text
+b"review-app-laravel/save-local-artifact/v1\x00"
++ category_ascii
++ b"\x00"
++ filename_ascii
++ b"\x00"
++ normalized_utf8_bytes
+```
+
+固定versionとNUL separatorによりcategory、filename、本文の境界を一意にbindする。preflightはtrusted helper自身がdigestとfixed framingを出力し、saveは同じ関数で再計算したdigestが一致する場合だけfilesystemへ進む。model生成previewだけへ同一性を依存しないため、preflightとsaveを分離する。
+
+#### root、directory、residue
+
+helperは自身の`__file__`と固定配置`<repo>/.claude/skills/save-local-artifact/scripts/save_local_artifact.py`からrepository rootを導出し、各componentのsymlink・dangling symlinkを拒否する。derived rootとcwdの`st_dev`・`st_ino`が一致しない場合は停止し、caller指定path、環境変数、absolute pathへのfallbackを持たない。
+
+`sys.platform == "linux"`、`/proc/sys/kernel/osrelease`のWSL marker、必要Python APIを確認し、`/mnt/<single ASCII letter>`そのものと配下を拒否する。判定不能時はfail-closedする。同一UIDの悪意あるprocessによる意図的な変更は完全防御対象外とするが、通常race、symlink差し替え、ancestor replacementにはdirectory descriptor基準で対処する。
+
+`.ai-work/`と指定categoryは通常directory、非symlink、実行UID所有、group/other非writableであることを確認し、`O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC`で開いた後も`fstat`する。自動作成、chmod、chown、修復を行わず、以後のnamespace操作はcategory dirfd基準とする。
+
+staging作成前に指定categoryだけを最大4,096 entriesまでscanする。予約prefix `.__claude_save_staging_`が種類を問わず1件でもあれば停止し、自動採用・削除・内容readを行わない。staging名はprefixとCSPRNG 128 bitの32 lowercase hexで、`O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC`、mode `0600`により最大8回試行する。cleanup対象は現在processが`O_EXCL`で作成に成功した名前だけである。
+
+#### atomic publishと状態機械
+
+全byteのshort write loop、file fsync、write fd closeの後、同じcategory dirfd内で`os.link(..., follow_symlinks=False)`によりfinalを作る。事前存在確認ではraceを防げないため、hard-linkの`EEXIST`を最終no-overwrite境界とし、finalへの直接writeや`os.replace` fallbackを行わない。
+
+link後にfinalがregular file、mode `0600`、final/stagingの`st_dev`・`st_ino`一致をdescriptor-relativeに確認し、publish用directory fsync後だけ`PUBLISHED_DURABLE`とする。その後にだけ現在processのstagingをunlinkし、cleanup用directory fsync成功で`COMPLETE`とする。
+
+link前failureで自分のstagingのcleanupとdirectory fsyncが完了すれば`FAILED`、cleanupを確定できなければ`FAILED_WITH_RESIDUE`とする。link後のdiagnostic失敗またはpublish用directory fsync失敗は`INDETERMINATE`とし、finalとstagingを変更・削除・retryしない。durable publish後のstaging unlinkまたはcleanup用directory fsync失敗は`PUBLISHED_WITH_RESIDUE`とし、finalを変更しない。`PRE_PUBLISH`は内部の開始状態である。
+
+`INDETERMINATE`でcleanupしないのは、durabilityを確定できない段階で人間がfinal/staging双方から状態を確認する情報を失わないためである。どのfailureでもredirect、Write/Edit、別path、別transport、direct target write、rename等へfallbackしない。residueの人間向け復旧は[AI共用ローカル成果物運用](AI_LOCAL_ARTIFACTS.md)を正本とする。
 
 ## 11. 複合コマンド設計
 
@@ -928,6 +1026,8 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 | Bash command substitution | バッククォート、`$()` | deny候補 | 隠れたcommand実行 | Hookでraw入力検査 |
 | 一般Bash | §10.2のcanonical形 | ask候補 | 人間が内容を確認 | 自動allowしない |
 | 未登録一般Bash | §10.2・§17以外 | deny候補 | closed world | 抽象条件でaskにしない |
+| 限定保存helper | §10.6のpreflight/save 2形 | ask候補 | `.ai-work/`限定保存 | 自動allow 0件、両commandを毎回承認 |
+| 限定保存helper | 非canonical形・一般`python3` | deny候補 | write到達範囲をclosed worldに保つ | helper側validationも維持 |
 | 品質確認 | 対象限定テスト等 | ask候補 | 実行範囲を人間確認 | 自動allowしない |
 | Read秘密情報 | `.env`、logs、keys等 | deny維持 | 秘密情報保護 | 間接経路は完全防御でない |
 
@@ -949,6 +1049,7 @@ Hookは対象pathがプロジェクト内のテストであり、`..`、glob、�
 | Bash / gh | option・JSON field | 許可optionとfieldだけ | `--jq`、`--web`、`--watch`、未知option・field | 定義済み可変閲覧形 | option・fieldの組合せを試験 |
 | Bash / Git | subcommand | 自動allowなし | 定義済み10形以外のGit | §13.1のcanonical形 | 件数、検索語、path、option差を試験 |
 | Bash | 一般command | 自動allowなし | 明示deny、未登録、非canonical入力 | §10.2と§17のcanonical形 | 各境界値と1 token差を試験 |
+| Bash | 限定保存helper | 固定path・mode・token・option順・category・filename・digest・payload shapeが正しい | 非canonical、追加・重複option、quote/空白/path差、encoded上限超過 | §10.6の2形 | Ask/Deny reason非漏洩と一般`python3`回帰も試験 |
 | WebFetch | URL scheme | なし | `http`、その他scheme | `https`かつ他のdeny条件なし | scheme大小・encodeを試験 |
 | WebFetch | `tool_input` | `url`と`prompt`だけで通常条件を満たす | 未知field（`run_in_background`を含む） | なし | 現行schemaと未知fieldを試験 |
 | WebFetch | host/path | なし | 許可外、suffix偽装、未登録subdomain、#89の未登録path | 既存14hostまたは#89の有限host/path | apex・subdomain・類似path・末尾dotを試験 |
@@ -1226,6 +1327,8 @@ Hook error、起動失敗、異常終了、timeoutが表示された場合、そ
 - `GH_REPO`と`GH_HOST`の継承状態はClaude Codeの起動環境に依存するため実機確認が必要である。
 - Gitの表示系コマンドでも内部cache、pager、helper、外部diff等の副作用を完全には排除できない。
 - Claude CodeやGitHub CLIのversion更新後はpermission matchingとHook入力schemaを再検証する必要がある。
+- `/save-local-artifact` helperは秘密情報・個人情報の自動検出器を持たず、validation成功は内容の安全性を保証しない。保存前の人間確認を省略しない。
+- 同一UIDの悪意ある別processによる意図的変更は完全防御対象外である。通常raceとsymlink・ancestor差し替えはdirfdとno-followで狭めるが、residueや`INDETERMINATE`は人間が確認する。
 
 ## 23. 段階的なIssue・PR方針
 
@@ -1292,11 +1395,12 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 
 ## 25. 公式一次情報
 
-確認日：2026年8月1日
+確認日：2026年8月14日
 
 ### Anthropic
 
 - [Configure permissions](https://code.claude.com/docs/en/permissions)
+- [Extend Claude with skills](https://code.claude.com/docs/en/skills)
 - [Claude Code settings](https://code.claude.com/docs/en/settings)
 - [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing)
 - [Interactive mode](https://code.claude.com/docs/en/interactive-mode)
@@ -1376,10 +1480,11 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-10 | Issue #95のPython CI追加に合わせ、現行CI Action Release allowlistを5 repositoryへ同期。Python 3.10以上の実行要件とPython 3.12単独CI検証を区別して記録 |
 | 2026-08-13 | Issue #90のrepository固有Dependabot alerts専用helperを追加。public preview API version 2026-03-10、固定list/view、pagination・byte・schema・projection・C1境界を記録し、Allow 0件とbare `gh api` denyを維持 |
 | 2026-08-13 | Issue #91のrepository固有Actions run/job metadata専用helperを追加。固定list/view、minimal projection、nullable・byte・job・subprocess境界を記録し、Allow 0件とbare `gh run` denyを維持 |
+| 2026-08-14 | Issue #88の`/save-local-artifact`、trusted preflight、closed-world Hook、confirmation digest、dirfd・hard-link publish、residueと状態機械を追加。Allow 0件と編集tool denyを維持 |
 
 ## 27. 決定事項と実装前提
 
-Issue #50・#51・#52・#89・#90・#91の設計事項は次のとおり確定した。
+Issue #50・#51・#52・#88・#89・#90・#91の設計事項は次のとおり確定した。
 
 1. Issue #51でHook、回帰test、Hook README、関連文書を実装し、Issue #52でbare `WebFetch`をdenyからaskへ移した。人間が設定ソース、Hook、代表hostの実WebFetch、未登録subdomain拒否、フォールバックと再適用を確認済みである。その他の実機検証は、個別の結果が記録されるまで確認済みとは扱わない。
 2. Hook matcherは`Bash`と`WebFetch`だけとし、公式例に沿う`command`文字列、timeout 5秒で同期実行する。
@@ -1393,6 +1498,7 @@ Issue #50・#51・#52・#89・#90・#91の設計事項は次のとおり確定�
 10. bare `gh api` denyと通常GitHub参照の単一repository固定を維持し、Global Advisories helper、現行CI Action Release/Release-linked Tag、repository固有Dependabot alerts helper、repository固有Actions run/job metadata helperだけを§14.4〜§14.7の専用経路へ分離する。
 11. Hook error、起動失敗、異常終了、timeoutが表示された場合は追加のBashとWebFetchを承認せず、安全側へ戻してから原因を調査する。
 12. 初期実装ではcanonicalな引数順だけを扱い、高度なshell parser、URL keywordの誤検知改善、optionalなGitHub CLI field・option、`git show`は後続改善とする。Laravel学習を優先し、Claude Code整備を早期に完了する。
+13. Issue #88ではsettingsを変更せず、ユーザー明示起動のSkill、preflight/saveの毎回承認、Hookのclosed world、helperのcontent/filesystem検査を分離する。`COMPLETE`以外を単純な保存完了とせず、residueと`INDETERMINATE`をAIが自動cleanupしない。
 
 Issue #51ではbare `Bash` ask、bare `WebFetch` deny、Allow 0件を維持した。Issue #52ではbare `Bash` askとGit・GitHub CLI・WebFetchの自動allow 0件を維持し、bare `WebFetch`だけをdenyからaskへ移した。Hookを通過したWebFetchもpermissionsのaskにより毎回人間が確認する。
 

@@ -179,6 +179,13 @@ WEBFETCH_HOSTS = LEGACY_WEBFETCH_HOSTS | RESTRICTED_WEBFETCH_HOSTS
 ADVISORY_HELPER = ".claude/helpers/github_global_advisories.py"
 DEPENDABOT_HELPER = ".claude/helpers/github_dependabot_alerts.py"
 ACTIONS_RUNS_HELPER = ".claude/helpers/github_actions_runs.py"
+SAVE_LOCAL_ARTIFACT_HELPER = (
+    ".claude/skills/save-local-artifact/scripts/save_local_artifact.py"
+)
+SAVE_LOCAL_ARTIFACT_CATEGORIES = frozenset({"reports", "handoffs", "scratch"})
+# Claude Code E2E transportのclosed-world境界。Hookからhelperをimportせず独立
+# 定義するが同値を必須とし、helper側とのdriftはsource-sync回帰testで検出する。
+SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES = 2_048
 MAX_DEPENDABOT_ALERT_NUMBER = 2**63 - 1
 MAX_ACTIONS_RUN_ID = 2**63 - 1
 ADVISORY_ECOSYSTEM_PACKAGES = {
@@ -300,6 +307,11 @@ GHSA_ID_RE = re.compile(
     r"GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\Z"
 )
 RELEASE_TAG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,99}\Z")
+SAVE_LOCAL_ARTIFACT_FILENAME_RE = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}\.(?:md|txt)\Z", re.ASCII
+)
+SAVE_LOCAL_ARTIFACT_DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
+SAVE_LOCAL_ARTIFACT_PAYLOAD_RE = re.compile(r"[A-Za-z0-9_-]*\Z", re.ASCII)
 
 
 def decision(kind: str, reason_key: str) -> dict[str, object]:
@@ -589,6 +601,80 @@ def _evaluate_actions_runs_helper(
     return deny("unregistered")
 
 
+def _evaluate_save_local_artifact_helper(
+    command: str, tokens: list[str]
+) -> dict[str, object] | None:
+    """限定保存helperの2つのcanonical形だけをAsk候補にする。"""
+    # Hookでpath解決まで担うとcommand shapeとfilesystem境界が混ざるため、
+    # 固定相対pathだけを比較し、実path・symlink・root検証はhelperへ一元化する。
+    prefix = ["python3", SAVE_LOCAL_ARTIFACT_HELPER]
+    if tokens[:2] != prefix:
+        return None
+
+    category: str
+    filename: str
+    digest: str | None
+    payload_option: str
+    if (
+        len(tokens) == 8
+        and tokens[2] == "preflight"
+        and tokens[3] == "--category"
+        and tokens[5] == "--filename"
+        and tokens[7].startswith("--content-base64url=")
+    ):
+        category = tokens[4]
+        filename = tokens[6]
+        digest = None
+        payload_option = tokens[7]
+    elif (
+        len(tokens) == 10
+        and tokens[2] == "save"
+        and tokens[3] == "--category"
+        and tokens[5] == "--filename"
+        and tokens[7] == "--confirmation-digest"
+        and tokens[9].startswith("--content-base64url=")
+    ):
+        category = tokens[4]
+        filename = tokens[6]
+        digest = tokens[8]
+        payload_option = tokens[9]
+    else:
+        return deny("unregistered")
+
+    # 非信頼本文を承認境界へ持ち込まず責務を重複させないため、Hookはencoded
+    # shapeと上限だけを見て、decode・UTF-8・Unicode検証はhelperへ一元化する。
+    payload = payload_option.removeprefix("--content-base64url=")
+    # helper到達後に拒否できるだけではAsk範囲が広がるため、保存先・digest・
+    # payload shapeはHookでも検査し、承認候補自体をclosed worldに保つ。
+    if (
+        category not in SAVE_LOCAL_ARTIFACT_CATEGORIES
+        or not SAVE_LOCAL_ARTIFACT_FILENAME_RE.fullmatch(filename)
+        or (digest is not None and not SAVE_LOCAL_ARTIFACT_DIGEST_RE.fullmatch(digest))
+        or len(payload) > SAVE_LOCAL_ARTIFACT_MAX_ENCODED_BYTES
+        or not SAVE_LOCAL_ARTIFACT_PAYLOAD_RE.fullmatch(payload)
+    ):
+        return deny("unregistered")
+
+    canonical_tokens = [
+        *prefix,
+        tokens[2],
+        "--category",
+        category,
+        "--filename",
+        filename,
+    ]
+    if digest is not None:
+        canonical_tokens.extend(("--confirmation-digest", digest))
+    canonical_tokens.append(f"--content-base64url={payload}")
+    # shlex上で同じtokenでもquote・空白差を許すとcommand shapeが広がるため、
+    # 検証済み値から再構築した一義的な文字列との完全一致だけをAskにする。
+    if command != " ".join(canonical_tokens):
+        return deny("unregistered")
+    # Hook reasonは承認UIやlogへ露出し得るため入力値を反映せず、固定reasonだけを
+    # 再利用してpayload・digest・filename・raw commandの漏洩経路を増やさない。
+    return ask()
+
+
 def _evaluate_action_release(
     command: str, tokens: list[str]
 ) -> dict[str, object] | None:
@@ -709,6 +795,12 @@ def _evaluate_find(command: str) -> dict[str, object] | None:
 
 
 def _evaluate_general(command: str, tokens: list[str]) -> dict[str, object]:
+    # 一般python3を解禁せず、固定したpreflight/saveだけを例外として
+    # Askへ進めるため、汎用python3 Denyより先に専用形を評価する。
+    artifact_result = _evaluate_save_local_artifact_helper(command, tokens)
+    if artifact_result is not None:
+        return artifact_result
+
     actions_result = _evaluate_actions_runs_helper(command, tokens)
     if actions_result is not None:
         return actions_result

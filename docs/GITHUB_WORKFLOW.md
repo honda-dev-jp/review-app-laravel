@@ -444,11 +444,11 @@ git log --oneline --decorate -5
 - ブランチ作成・切り替え・削除、`git add`、commit、push、pull、fetch、merge、rebase、reset、restore、stashなどのGit変更操作とマージ判断は人間が行う
 - Issue・PR・Labels・Milestone・Ruleset・GitHub Settingsの変更操作は人間が行う
 - AIは、ユーザーから明示的に依頼された範囲で、調査、設計相談、提案、ファイル作成・編集、差分レビューを担当できる
-- AIがコマンドを実行する場合は、プロジェクトで許可された読み取り専用確認に限定する
+- AIがコマンドを実行する場合は、原則としてプロジェクトで許可された読み取り専用確認に限定する。Claude Codeの`.ai-work/`限定保存だけは、`CLAUDE.md`と権限設計書で定義した専用経路を例外とする
 - AIはGitおよびGitHubの変更操作を代行せず、許可されていないファイルや秘密情報を読まない
 - AIは実行していない確認を実行済みとして扱わず、ユーザーから明示的に依頼された範囲を超えて編集しない
 
-セキュリティ原則は[AGENTS.md](../AGENTS.md)、Claude Code固有の読み取り専用制約は[CLAUDE.md](../CLAUDE.md)を正本とします。この文書では詳細を重複させません。
+セキュリティ原則は[AGENTS.md](../AGENTS.md)、Claude Codeの原則read-onlyと`.ai-work/`限定保存の境界は[CLAUDE.md](../CLAUDE.md)を正本とします。この例外はGitおよびGitHubの変更操作を許可しません。この文書では詳細を重複させません。
 
 ## 14. 関連ドキュメント
 
