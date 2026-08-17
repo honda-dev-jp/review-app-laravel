@@ -22,7 +22,7 @@ class Review extends Model
     ];
 
     /**
-     * @return BelongsTo<User, Review>
+     * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
     {
@@ -30,7 +30,7 @@ class Review extends Model
     }
 
     /**
-     * @return BelongsTo<Item, Review>
+     * @return BelongsTo<Item, $this>
      */
     public function item(): BelongsTo
     {
@@ -38,7 +38,7 @@ class Review extends Model
     }
 
     /**
-     * @return HasMany<ReviewComment>
+     * @return HasMany<ReviewComment, $this>
      */
     public function comments(): HasMany
     {
