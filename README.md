@@ -2,7 +2,7 @@
 
 ## 概要
 
-PHPスクラッチMVCで作成した映画レビューアプリをLaravel 10へ移植する。
+PHPスクラッチMVCで作成した映画レビューアプリをLaravelへ移植し、サポート対象版へ段階的にアップグレードする。
 まずはスクラッチ版の最低限機能をLaravelへ移植し、その後、必要に応じて管理者機能やTMDB API連携などを追加します。
 
 ## 目的
@@ -15,7 +15,7 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravel 10へ�
 ## 使用技術
 
 - PHP 8.2
-- Laravel 10
+- Laravel 11（Issue #122の短期中継baseline。`main`および本番環境へは反映しない）
 - Laravel Sail
 - MySQL
 - phpMyAdmin
@@ -145,6 +145,8 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 - [コマンド集](docs/COMMANDS.md)
 - [トラブルシューティング](docs/TROUBLESHOOTING.md)
 - [デプロイ方針](docs/DEPLOYMENT.md)
+- [Laravelメジャーアップグレードガイド](docs/LARAVEL_UPGRADE_GUIDE.md)
+- [Laravelメジャーアップグレード実施履歴](docs/LARAVEL_UPGRADE_HISTORY.md)
 
 ## 開発方針
 

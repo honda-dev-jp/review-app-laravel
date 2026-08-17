@@ -109,9 +109,13 @@ GitHub上の操作順、ブランチ命名、Issue参照、マージ後整理、
 ### 依存関係を変更した場合
 
 - `composer.json`と`composer.lock`、または`package.json`と`package-lock.json`の差分
-- 依存関係の脆弱性情報とLaravel 10との互換性
+- 依存関係の脆弱性情報と現在使用しているLaravelバージョンとの互換性
 - 変更後のテスト、静的解析、Vite build
 - `vendor/`と`node_modules/`がGit管理対象へ混入していないこと
+
+Laravel本体のメジャーアップグレードは、
+[Laravelメジャーアップグレードガイド](LARAVEL_UPGRADE_GUIDE.md)
+の段階的な手順に従います。
 
 コマンド単体の書式は[コマンド集](COMMANDS.md)を参照します。失敗時は結果を隠さず、[トラブルシューティング](TROUBLESHOOTING.md)で切り分けます。
 
