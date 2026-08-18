@@ -47,7 +47,7 @@
 - コマンドを実行するだけでなく「なぜこの順番なのか」も理解したい
 - 将来このプロジェクトを保守する
 
-今回の Laravel 10→11 で実際に発生した問題・実行結果は、
+各メジャーアップグレードで実際に発生した問題・実行結果は、
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
 へ分離しています。
 
@@ -184,95 +184,24 @@ Laravel更新PRへ、理由なく以下を混ぜません。
 
 ## 5. Step 2: 最新developから作業ブランチを作る
 
-Git / GitHub操作の標準手順は
-[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)
-を正本とします。
+Git / GitHub操作は、[GitHub開発運用ガイド §7「最新のdevelopから作業を開始する」](GITHUB_WORKFLOW.md#7-最新のdevelopから作業を開始する)を正本とし、その手順に従って作業ブランチを作成します。このガイドでは一般的なGit操作を重複記載しません。
 
-Laravelアップグレードでも、通常の作業と同じく
-**最新の`develop`から作業ブランチを作成します。**
+### Laravelアップグレード固有のbaseline確認
 
-```bash
-# 作業ツリーに未コミット変更がないか確認
-git status
-
-# developへ移動
-git switch develop
-
-# origin/developの最新状態を取得し、
-# fast-forwardできる場合だけローカルdevelopを更新
-git pull --ff-only origin develop
-
-# Issueに対応するLaravelアップグレード用作業ブランチを作成
-git switch -c <ブランチ名>
-```
-
-### 確認すること
-
-#### 1. 作業開始前に未コミット変更がないか
-
-```text
-git status
-→ working tree clean
-```
-
-未コミット変更がある場合は、新しい作業ブランチを作らず停止します。
-
-#### 2. developの最新化に成功したか
-
-```text
-git pull --ff-only origin develop
-→ 成功
-```
-
-`--ff-only`で更新できない場合は、その場で停止します。
-
-独自判断でmerge、rebase、reset、force pushへ切り替えません。
-
-#### 3. 作業ブランチをdevelopから作成できたか
-
-```text
-git switch -c <ブランチ名>
-→ 新しい作業ブランチへ切り替わる
-```
-
-ブランチ名は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)の命名規則と、
-対象Issueの内容に合わせます。
-
-### 追加確認
-
-作業ブランチを作成する直前または作成直後に、
-直近の履歴と各ブランチが指しているコミットを確認したい場合は、
-次のコマンドを使用します。
+作業ブランチ作成後、移行元baselineの起点を記録します。
 
 ```bash
-# 直近3件のコミットと、
-# そのコミットを指しているローカル・remote-tracking branchを確認
-git log --oneline --decorate -3
+# 対象Issueの作業ブランチへ切り替わっていることを確認
+git branch --show-current
+
+# 移行元baselineの起点コミットを記録
+git log --oneline -n 1
+
+# 作業開始時点の差分がないことを確認
+git status --short
 ```
 
-例えば、作業ブランチ作成前に次のように表示された場合:
-
-```text
-a24d8ab (HEAD -> develop, origin/develop, origin/main, main) ...
-```
-
-`develop`と`origin/develop`が同じコミットを指していることを確認できます。
-
-`main`と`origin/main`も同じ位置に表示されていれば、
-その時点では`main`と`develop`も同じコミットです。
-
-ただし、Laravelアップグレード開始時の必須条件は、
-`main`と`develop`の4参照一致ではありません。
-
-必須なのは次の3点です。
-
-```text
-1. 作業ツリーがクリーン
-2. developへ移動済み
-3. git pull --ff-only origin develop が成功
-```
-
-ここまで確認してから、Laravelアップグレード作業を開始します。
+ブランチ名、起点コミット、作業ツリーがIssueの開始条件と一致しない場合は、アップグレード作業を開始せず停止します。
 
 ---
 
@@ -302,10 +231,10 @@ Laravel更新で壊れた
 
 ```bash
 # Laravel・PHP・DBなど現在のアプリ実行環境を確認
-sail artisan about
+./vendor/bin/sail artisan about
 
 # PHPのバージョンを明示的に確認
-sail php -v
+./vendor/bin/sail php -v
 ```
 
 Laravel Upgrade Guideにcurlの最低バージョン要件がある場合は、
@@ -313,7 +242,7 @@ PHPから利用しているcurlのバージョンも確認します。
 
 ```bash
 # PHPから利用しているcurlのバージョンを確認
-sail php -r 'echo curl_version()["version"], PHP_EOL;'
+./vendor/bin/sail php -r 'echo curl_version()["version"], PHP_EOL;'
 ```
 
 フロントエンドのビルド環境もアップグレード前後で比較できるように、
@@ -321,10 +250,10 @@ Node.jsとnpmのバージョンを確認します。
 
 ```bash
 # Sailコンテナで使用しているNode.jsのバージョンを確認
-sail node -v
+./vendor/bin/sail node -v
 
 # Sailコンテナで使用しているnpmのバージョンを確認
-sail npm -v
+./vendor/bin/sail npm -v
 ```
 
 ### 依存パッケージの実バージョン確認
@@ -334,7 +263,7 @@ sail npm -v
 
 ```bash
 # composer.lockに固定された直接依存パッケージの実バージョンを確認
-sail composer show --locked --direct
+./vendor/bin/sail composer show --locked --direct
 ```
 
 ### ルートbaseline確認
@@ -343,7 +272,7 @@ sail composer show --locked --direct
 
 ```bash
 # 現在登録されているルート一覧とルート数を確認
-sail artisan route:list
+./vendor/bin/sail artisan route:list
 ```
 
 確認する主な点:
@@ -357,23 +286,23 @@ sail artisan route:list
 
 ```bash
 # composer.jsonとcomposer.lockの整合性を確認
-sail composer validate --strict
+./vendor/bin/sail composer validate --strict
 
 # PHPUnitテストを実行し、既存機能の回帰がないか確認
-sail artisan test
+./vendor/bin/sail artisan test
 
 # PHPStan / Larastanで静的解析を実行
-sail php ./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 
 # Pintでコードスタイル違反がないか確認（自動修正はしない）
-sail php ./vendor/bin/pint --test
+./vendor/bin/sail php ./vendor/bin/pint --test
 
 # package-lock.jsonどおりにSail環境のnode_modulesを再構築
 # package.jsonやpackage-lock.jsonは変更しない
-sail npm ci
+./vendor/bin/sail npm ci
 
 # Sail環境でフロントエンドassetsが正常にビルドできるか確認
-sail npm run build
+./vendor/bin/sail npm run build
 ```
 
 ### 記録するもの
@@ -402,6 +331,10 @@ sail npm run build
 
 ## 7. Step 4: 公式Upgrade Guideを読む
 
+作業開始時点のLaravel公式Release Notesと、移行先majorのUpgrade Guideを確認します。過去Issueの調査結果だけを再利用せず、依存関係を変更する直前にも内容が更新されていないか再確認します。
+
+Issueまたは実施履歴には、確認した対象majorと公式URLを記録します。
+
 ### 何を見る？
 
 Laravel Upgrade Guideの各項目を次へ分類します。
@@ -425,11 +358,21 @@ Authentication
 Testing
 ```
 
+移行先majorのPHP要件と現在のPHPを比較し、次を判断します。
+
+- 現在のPHPを維持したまま移行できるか
+- PHP更新を今回のIssueへ含める必要があるか
+- Laravel更新後にPHP更新を別Issueへ分離するか
+
+現在のPHPで移行でき、Issueの対象外に定めている場合は、PHP更新をLaravelアップグレードへ混在させません。
+
 ### 重要
 
 公式ガイドに書かれているpackageだけ見て終わりではありません。
 
 **現在のプロジェクトに実際に入っているpackageを次のStepで確認します。**
+
+前majorで互換と判断したpackageも、次majorで同じとは限りません。`composer.json`のconstraintと`composer.lock`の実解決versionを、毎回あらためて確認します。
 
 ---
 
@@ -482,7 +425,7 @@ sed -n '1,220p' composer.json
 
 #### 何をメモする？
 
-次の表を作ります。
+次の表を作ります。以下はLaravel 10→11を調査するときの記入例です。
 
 | package | require / require-dev | 現在のconstraint |
 |---|---|---|
@@ -510,12 +453,14 @@ sed -n '1,220p' composer.json
 
 ```bash
 # composer.lockに固定された直接依存パッケージの実バージョンを確認
-sail composer show --locked --direct
+./vendor/bin/sail composer show --locked --direct
 ```
 
 Composer公式の`show --locked`は`composer.lock`に固定されたpackageを表示し、`--direct`は直接依存だけへ絞ります。
 
 #### 出力例
+
+以下はLaravel 10→11を調査するときの例です。現在値として流用せず、作業時点の`composer.lock`を確認します。
 
 ```text
 laravel/breeze      1.29.1
@@ -556,15 +501,15 @@ laravel/framework 10.50.2
 
 ```bash
 # Laravel本体の実バージョンと依存条件を詳しく確認
-sail composer show --locked laravel/framework
+./vendor/bin/sail composer show --locked laravel/framework
 ```
 
 別package:
 
 ```bash
-sail composer show --locked laravel/sanctum
-sail composer show --locked larastan/larastan
-sail composer show --locked phpunit/phpunit
+./vendor/bin/sail composer show --locked laravel/sanctum
+./vendor/bin/sail composer show --locked larastan/larastan
+./vendor/bin/sail composer show --locked phpunit/phpunit
 ```
 
 #### どこを見る？
@@ -594,11 +539,11 @@ PHPUnit 10.5.63はCollision 8と一緒に使えるか？
 
 ## 9. Step 6: 「なぜこのpackageが入っている？」を調べる
 
-推移依存で見覚えのないpackageがあるときに使います。
+推移的依存で見覚えのないpackageがあるときに使います。
 
 ```bash
 # このpackageを必要としている依存元をツリー表示
-sail composer depends <package> --tree
+./vendor/bin/sail composer depends <package> --tree
 ```
 
 `depends`は`why`の別名です。
@@ -606,7 +551,7 @@ sail composer depends <package> --tree
 例:
 
 ```bash
-sail composer why symfony/console --tree
+./vendor/bin/sail composer why symfony/console --tree
 ```
 
 ### 何が分かる？
@@ -641,13 +586,13 @@ Composerには、指定versionを**何がブロックしているか**調べる�
 
 ```bash
 # 次のLaravelへの更新を妨げているpackageを調べる
-sail composer prohibits laravel/framework '<移行先major>.*' --tree
+./vendor/bin/sail composer prohibits laravel/framework '<移行先major>.*' --tree
 ```
 
 Laravel 10→11の場合:
 
 ```bash
-sail composer prohibits laravel/framework '11.*' --tree
+./vendor/bin/sail composer prohibits laravel/framework '11.*' --tree
 ```
 
 `prohibits`は`why-not`の別名です。
@@ -695,7 +640,7 @@ package公式composer.json
 ### 11.2 現在の実version
 
 ```bash
-sail composer show --locked --direct
+./vendor/bin/sail composer show --locked --direct
 ```
 
 ### 11.3 Laravelの公式Upgrade Guide
@@ -722,6 +667,21 @@ conflict
 phpunit
 ```
 
+Laravel本体だけでなく、プロジェクトで実際に使用している次のようなpackageも対象にします。
+
+```text
+Breeze / BreezeJP
+Sail
+Sanctum
+Larastan / PHPStan
+PHPUnit / Collision
+Pint
+Laravel IDE Helper
+Carbon / Laravel Promptsなど主要な推移的依存
+```
+
+前majorの調査表やlockfileをそのまま流用せず、移行先majorを許可するconstraintと実解決versionを再確認します。
+
 #### 例
 
 Larastanなら:
@@ -746,6 +706,12 @@ PHPUnit 10を許可しているか
 | 現状維持 | 現version / constraintのまま互換 |
 | 追加確認 | 条件付き互換・実解決version確認が必要 |
 | 今回触らない | Laravel更新に不要 |
+
+### 11.6 不要packageの削除を混在させない
+
+調査中に現在使われていない可能性のあるpackageが見つかっても、Laravel更新に削除が必須でなければ別のcleanup Issueへ分離します。
+
+例えばSanctumを削除するかどうかは、認証方式、ルート、設定、migration、Featureテストへの影響を整理して判断する別責務です。Laravel互換版へ更新すれば移行できる場合、アップグレードIssueでは維持します。
 
 ---
 
@@ -793,7 +759,7 @@ git diff -- composer.json
 
 ```bash
 # ファイルを書き換える前に、更新されるpackageをdry-runで事前確認
-sail composer update <対象package...> \
+./vendor/bin/sail composer update <対象package...> \
   --with-all-dependencies \
   --minimal-changes \
   --dry-run \
@@ -859,6 +825,10 @@ Security Blockingの実例は
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
 を参照します。
 
+`--no-security-blocking`、advisory ignore、audit結果を回避する設定は通常手順へ持ち越しません。過去の実施履歴に例外が記録されていても、新しいIssueで自動的に再利用しないでください。
+
+Security Blockingが発生した場合は停止し、対象advisory、影響version、修正版、今回の移行経路を人間が評価します。例外使用をIssueが明示的に許可しない限り、解除せずに依存解決方法を見直します。
+
 ---
 
 ## 15. Step 11: composer.lockだけ更新する
@@ -867,7 +837,7 @@ dry-runの内容を人間が確認してから進みます。
 
 ```bash
 # vendorはまだ更新せず、依存関係の解決結果をcomposer.lockへ反映
-sail composer update <対象package...> \
+./vendor/bin/sail composer update <対象package...> \
   --with-all-dependencies \
   --minimal-changes \
   --no-install \
@@ -892,26 +862,32 @@ vendorを変える前に、lockfileの実versionを確認できるためです�
 
 ```bash
 # composer.lockに固定された直接依存パッケージの実バージョンを確認
-sail composer show --locked --direct
+./vendor/bin/sail composer show --locked --direct
 ```
 
 個別:
 
 ```bash
-sail composer show --locked laravel/framework
-sail composer show --locked larastan/larastan
-sail composer show --locked phpunit/phpunit
+./vendor/bin/sail composer show --locked laravel/framework
+./vendor/bin/sail composer show --locked larastan/larastan
+./vendor/bin/sail composer show --locked phpunit/phpunit
 ```
+
+直接依存だけでなく、Carbon、Laravel Prompts、PHPStan、PHPUnit関連packageなど、majorが変わった主要な推移的依存も個別に確認します。
 
 ### 確認表
 
+次はLaravel 10→11を確認するときの記入例です。実際の移行先majorと予定versionに置き換えます。
+
 | package | 予定 | 実解決 | OK? |
 |---|---|---|---|
-| Laravel | 11.x | 11.xx.x | Yes/No |
-| Sanctum | 4.x | 4.xx.x | Yes/No |
-| PHPUnit | 維持 | 10.xx.x | Yes/No |
+| Laravel | 移行先major.x | 実解決version | Yes/No |
+| 認証package | 互換majorまたは維持 | 実解決version | Yes/No |
+| PHPUnit | 互換majorまたは維持 | 実解決version | Yes/No |
 
 **constraintだけでなく実解決versionを見る**ことが重要です。
+
+前majorのbaselineで記録したtests数・assertions数・主要package versionと比較し、減少や想定外のmajor更新がある場合は理由を確認します。
 
 ---
 
@@ -919,7 +895,7 @@ sail composer show --locked phpunit/phpunit
 
 ```bash
 # 更新後のcomposer.lockに既知脆弱性がないか確認
-sail composer audit --locked
+./vendor/bin/sail composer audit --locked
 ```
 
 Composer公式の`--locked`は、現在のvendorではなく`composer.lock`を監査します。
@@ -951,13 +927,19 @@ first patched version
 
 **警告を消すことが目的ではありません。**
 
+### Dependabot Alertsとの区別
+
+`composer audit --locked`は現在の`composer.lock`を検査します。一方、GitHub Dependabot Alertsは既定ブランチを基準に評価されるため、作業ブランチや`develop`だけで修正版へ更新しても、既定ブランチへ同期するまでAlertがCloseされない場合があります。
+
+この違いを記録し、Dependabot AlertのCloseを受け入れ条件にするかどうかはIssueで明示します。`composer audit`の成功とDependabot Alertの表示状態を同じ確認として扱いません。
+
 ---
 
 ## 18. Step 14: vendorを更新する
 
 ```bash
 # composer.lockどおりにvendorを更新し、Composer scriptsはまだ実行しない
-sail composer install --no-scripts
+./vendor/bin/sail composer install --no-scripts
 ```
 
 ### このコマンドが変えるもの
@@ -1009,17 +991,17 @@ composer.lockの解決version
 # Composerのautoloadを再生成する
 # このプロジェクトではpost-autoload-dump script経由で
 # Laravelのpackage discoveryも実行される
-sail composer dump-autoload
+./vendor/bin/sail composer dump-autoload
 ```
 
 確認:
 
 ```bash
 # Laravel・PHP・DBなど現在のアプリ実行環境を確認
-sail artisan about
+./vendor/bin/sail artisan about
 
 # 現在登録されているルート一覧とルート数を確認
-sail artisan route:list
+./vendor/bin/sail artisan route:list
 ```
 
 見るところ:
@@ -1037,20 +1019,20 @@ sail artisan route:list
 
 ```bash
 # PHPUnitテストを実行し、既存機能の回帰がないか確認
-sail artisan test
+./vendor/bin/sail artisan test
 
 # PHPStan / Larastanで静的解析を実行
-sail php ./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
 
 # Pintでコードスタイル違反がないか確認（自動修正はしない）
-sail php ./vendor/bin/pint --test
+./vendor/bin/sail php ./vendor/bin/pint --test
 
 # package-lock.jsonどおりにSail環境のnode_modulesを再構築
 # package.jsonやpackage-lock.jsonは変更しない
-sail npm ci
+./vendor/bin/sail npm ci
 
 # Sail環境でフロントエンドassetsが正常にビルドできるか確認
-sail npm run build
+./vendor/bin/sail npm run build
 
 # trailing whitespaceなど差分上の書式エラーを確認
 git diff --check
@@ -1075,21 +1057,24 @@ frameworkの型定義変更などを確認します。
 
 ## 22. Step 18: 目視回帰
 
-最低限:
+最低限、次の一連の操作を実際のブラウザで確認します。
 
-- ゲスト作品一覧・詳細
-- ページネーション
-- 会員登録
-- ログイン / ログアウト
-- パスワードリセット + Mailpit
-- Profile
-- アバター
-- レビュー
-- 評価キャッシュ
-- 返信
-- 本人レビュー一覧
-- レビュー削除
-- 退会
+- ゲストで作品一覧・作品詳細・レビュー・返信を表示できる
+- 作品一覧のページネーションで前後ページへ移動でき、件数表示が一致する
+- 新規登録、ログイン、ログアウトが成功する
+- パスワードリセットメールが届き、パスワードを再設定できる
+- プロフィールを表示し、ニックネームや自己紹介を更新できる
+- アバターを新規登録・差し替えでき、主要な表示箇所へ反映される
+- パスワードを変更でき、旧パスワードと新パスワードの動作が想定どおりである
+- レビューを表示・投稿・削除でき、投稿・削除後に平均評価と評価件数が更新される
+- 返信コメントを表示・投稿できる
+- 本人レビュー一覧を表示でき、10件超の場合はページネーションで移動できる
+- 本人レビュー一覧から作品詳細へ移動できる
+- レビューを削除すると、そのレビューに属する返信も消え、平均評価・評価件数が再計算される
+- アカウントを削除するとログアウト状態になり、既存レビュー・返信の投稿者が匿名表示になる
+- 主要画面をデスクトップ幅とモバイル幅で表示し、ナビゲーションと主要フォームのレイアウト崩れがないことを確認する
+
+レビュー編集、返信コメントの編集・単独削除、アバターの単独削除などは、実装済みの場合のみ対象にします。モーダル、focus、特定のJavaScript動作は、該当UIが存在する場合や関連差分がある場合の追加確認として扱います。
 
 ### 自動テストがPASSしても必要な理由
 
@@ -1108,6 +1093,8 @@ frameworkの型定義変更などを確認します。
 
 現在versionやLaravelとの互換性を記載するdocsを、次の表に沿って確認します。
 
+`docs/LARAVEL_UPGRADE_HISTORY.md`には今回の実測結果を追記します。それ以外は内容を確認し、現在値や手順に影響があるファイルだけを更新します。確認した結果、固定versionや互換性記述がなければ無理に変更しません。
+
 | ファイル | 確認する内容 |
 |---|---|
 | `README.md` | Laravel / PHPなど現在の技術構成 |
@@ -1120,9 +1107,14 @@ frameworkの型定義変更などを確認します。
 | `docs/DEVELOPMENT_FLOW.md` | 依存関係変更時のLaravel互換性記述 |
 | `docs/SECURITY.md` | Composer依存・既知脆弱性に関する方針 |
 | `docs/CLAUDE_CODE_PERMISSION_DESIGN.md` | Laravel公式参照・実測バージョンの記録 |
+| `docs/CLAUDE_CODE_REVIEW.md` | レビュー時に前提とするLaravelバージョン・品質ゲート |
+| `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md` | 実装前レビュー時に前提とするLaravelバージョン・確認項目 |
 | `.claude/skills/pre-implementation-review/SKILL.md` | Laravelプロジェクトの前提バージョン |
+| `.claude/skills/pr-diff-review/SKILL.md` | PR差分レビュー時に前提とするLaravelバージョン・品質ゲート |
 
 歴史的記録まで現在値に書き換えません。
+
+`docs/TROUBLESHOOTING.md`は、再現可能な実トラブルと検証済みの解決手順が新たに得られた場合だけ更新します。WSL、エディタ、Vite開発サーバーなどローカル環境の一時的な停止や、再起動後に正常化して再現しない事象は、Laravelアップグレード固有の履歴として残しません。
 
 ---
 
@@ -1176,6 +1168,10 @@ PRマージ後に`develop`上で再度:
 - 残存advisory記録済み
 - 次major公式Upgrade Guide調査済み
 
+次majorのPHP要件を現在のPHPが満たさない場合や、サポート期間の都合でPHP更新を先に行う必要がある場合は、Laravelの次major Issueへ混在させず、PHP更新用の子Issueを先に作成するか人間が判断します。
+
+前段階のbaselineが確定する前に、次Laravel majorやPHP更新の依存変更へ着手しません。
+
 ---
 
 ## 27. 停止条件早見表
@@ -1185,7 +1181,7 @@ PRマージ後に`develop`上で再度:
 | baseline失敗 | アップグレード開始しない |
 | `prohibits`でblocker判明 | package公式互換性を調べる |
 | dry-run conflict | その場で停止 |
-| Security Blocking | advisoryを評価。解除を即実行しない |
+| Security Blocking | 停止してadvisoryを評価。過去の解除例を通常手順へ流用しない |
 | removalsが想定外 | 停止 |
 | lockfileの実versionが想定外 | 停止 |
 | auditで未評価High | 停止 |
@@ -1204,7 +1200,7 @@ PRマージ後に`develop`上で再度:
 
 - baselineなしでupdateしない
 - dry-runなしでupdateしない
-- Security Blockingを理由確認なしに解除しない
+- Security Blockingを通常手順として解除しない
 - `composer audit`を隠さない
 - `.env`や秘密情報をログへ出さない
 - 本番DBをテストに使わない

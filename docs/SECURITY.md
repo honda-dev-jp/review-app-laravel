@@ -485,7 +485,7 @@ dry-run、lockfile更新、audit、停止条件の詳細は
 [Laravelメジャーアップグレードガイド](LARAVEL_UPGRADE_GUIDE.md)
 を参照する。
 
-今回のLaravel 10→11で実際に行ったSecurity Blockingの切り分けと判断は、
+Laravel 10→11で実際に行ったSecurity Blockingの切り分けと判断は、
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
 を参照する。
 
