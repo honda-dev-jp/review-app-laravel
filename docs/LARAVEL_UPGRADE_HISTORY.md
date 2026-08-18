@@ -5,7 +5,7 @@
 - [1. このドキュメントの役割](#1-このドキュメントの役割)
 - [2. Laravel 10.50.2 → 11.55.1](#2-laravel-10502--11551)
 - [3. Laravel 11 → 12への引継ぎ](#3-laravel-11--12への引継ぎ)
-- [4. 未完了](#4-未完了)
+- [4. Laravel 10 → 11 完了確認](#4-laravel-10--11-完了確認)
 
 ---
 
@@ -668,32 +668,115 @@ Laravel 11段階:
 
 ---
 
-## 3. Laravel 11 → 12への引継ぎ
+### 2.20 developマージ後baseline再確認
 
-1. Issue #122をdevelopへマージ
-2. CI確認
-3. develop上baseline再確認
-4. Laravel 12公式Upgrade Guideを最新確認
-5. 残存Dependabot Alert No.6 / No.7の解消version確認
-6. Security Blocking解除を通常運用へ持ち越さない
-7. composer.json / lockを再調査
-8. PHPをどの段階で更新するか再判断
-9. Sanctum削除は必要なら別cleanup
-10. Carbonの実解決version再確認
-11. 128 testsを次baselineとして使用
+PR #123を`develop`へマージし、Merge commit `f639eb8`を取り込んだ`develop`上でbaselineを再確認した。
+
+```text
+PR: #123 chore: Laravel 10から11へ段階的にアップグレードする
+Base: develop
+Merge commit: f639eb8
+GitHub Actions: 2 checks passed
+```
+
+マージ後、作業ブランチ`chore/122-upgrade-laravel-11`はリモート・ローカルとも削除済み。
+
+#### 実行環境
+
+`./vendor/bin/sail artisan about`で確認:
+
+```text
+Laravel: 11.55.1
+PHP: 8.2.30
+Composer: 2.9.7
+Database: MySQL
+```
+
+#### 自動確認
+
+| 確認 | 結果 |
+|---|---|
+| `composer validate --strict` | PASS（`./composer.json is valid`） |
+| PHPUnit | 128 tests / 1374 assertions PASS |
+| PHPStan / Larastan | 67/67、No errors |
+| Pint | 110 files PASS |
+| `npm ci` | success（121 packages added / 122 packages audited） |
+| Vite build | Vite 6.4.3 / 56 modules transformed / PASS |
+| `git status --short` | no output（clean） |
+| `git diff --check` | no output |
+
+`npm ci`では既知の`1 high severity vulnerability`が表示された。これはLaravel 10→11で新たに修正する対象ではなく、別npm課題として扱う。`npm audit fix`は実行していない。
+
+#### Composer audit
+
+```bash
+./vendor/bin/sail composer audit
+```
+
+結果:
+
+```text
+3 security vulnerability advisories
+1 package
+laravel/framework
+```
+
+実質的な脆弱性は、2.8で記録済みの次の2種類:
+
+```text
+GHSA-crmm-hgp2-wgrp
+Temporary Signed URL Path Confusion
+medium
+
+GHSA-5vg9-5847-vvmq
+CRLF injection in default email rule
+high
+```
+
+`GHSA-5vg9-5847-vvmq`は別advisory sourceからも表示されるため、Composerの表示上は合計3 advisoriesとなる。develop baseline再確認で、HISTORYへ未記録の新しいSecurity Advisoryは増えていない。
+
+判断は維持する:
+
+```text
+audit結果を隠さない
+Laravel 11をmainへ出さない
+Laravel 11をXServerへ出さない
+Laravel 12で解消確認する
+```
+
+以上により、Laravel 11.55.1をLaravel 12へ進むための短期中継baselineとして確定した。
 
 ---
 
-## 4. 未完了
+## 3. Laravel 11 → 12への引継ぎ
 
-この履歴作成時点では:
+### 前段完了
+
+- PR #123を`develop`へマージ済み（Merge commit `f639eb8`）
+- GitHub Actions 2 checks passed
+- `develop`上でbaseline再確認済み
+- Laravel 11.55.1を短期中継baselineとして確定
+
+### 引継ぎ事項
+
+1. Laravel 12公式Upgrade Guideを最新確認
+2. 残存Dependabot Alert No.6 / No.7の解消version確認
+3. Security Blocking解除を通常運用へ持ち越さない
+4. composer.json / composer.lockを再調査
+5. PHPをどの段階で更新するか再判断
+6. Sanctum削除は必要なら別cleanup
+7. Carbonの実解決version再確認
+8. 128 tests / 1374 assertionsを次baselineとして使用
+
+---
+
+## 4. Laravel 10 → 11 完了確認
 
 ```text
-GitHub Actions CI
-developへのマージ
-develop上baseline再確認
+PR #123 develop merge: 完了
+GitHub Actions CI: 2 checks passed
+develop baseline再確認: PASS
+Laravel 11.55.1: 短期中継baselineとして確定
 ```
 
-は未完了。
-
-完了後に追記する。
+Laravel 11は`main`へ同期せず、XServerへデプロイせず、通常機能開発を挟まずにLaravel 12へ進む。
