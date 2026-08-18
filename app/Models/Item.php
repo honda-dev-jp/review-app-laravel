@@ -12,7 +12,7 @@ class Item extends Model
     use HasFactory;
 
     /**
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'category_id',
