@@ -1017,4 +1017,87 @@ PHPStanのbaseline、`ignoreErrors`、stub、level変更、設定変更は使用
 - マージ後の`develop`上でLaravel 12 baselineを再確認する
 - Issue #126配下に記録専用docs子Issueを作成し、確定baselineとPHP 8.4への引継ぎを追記する
 
-このため、本節は**作業ブランチ上で確認済みの実測記録**であり、`develop`上の確定baseline記録ではない。
+このため、5.1〜5.10は**作業ブランチ上で確認済みの実測記録**であり、`develop`上の確定baselineは5.11に記録する。
+
+### 5.11 PR #127マージ後の`develop`確定baseline
+
+Issue #128で、PR #127のマージ結果と、その後の`develop`上の状態を確定記録した。
+
+#### PR・GitHub Actions
+
+```text
+PR: #127 chore: Laravel 11から12へ段階的にアップグレードする
+Base: develop
+Merge commit: 6b5e4fc
+GitHub Actions: 2 checks passed
+0 cancelled / 0 failing / 0 skipped / 0 pending
+```
+
+成功したChecks:
+
+```text
+CI/python-quality-checks (pull_request)
+CI/quality-checks (pull_request)
+```
+
+PRマージ後、作業ブランチ`chore/126-upgrade-laravel-12`はリモート・ローカルとも削除済みである。
+
+#### PR #127へ含めたコミットの品質ゲート
+
+次の値は、PR #127へ含めたコミットについて、マージ前のローカル確認およびPRのGitHub Actionsで確認した結果である。マージ後の`develop`で品質ゲート一式を再実行した結果ではない。
+
+| 確認 | 結果 |
+|---|---|
+| `composer validate --strict` | PASS（`./composer.json is valid`） |
+| `composer audit --locked` | advisories 0 / abandoned packages 0 |
+| PHPUnit | 127 tests / 1373 assertions PASS |
+| PHPStan / Larastan | 66/66、No errors |
+| Pint | 109 files PASS |
+| `npm ci` | PASS |
+| Vite build | Vite 6.4.3 / 56 modules transformed / PASS |
+| ルート | 30 routes / route name重複0 |
+
+Issue #126で指定した手動回帰確認および自動テストによる確認も完了した。新規登録、ログイン・ログアウト、パスワード変更・リセット、Mailpitへのメール送信、プロフィールとアバター、作品一覧・詳細・ページネーション、レビューと返信コメント、本人レビュー一覧、評価集計、画像バリデーション、退会後の匿名表示、Sanctumトークン認証、未認証・権限不足時の拒否、デスクトップ幅・モバイル幅での主要画面表示を確認している。詳細は5.8および5.9の記録を正本とする。
+
+#### マージ後の`develop`で確認した状態
+
+PR #127のMerge commitを取り込んだ`develop`上では、`./vendor/bin/sail artisan about`により次を確認した。
+
+```text
+Laravel: 12.66.0
+PHP: 8.2.30
+Composer: 2.9.7
+Database: MySQL
+Environment: local
+Maintenance Mode: OFF
+Timezone: Asia/Tokyo
+Locale: ja
+public/storage: LINKED
+```
+
+Git状態は次のとおりであった。
+
+```text
+develop HEAD: 6b5e4fc
+origin/develop: 6b5e4fc
+git status --short: no output
+```
+
+以上により、次をPHP更新へ進む前の`develop`確定baselineとする。
+
+```text
+Laravel 12.66.0
+PHP 8.2.30
+Composer 2.9.7
+MySQL
+```
+
+この記録時点では、Laravel 12の`main`への同期およびXServerへのデプロイは実施していない。
+
+### 5.12 PHP 8.4とLaravel 13への引継ぎ
+
+PHP 8.4への実更新はIssue #128では行わず、別Issueで扱う。後続Issueでは、PHP 8.4の公式要件、Laravel 12と利用パッケージの互換性、ローカル・CI・XServerの実行環境を確認する。
+
+PHP 8.4更新後は、5.11で確定したLaravel 12.66.0 / PHP 8.2.30 baselineと、品質ゲートおよび手動回帰結果を比較する。
+
+Laravel 12 → 13はPHP 8.4更新と分離する。PHP 8.4更新後の`develop` baselineを確定してから、Laravel 12 → 13を別Issueとして開始する。Issue #128ではPHP 8.4およびLaravel 13の依存変更を行わない。
