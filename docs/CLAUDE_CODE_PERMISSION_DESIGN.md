@@ -582,7 +582,7 @@ Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Code�
 | ホスト | 用途 | apex | サブドメイン | 初期判定 | 根拠 |
 |---|---|---:|---:|---|---|
 | `code.claude.com` | Claude Code公式仕様 | 対象 | 対象外 | ask候補 | Claude Codeの現行公式host |
-| `laravel.com` | Laravel 11公式仕様 | 対象 | 対象外 | ask候補 | Laravel 11.55.1（Issue #122の短期中継baseline。`main`および本番環境へは反映しない）を使用 |
+| `laravel.com` | Laravel 12公式仕様 | 対象 | 対象外 | ask候補 | Laravel 12.66.0（Issue #126の作業ブランチ上の短期baseline。`main`および本番環境へは未反映）を使用 |
 | `docs.github.com` | GitHub公式仕様 | 対象 | 対象外 | ask候補 | GitHub運用・Security |
 | `cli.github.com` | GitHub CLI公式manual | 対象 | 対象外 | ask候補 | ghコマンド設計 |
 | `git-scm.com` | Git公式manual | 対象 | 対象外 | ask候補 | Gitコマンド設計 |

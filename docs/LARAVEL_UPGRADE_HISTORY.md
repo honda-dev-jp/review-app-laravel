@@ -6,6 +6,7 @@
 - [2. Laravel 10.50.2 → 11.55.1](#2-laravel-10502--11551)
 - [3. Laravel 11 → 12への引継ぎ](#3-laravel-11--12への引継ぎ)
 - [4. Laravel 10 → 11 完了確認](#4-laravel-10--11-完了確認)
+- [5. Laravel 11.55.1 → 12.66.0](#5-laravel-11551--12660)
 
 ---
 
@@ -83,7 +84,7 @@ nunomaduro/collision ^7.0
 #### 実version確認
 
 ```bash
-sail composer show --locked --direct
+./vendor/bin/sail composer show --locked --direct
 ```
 
 主要実version:
@@ -140,7 +141,7 @@ Mockery
 最初のdry-run:
 
 ```bash
-sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
+./vendor/bin/sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
   --with-all-dependencies \
   --minimal-changes \
   --dry-run \
@@ -168,7 +169,7 @@ Laravel 12への短期中継
 という例外条件を人間が確認し、今回だけSecurity Blocking解除を使用。
 
 ```bash
-sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
+./vendor/bin/sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
   --with-all-dependencies \
   --minimal-changes \
   --dry-run \
@@ -212,7 +213,7 @@ symfony/polyfill-php85追加
 ### 2.6 lockfile更新
 
 ```bash
-sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
+./vendor/bin/sail composer update laravel/framework laravel/sanctum laravel/breeze nunomaduro/collision \
   --with-all-dependencies \
   --minimal-changes \
   --no-install \
@@ -257,7 +258,7 @@ PHPUnit 10維持
 ### 2.8 composer audit
 
 ```bash
-sail composer audit --locked
+./vendor/bin/sail composer audit --locked
 ```
 
 結果:
@@ -295,7 +296,7 @@ Laravel 12で解消する
 ### 2.9 vendor更新
 
 ```bash
-sail composer install --no-scripts
+./vendor/bin/sail composer install --no-scripts
 ```
 
 結果:
@@ -358,7 +359,7 @@ Sanctum 4.3.x → name text / expires_at index
 ### 2.11 package discovery / bootstrap
 
 ```bash
-sail composer dump-autoload
+./vendor/bin/sail composer dump-autoload
 ```
 
 結果:
@@ -780,3 +781,240 @@ Laravel 11.55.1: 短期中継baselineとして確定
 ```
 
 Laravel 11は`main`へ同期せず、XServerへデプロイせず、通常機能開発を挟まずにLaravel 12へ進む。
+
+---
+
+## 5. Laravel 11.55.1 → 12.66.0
+
+### 5.1 記録範囲
+
+```text
+親Issue: #69
+子Issue: #126
+起点: develop / 8ec1465
+記録時点: 作業ブランチ上（PR・CI・developマージ前）
+```
+
+Issue #126では、Laravel 11の短期中継baselineからLaravel 12へ1メジャーだけ更新した。
+PHPは`8.2.30`のまま維持し、Laravel 10 / 11形式のapplication structureも維持した。
+
+この時点では、以下は実施していない。
+
+- `main`への同期
+- XServerへのデプロイ
+- PHP 8.4への更新
+- Laravel 13への更新
+- PR作成、GitHub Actions、`develop`へのマージ
+- マージ後の`develop` baseline再確認
+
+### 5.2 変更前baseline
+
+主要version:
+
+| 項目 | 変更前 |
+|---|---:|
+| Laravel | 11.55.1 |
+| PHP | 8.2.30 |
+| Composer | 2.9.7 |
+| PHPUnit | 10.5.63 |
+| Larastan | 2.11.2 |
+| Collision | 8.5.0 |
+| Carbon | 2.73.0 |
+| BreezeJP | 1.8.3 |
+| Laravel IDE Helper | 3.1.0 |
+| Sanctum | 4.3.3 |
+| Breeze | 2.4.2 |
+| Pint | 1.30.4 |
+| Sail | 1.58.0 |
+| Vite | 6.4.3 |
+
+検証結果:
+
+| 項目 | 結果 |
+|---|---|
+| PHPUnit | 128 tests / 1374 assertions PASS |
+| PHPUnit deprecation | なし |
+| PHPStan / Larastan | 67/67、No errors（level 4） |
+| Pint | 110 files PASS |
+| Vite build | 56 modules transformed、PASS |
+| Composer audit | 既知の3 advisories（1 package） |
+| npm audit | 既知のhigh 1件 |
+
+### 5.3 `composer.json`の直接依存変更
+
+意図的に変更した直接依存制約は4件だけである。
+
+| パッケージ | 変更前 | 変更後 | 判断 |
+|---|---:|---:|---|
+| `laravel/framework` | `^11.0` | `^12.61.1` | Laravel 12化と既知脆弱性の修正版を下限にする |
+| `askdkc/breezejp` | `^1.8` | `^2.2` | Laravel 12互換版へ更新する |
+| `larastan/larastan` | `^2.0` | `^3.1` | Laravel 12 / PHPStan 2対応版へ更新する |
+| `phpunit/phpunit` | `^10.1` | `^11.0` | Laravel 12公式Upgrade Guideに合わせる |
+
+Laravel IDE HelperとCollisionは既存の直接依存制約を維持し、ComposerソルバーでLaravel 12互換版へ更新した。
+Carbon 3、Laravel Prompts 0.3系、PHPStan 2系、PHPUnit 11関連パッケージは推移依存として解決し、個別固定しなかった。
+
+### 5.4 Composer解決結果
+
+dry-runを確認した後、同じ対象に`--no-install --no-scripts`を付けてlockfileを更新し、内容確認後にvendorを同期した。
+
+```text
+3 installs
+30 updates
+4 removals
+```
+
+確認できた主要な実version:
+
+| パッケージ | 実version |
+|---|---:|
+| `laravel/framework` | 12.66.0 |
+| `larastan/larastan` | 3.10.0 |
+| `phpstan/phpstan` | 2.2.8 |
+| `phpunit/phpunit` | 11.5.56 |
+
+LaravelはIssueの下限`12.61.1`以上へ解決され、PHPは`8.2.30`のまま維持された。
+package discoveryとLaravel bootstrapも成功した。
+
+### 5.5 Composerセキュリティ確認
+
+```text
+security advisories: 0
+abandoned packages: 0
+exit code: 0
+```
+
+- Security Blockingは有効なまま使用した
+- `--no-security-blocking`を使用していない
+- advisory ignoreやaudit回避設定を追加していない
+- Laravel `12.66.0`は署名付きURL脆弱性の修正版`12.61.1`以上である
+- Laravel `12.66.0`はメールアドレスCRLF注入脆弱性の修正版`12.60.0`以上である
+
+Dependabot Alerts No.6 / No.7は既定ブランチ`main`を基準に評価されるため、作業ブランチ時点でのCloseを本Issueの受け入れ条件にはしない。
+
+### 5.6 Laravel 12化で必要になった最小修正
+
+初回のPHPStan / Larastan 3解析では9件の指摘が発生した。
+
+| 修正 | 件数 | 対象・判断 |
+|---|---:|---|
+| Eloquentモデルの属性配列PHPDoc | 6 | `Category`、`Item`、`Review`、`ReviewComment`、`User`の`$fillable`と`User::$hidden`を`array<int, string>`から`list<string>`へ調整 |
+| 不要なnullsafe演算子 | 2 | `tests/Feature/ProfileTest.php`で`DOMNodeList::item(0)`がnullでないと確定済みの箇所から`?->`を除去 |
+| 雛形テストの削除 | 1 | 常に真となる`assertTrue(true)`だけを持つ`tests/Unit/ExampleTest.php`を削除 |
+
+PHPStanのbaseline、`ignoreErrors`、stub、level変更、設定変更は使用していない。
+修正後は`66/66`、`No errors`となった。解析対象が`67`から`66`へ減ったのは、`tests/Unit/ExampleTest.php`の削除と一致する。
+
+`tests/Unit/ExampleTest.php`は常に真となる`assertTrue(true)`だけのLaravel標準雛形であり、有効な回帰を検証しないため削除した。一方、`phpunit.xml`のUnit testsuiteと将来追加するUnitテストの自動検出を維持し、fresh cloneでも`tests/Unit`が存在するよう、空ファイル`tests/Unit/.gitkeep`を追加した。`.gitkeep`はPHPUnit、PHPStan、Pintの対象にならないため、実測件数は127 tests、PHPStan 66 files、Pint 109 filesのままである。現在のUnitテストは0件である。
+
+アプリケーションの実行ロジックやLaravel 12新規skeletonへの構造変更は行っていない。
+
+### 5.7 自動回帰結果
+
+実行コマンドは、環境依存のaliasを前提にせず、リポジトリ内のSailを明示した。
+
+```bash
+./vendor/bin/sail composer validate --strict
+
+./vendor/bin/sail php ./vendor/bin/phpunit \
+  --display-deprecations \
+  --display-phpunit-deprecations
+
+./vendor/bin/sail php ./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/pint --test
+./vendor/bin/sail npm ci
+./vendor/bin/sail npm run build
+```
+
+| 項目 | 結果 |
+|---|---|
+| Composer validate | PASS（`./composer.json is valid`） |
+| Laravel | 12.66.0 |
+| PHP | 8.2.30 |
+| PHPUnit | 11.5.56、127 tests / 1373 assertions PASS |
+| PHPUnit deprecation | なし |
+| PHPStan / Larastan | 66/66、No errors（level 4） |
+| Pint | 109 files PASS |
+| `npm ci` | 121 packages added、122 packages audited、成功 |
+| Vite build | Vite 6.4.3、56 modules transformed、成功 |
+| `artisan about` | 成功 |
+| `artisan route:list` | 成功、30 routes |
+| ルート名重複 | 0件 |
+| `git diff --check` | 問題なし |
+
+`npm audit`のhigh 1件は変更前から存在する別課題であり、本Issueでは増加も修正も行っていない。
+
+### 5.8 手動回帰結果
+
+#### ゲスト
+
+- 作品一覧を表示できる
+- 作品一覧のページネーションを操作できる（全13件、1ページ目1〜10件、2ページ目11〜13件）
+- 作品詳細を表示できる
+- 星評価、平均評価、評価件数を表示できる
+- レビューと返信を表示できる
+- 未認証時にレビュー・返信のログイン案内が表示される
+
+#### 認証・プロフィール
+
+- 新規登録後、自動ログインして作品一覧へ遷移できる
+- ログイン / ログアウトできる
+- アカウント画面でニックネームと自己紹介を更新できる
+- アバターの新規登録、差し替え、表示を確認した
+- パスワード変更後、旧パスワードでログインできず、新パスワードでログインできる
+- Mailpitでパスワードリセットメールを受信できる
+- パスワード再設定後、旧パスワードでログインできず、新パスワードでログインできる
+
+独立したアバター削除機能はIssue #126の対象外であり、実施済みとは扱わない。
+
+#### レビュー・返信・評価キャッシュ
+
+- レビューを投稿できる
+- 返信を投稿し、親レビュー内に表示できる
+- レビュー投稿後、平均評価と評価件数が`5.0 / 1件`から`3.0 / 2件`へ更新された
+- 本人レビュー一覧からレビューを削除できる
+- 親レビュー削除時に、その配下の返信も表示から消えた
+- 削除後、平均評価と評価件数が`5.0 / 1件`へ戻った
+- 退会済みユーザーの既存レビューは「匿名」として残った
+
+#### 本人レビュー一覧
+
+- 全11件を確認した
+- 1ページ目に1〜10件を表示できる
+- 2ページ目に11件目を表示できる
+- ページ番号と前後移動を操作できる
+- 作品詳細への導線を表示できる
+
+#### アカウント削除
+
+- 確認モーダルを表示できる
+- 現在のパスワードを入力してアカウントを削除できる
+- 削除後にログアウトし、作品一覧へ遷移できる
+- 投稿済みレビューは削除せず、「匿名」として保持された
+
+#### 表示幅
+
+- デスクトップ幅とモバイル幅で主要画面、ナビゲーション、主要フォーム、ページネーションを表示できた
+- モバイル幅でレスポンシブヘッダーを表示できた
+
+### 5.9 自動テストで確認した回帰
+
+127件の全テスト成功により、次を含む既存Featureテストが通過した。現在のUnitテストは0件である。
+
+- Sanctum Bearerトークン認証
+- 未認証・権限不足時の拒否動作
+- 不正画像形式、GIF拒否、サイズ超過、2 MB境界値
+- 画像保存、差し替え、削除、共有パス保護
+- 会員退会後の匿名表示
+- レビュー投稿・削除後の評価平均と評価件数更新
+
+### 5.10 記録時点の残作業
+
+- Codex / Claude Codeで全差分レビューを実施する
+- `develop`向けPRを作成し、本文に`Refs #126`を記載する
+- GitHub Actionsの全ジョブ成功を確認する
+- merge commitで`develop`へマージする
+- マージ後の`develop`上でLaravel 12 baselineを再確認する
+- Issue #126配下に記録専用docs子Issueを作成し、確定baselineとPHP 8.4への引継ぎを追記する
+
+このため、本節は**作業ブランチ上で確認済みの実測記録**であり、`develop`上の確定baseline記録ではない。

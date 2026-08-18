@@ -44,8 +44,8 @@ Laravelメジャーアップグレードの標準手順は
 を参照する。
 
 MVP2では一般公開を目標とする。
-ただし、Laravel 11はサポート終了済みの短期中継baselineとして扱い、
-`main`への同期およびXServerへのデプロイは行わない。
+Issue #126の作業ブランチではLaravel 12.66.0を短期baselineとして確認しているが、
+このIssueでは`main`への同期およびXServerへのデプロイは行わない。
 
 現時点で分かっている情報を以下の区分で整理する。
 
@@ -72,8 +72,8 @@ MVP2では一般公開を目標とする。
 
 | 項目 | 状態 | 備考 |
 |---|---|---|
-| 開発中のLaravel版 | 確認済み | Issue #122でLaravel 11.55.1へ更新。Laravel 12へ進むための短期中継baseline |
-| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Laravel 11は本番反映対象外 |
+| 開発中のLaravel版 | 確認済み | Issue #126の作業ブランチでLaravel 12.66.0へ更新した短期baseline |
+| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #126では`main`への同期およびXServerへのデプロイを行わない |
 | Laravel 11を`main`へ同期する | 方針決定済み | 実施しない |
 | Laravel 11をXServerへデプロイする | 方針決定済み | 実施しない |
 | Laravel Sail をローカル開発で使用する | 確定 | 本番環境では使用しない |
@@ -109,7 +109,7 @@ MVP2では一般公開を目標とする。
 
 - 本番反映時は、その時点でプロジェクトが採用すると決定した**本番反映対象のLaravel版**を使用する
 - メジャーアップグレード途中の中継baselineを、動作確認済みという理由だけで`main`や本番環境へ反映しない
-- Laravel 11は短期中継baselineとし、`main`への同期およびXServerへのデプロイを行わない
+- Issue #126のLaravel 12.66.0は作業ブランチ上の短期baselineとし、このIssueでは`main`への同期およびXServerへのデプロイを行わない
 - MySQL を使用する
 - Laravel Breeze 導入済み
 - Laravel Sail はローカル開発環境専用とする
