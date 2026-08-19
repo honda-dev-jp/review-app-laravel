@@ -45,7 +45,7 @@ Laravelメジャーアップグレードの標準手順は
 
 MVP2では一般公開を目標とする。
 Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineである。
-Issue #130の作業ブランチでは、ローカル開発環境をPHP 8.4.24へ更新した後のbaseline候補を確認している。この変更はPR未作成で、`develop`・`main`およびXServerの本番環境へ未反映である。
+PHP 8.4.24はPR #131で`develop`へマージ済みの確定baselineである。`main`およびXServerの本番環境へは未反映である。
 
 現時点で分かっている情報を以下の区分で整理する。
 
@@ -73,8 +73,8 @@ Issue #130の作業ブランチでは、ローカル開発環境をPHP 8.4.24へ
 | 項目 | 状態 | 備考 |
 |---|---|---|
 | 開発中のLaravel版 | 確認済み | Laravel 12.66.0。PR #127で`develop`へマージ済みの確定baseline |
-| ローカル開発環境のPHP版 | 確認中 | PHP 8.4.24。Issue #130の作業ブランチ上で更新後baseline候補を確認中。PR未作成、`develop`未反映 |
-| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #130では`main`への同期およびXServerへのデプロイを行わない |
+| ローカル開発環境のPHP版 | 確認済み | PHP 8.4.24。PR #131で`develop`へマージ済みの確定baseline |
+| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #132でも`main`への同期およびXServerへのデプロイを行わない |
 | Laravel 11を`main`へ同期する | 方針決定済み | 実施しない |
 | Laravel 11をXServerへデプロイする | 方針決定済み | 実施しない |
 | Laravel Sail をローカル開発で使用する | 確定 | 本番環境では使用しない |
@@ -111,7 +111,7 @@ Issue #130の作業ブランチでは、ローカル開発環境をPHP 8.4.24へ
 - 本番反映時は、その時点でプロジェクトが採用すると決定した**本番反映対象のLaravel版**を使用する
 - メジャーアップグレード途中の中継baselineを、動作確認済みという理由だけで`main`や本番環境へ反映しない
 - Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineとする
-- Issue #130のPHP 8.4.24は作業ブランチ上の更新後baseline候補とし、PR作成前で`develop`へも未反映である。このIssueでは`main`への同期およびXServerへのデプロイを行わない
+- PHP 8.4.24はPR #131で`develop`へマージ済みの確定baselineとする。Issue #132では`main`への同期およびXServerへのデプロイを行わない
 - MySQL を使用する
 - Laravel Breeze 導入済み
 - Laravel Sail はローカル開発環境専用とする

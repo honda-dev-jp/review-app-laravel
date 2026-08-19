@@ -8,6 +8,7 @@
 - [4. Laravel 10 → 11 完了確認](#4-laravel-10--11-完了確認)
 - [5. Laravel 11.55.1 → 12.66.0](#5-laravel-11551--12660)
 - [6. PHP 8.2.30 → 8.4.24](#6-php-8230--8424)
+- [7. PHP 8.4のdevelop baseline確定](#7-php-84のdevelop-baseline確定)
 
 ---
 
@@ -1274,3 +1275,74 @@ package更新、`npm audit fix`、install script承認は、いずれもPHP 8.4�
 - GitHub Actions CI
 
 今後、これらの結果を実測した場合は、作業ブランチ上、PR CI、マージ後の`develop`のどの時点で確認したかを区別して追記する。
+
+---
+
+## 7. PHP 8.4のdevelop baseline確定
+
+### 7.1 Issue #132の目的
+
+Issue #132では、Issue #130の作業ブランチ上で確認したPHP 8.4候補状態を歴史的記録として維持したまま、PR #131のマージ結果と、マージ後の`develop`上で実測したLaravel 12 + PHP 8.4の確定baselineを記録する。PHP・Laravel・Composer packageの追加更新やLaravel 12 → 13の実装は行わない。
+
+本節は、第6章に記録したIssue #130の作業ブランチ上の実測に対する、PR #131マージ後の`develop`確定baselineであり、第6章で未確認としていたGitHub Actions CIの結果は7.2に記録する。
+
+### 7.2 PR #131とGitHub Actions
+
+```text
+PR: #131 chore: Laravel 12環境のPHPを8.4へ更新する
+Base: develop
+Merge commit: 1e53ddd
+GitHub Actions: 2 successful checks
+```
+
+成功したChecksは次のとおり。
+
+- `CI/python-quality-checks (pull_request)`
+- `CI/quality-checks (pull_request)`
+
+作業ブランチ`chore/130-upgrade-php-84`は、PR #131のマージ後にリモート・ローカルとも削除済みである。
+
+### 7.3 マージ後のdevelop確定baseline
+
+PR #131のMerge commitを反映した`develop`上で、次を確認した。
+
+| 項目 | 確定値 |
+|---|---:|
+| PHP | 8.4.24 |
+| Laravel Framework | 12.66.0 |
+| Composer | 2.10.2 |
+| Composer実行PHP | 8.4.24（PHP path `/usr/bin/php8.4`、ローカルSailコンテナ内） |
+| `develop` / `origin/develop` | `1e53ddd`で一致 |
+| Git状態 | `git status --short`は無出力 |
+
+確認時点のlocal branchは`develop`と`main`、remote-tracking branchは`origin/develop`と`origin/main`であった。
+
+XServer上の`/usr/bin/php8.4`はPHP 8.4.20であり、ローカルSailコンテナ内の同名pathで実行したPHP 8.4.24とは別環境である。Issue #132ではXServer操作・デプロイを行っていない。
+
+この記録時点で、Laravel 12 + PHP 8.4の確定baselineは`develop`のみに反映されており、`main`およびXServer本番環境へは未反映である。
+
+### 7.4 マージ後のdevelop実測結果
+
+| 確認 | 結果 |
+|---|---|
+| `composer check-platform-reqs --lock` | PHP 8.4.24と必要なPHP拡張を含む全項目`success` |
+| `composer validate --strict` | PASS（`./composer.json is valid`） |
+| `composer audit --locked` | PASS（`No security vulnerability advisories found.`） |
+| PHPUnit | 11.5.56 / Runtime PHP 8.4.24 / 128 tests / 1375 assertions / PASS |
+| PHPUnit deprecation | `--display-deprecations`および`--display-phpunit-deprecations`で表示なし |
+| PHPStan / Larastan | 66/66 / No errors |
+| Pint | 109 files / PASS |
+| Vite build | Vite 6.4.3 / 56 modules transformed / 986ms / PASS |
+| Routes | 30 routes / route name重複0 |
+
+### 7.5 確認時点の区別
+
+Issue #130の作業ブランチ上では、`composer install`、`npm ci`、主要機能の手動回帰、デスクトップ幅・モバイル幅の表示確認を実施した。これらはマージ後の`develop`で再実行した結果ではない。
+
+PR #131では、GitHub ActionsのPHP 8.4環境で2 checksが成功した。7.4の結果は、PR CIとは別に、マージ後の`develop`上で実測した結果である。
+
+### 7.6 次段階への引継ぎ
+
+Laravel 12.66.0 + PHP 8.4.24 + Composer 2.10.2 + MySQLを、Laravel 12 → 13へ進む前の`develop`確定baselineとする。
+
+Laravel 12 → 13はIssue #132へ混在させない。本Issueのbaseline記録を完了した後、親Issue #69配下にLaravel 12 → 13の子Issueを作成し、本節のbaselineを更新前比較対象として引き継ぐ。

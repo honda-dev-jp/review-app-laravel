@@ -582,7 +582,7 @@ Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Code�
 | ホスト | 用途 | apex | サブドメイン | 初期判定 | 根拠 |
 |---|---|---:|---:|---|---|
 | `code.claude.com` | Claude Code公式仕様 | 対象 | 対象外 | ask候補 | Claude Codeの現行公式host |
-| `laravel.com` | Laravel 12公式仕様 | 対象 | 対象外 | ask候補 | Laravel 12.66.0はPR #127で`develop`へマージ済み。PHP 8.4.24はIssue #130の作業ブランチ上の候補で、PR未作成、`develop`・`main`・本番環境へ未反映 |
+| `laravel.com` | Laravel 12公式仕様 | 対象 | 対象外 | ask候補 | Laravel 12.66.0はPR #127、PHP 8.4.24はPR #131で`develop`へマージ済みの確定baseline。`main`・本番環境へ未反映 |
 | `docs.github.com` | GitHub公式仕様 | 対象 | 対象外 | ask候補 | GitHub運用・Security |
 | `cli.github.com` | GitHub CLI公式manual | 対象 | 対象外 | ask候補 | ghコマンド設計 |
 | `git-scm.com` | Git公式manual | 対象 | 対象外 | ask候補 | Gitコマンド設計 |
@@ -590,7 +590,7 @@ Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Code�
 | `docs.phpunit.de` | PHPUnit公式仕様 | 対象 | 対象外 | ask候補 | PHPUnit 11.5.56を使用 |
 | `phpstan.org` | PHPStan公式仕様 | 対象 | 対象外 | ask候補 | PHPStan / Larastan |
 | `docs.npmjs.com` | npm公式仕様 | 対象 | 対象外 | ask候補 | npm 12.0.2を使用 |
-| `www.php.net` | PHP公式manual | 対象 | 対象外 | ask候補 | Issue #130の作業ブランチ上でPHP 8.4.24を使用。PR未作成、`develop`・`main`・本番環境へ未反映 |
+| `www.php.net` | PHP公式manual | 対象 | 対象外 | ask候補 | PHP 8.4.24はPR #131で`develop`へマージ済みの確定baseline。`main`・本番環境へ未反映 |
 | `v3.tailwindcss.com` | Tailwind CSS 3公式docs | 対象 | 対象外 | ask候補 | Tailwind CSS 3.4.19を使用 |
 | `vite.dev` | Vite公式docs | 対象 | 対象外 | ask候補 | Vite 6.4.3を使用 |
 | `nodejs.org` | Node.js公式docs | 対象 | 対象外 | ask候補 | Node.js 24.19.0を使用 |
