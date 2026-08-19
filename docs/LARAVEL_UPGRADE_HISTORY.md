@@ -9,6 +9,7 @@
 - [5. Laravel 11.55.1 → 12.66.0](#5-laravel-11551--12660)
 - [6. PHP 8.2.30 → 8.4.24](#6-php-8230--8424)
 - [7. PHP 8.4のdevelop baseline確定](#7-php-84のdevelop-baseline確定)
+- [8. Laravel 12.66.0 → 13.26.1](#8-laravel-12660--13261)
 
 ---
 
@@ -1346,3 +1347,160 @@ PR #131では、GitHub ActionsのPHP 8.4環境で2 checksが成功した。7.4�
 Laravel 12.66.0 + PHP 8.4.24 + Composer 2.10.2 + MySQLを、Laravel 12 → 13へ進む前の`develop`確定baselineとする。
 
 Laravel 12 → 13はIssue #132へ混在させない。本Issueのbaseline記録を完了した後、親Issue #69配下にLaravel 12 → 13の子Issueを作成し、本節のbaselineを更新前比較対象として引き継ぐ。
+
+---
+
+## 8. Laravel 12.66.0 → 13.26.1
+
+### 8.1 Issueと確認時点
+
+親Issue #69から分離したIssue #134で、Laravel 12から13への1メジャー更新を実施した。
+
+本章は`chore/134-upgrade-laravel-13`作業ブランチ上の候補結果である。Laravel 13はまだ`develop`、`main`、本番環境へ反映されていない。PR番号、GitHub Actionsの結果、マージ結果は未確定のため記録しない。
+
+| 項目 | `develop`確定baseline | Issue #134作業ブランチ上の候補状態 |
+|---|---:|---:|
+| Laravel Framework | 12.66.0 | 13.26.1 |
+| PHP | 8.4.24 | 8.4.24 |
+| Composer | 2.10.2 | 2.10.2 |
+| PHPUnit | 11.5.56 | 12.5.33 |
+
+### 8.2 依存関係の変更
+
+直接依存のconstraintを次のように変更した。
+
+- `laravel/framework`: `^12.61.1` → `^13.0`
+- `laravel/tinker`: `^2.8` → `^3.0`
+- `phpunit/phpunit`: `^11.0` → `^12.0`
+
+作業ブランチ上ではLaravel Framework 13.26.1、Laravel Tinker 3.0.2、PHPUnit 12.5.33へ解決された。Laravel 13移行に必要な依存解決に限定し、Composer Security Blockingを無効化する設定やadvisory ignoreは追加していない。
+
+直接依存の実解決versionも確認し、Laravel 13またはPHP 8.4と静的に矛盾するpackageがないことを確認した。
+
+| 関連package | 作業ブランチ上の実version |
+|---|---:|
+| `laravel/sanctum` | 4.3.3 |
+| `askdkc/breezejp` | 2.6.3 |
+| `laravel/breeze` | 2.4.2 |
+| `spatie/laravel-ignition` | 2.12.0 |
+| `larastan/larastan` | 3.10.0 |
+| `barryvdh/laravel-ide-helper` | 3.7.0 |
+| `laravel/sail` | 1.58.0 |
+
+`laravel/boost`と`pestphp/pest`はこのリポジトリの依存関係にないため、Laravel 13移行を理由とする追加は行っていない。
+
+### 8.3 Laravel 13対応
+
+- `app/Http/Middleware/VerifyCsrfToken.php`の継承元を`PreventRequestForgery`へ変更した
+- `config/sanctum.php`の`ValidateCsrfToken`直接参照を`PreventRequestForgery`へ変更した
+- `config/cache.php`へ`serializable_classes=false`を追加した
+- `config/session.php`へ`serialization=json`を追加した
+- `CACHE_PREFIX`、`REDIS_PREFIX`、`SESSION_COOKIE`の既存fallbackは維持した
+- Laravel 13公式skeletonの該当コメントを採用した
+- Laravel 10形式のアプリケーション構造は全面移行せず維持した
+
+cacheとsessionの設定は、`APP_KEY`漏えい時にPHP object deserializationのgadget chainを悪用される攻撃面を縮小する多層防御である。session形式の変更により既存sessionは引き継がれず、利用者は再ログインが必要になるが、DBデータは削除されない。
+
+BreezeJP 2.6.3のパスワードリセット通知callbackが既存の`Reset Password Notification`翻訳を使用することを確認したため、`lang/ja.json`へLaravel 13本体の新しいsubject keyは追加していない。
+
+### 8.4 Laravel 13公式Upgrade Guideの全項目判定
+
+2026-08-19時点の[Laravel 13 Upgrade Guide](https://laravel.com/framework/docs/13.x/upgrade)を見出し単位で確認した。アプリ所有コードの基本検索範囲は、`app/`、`bootstrap/`、`config/`、`database/`、`resources/`、`routes/`、`tests/`のPHPファイルである。`vendor/`と生成物は非該当判定の検索対象に含めていない。
+
+検索コマンドが無出力かつ終了コード`1`の場合は「一致なし」、終了コード`2`以上は「検索エラー」と区別した。次表の「非該当」は、該当API・class・設定・実装の一致がないこと、またはリポジトリの実行対象ではないことを確認した結果である。
+
+`upsert` / `uniqueBy`は、次の検索を再実行した。
+
+```bash
+rg -n \
+  --glob '*.php' \
+  '\bupsert\s*\(|\buniqueBy\b' \
+  app bootstrap config database resources routes tests
+```
+
+結果は無出力、終了コード`1`（一致なし）であった。これは`vendor/`を含むLaravel全体ではなく、上記の現行アプリ所有コードで非該当とする根拠である。
+
+| 公式項目 | 判定 | 調査対象・検索語 | 根拠・結果 | 対応 |
+|---|---|---|---|---|
+| Updating Dependencies | 該当・対応済み | `composer.json`、`composer.lock`; `laravel/framework`、`laravel/tinker`、`phpunit/phpunit`、`laravel/boost`、`pestphp/pest` | root constraintとlock versionを確認。BoostとPestはroot依存にない | Framework 13、Tinker 3、PHPUnit 12へ更新し、未使用packageは追加しない |
+| Updating the Laravel Installer | 非該当 | `composer.json`、`composer.lock`; `laravel/installer` | 一致なし、終了コード`1`。global toolはアプリのrepository依存ではない | 変更しない |
+| Cache Prefixes and Session Cookie Names | 該当・方針決定済み | `config/cache.php`、`config/database.php`、`config/session.php`; `CACHE_PREFIX`、`REDIS_PREFIX`、`SESSION_COOKIE` | 3設定の既存fallbackを確認 | 識別子を維持する |
+| Cache `Store` / `Repository` contracts: `touch` | 非該当 | 基本検索範囲; `implements Store`、`implements Repository`、`function touch` | custom実装の一致なし、終了コード`1` | 変更しない |
+| Cache `serializable_classes` | 該当・対応済み | `config/cache.php`; `serializable_classes`、`serialize`、`unserialize` | top-levelのboolean `false`を確認。アプリ所有コードのserialization処理は一致なし、終了コード`1` | `false`を採用し、任意classの復元を許可しない |
+| `Container::call` nullable defaults | 非該当 | 基本検索範囲; `Container::call`、`app(...)->call`、`resolve(...)->call` | 一致なし、終了コード`1` | 変更しない |
+| `Dispatcher::dispatchAfterResponse` | 非該当 | 基本検索範囲; `dispatchAfterResponse`、`implements Dispatcher` | 一致なし、終了コード`1` | 変更しない |
+| `ResponseFactory::eventStream` | 非該当 | 基本検索範囲; `eventStream`、custom `ResponseFactory` | 一致なし、終了コード`1` | 変更しない |
+| `MustVerifyEmail::markEmailAsUnverified` | 非該当 | 基本検索範囲; `markEmailAsUnverified`、`implements MustVerifyEmail` | 一致なし、終了コード`1` | 変更しない |
+| Database `upsert` / empty `uniqueBy` | 非該当 | 基本検索範囲のPHPファイル; `upsert()`、`uniqueBy` | 無出力、終了コード`1`。現行アプリ所有コードに使用箇所なし | 空の`uniqueBy`を渡すコードがないため変更しない |
+| MySQL joined `DELETE` with `ORDER BY` / `LIMIT` | 非該当 | 基本検索範囲; `join`、`leftJoin`、`rightJoin`、`crossJoin`、`joinSub` | JOIN queryの一致なし、終了コード`1` | 変更しない |
+| Model booting and nested instantiation | 非該当 | `app/Models/`、`tests/`; `function boot*`、`static::boot`、`parent::boot` | model boot実装の一致なし、終了コード`1` | 変更しない |
+| Polymorphic pivot table name generation | 非該当 | 基本検索範囲; `MorphPivot`、`morphToMany`、`morphedByMany`、`morphPivot` | 一致なし、終了コード`1` | 変更しない |
+| Collection model serialization | 非該当 | 基本検索範囲; `serialize`、`unserialize`、`SerializesModels`、`ShouldQueue` | 一致なし、終了コード`1` | 変更しない |
+| HTTP client `Response::throw` / `throwIf` signatures | 非該当 | 基本検索範囲; custom `throw`、`throwIf`、`extends Response` | overrideの一致なし、終了コード`1` | 変更しない |
+| Default Password Reset Subject | 該当・変更不要 | BreezeJP 2.6.3 `BreezejpServiceProvider`、framework `ResetPassword`、`lang/ja.json`; `toMailUsing`、subject key | BreezeJP callbackが`Reset Password Notification`を使用し、既存日本語keyも存在。Mailpitの日本語subjectは手動回帰で確認 | 新keyを追加せず、既存keyを維持する |
+| Queued Notifications and Missing Models | 非該当 | 基本検索範囲; `extends Notification`、`ShouldQueue`、`SerializesModels` | custom queued notificationの一致なし、終了コード`1` | 変更しない |
+| `JobAttempted::$exception` | 非該当 | 基本検索範囲; `JobAttempted`、`exceptionOccurred` | 一致なし、終了コード`1` | 変更しない |
+| `QueueBusy::$connectionName` | 非該当 | 基本検索範囲; `QueueBusy`、`connectionName` | 一致なし、終了コード`1` | 変更しない |
+| Queue contract method additions | 非該当 | 基本検索範囲; custom `Queue`、`Connector`、`Job` contract実装 | 一致なし、終了コード`1` | 変更しない |
+| Domain route registration precedence | 非該当 | 基本検索範囲; `Route::domain`、`->domain()` | 一致なし、終了コード`1` | 変更しない |
+| Session `serialization` | 該当・対応済み | `config/session.php`とsession利用箇所; `serialization`、sessionへの保存値 | top-levelの`json`を確認。既存session失効、認証、validation、old input、名前付きerror bagは手動回帰で確認 | JSONを採用し、既存session失効と再ログインを受け入れる |
+| `withScheduling` registration timing | 非該当 | 基本検索範囲; `withScheduling` | 一致なし、終了コード`1`。従来のConsole Kernel構造 | 変更しない |
+| Request Forgery Protection | 該当・対応済み | 基本検索範囲; `VerifyCsrfToken`、`ValidateCsrfToken`、`PreventRequestForgery` | Laravel側旧class直接参照は一致なし、終了コード`1`。新classはapp middlewareとSanctum設定の3箇所で確認。HTTP結果は手動回帰で確認 | app class名とKernel登録を維持し、framework直接参照を新classへ変更する |
+| Manager `extend` callback binding | 非該当 | 基本検索範囲; `->extend()`、`::extend()` | custom driver callbackの一致なし、終了コード`1` | 変更しない |
+| `Str` factories reset between tests | 非該当 | 基本検索範囲; `createUuidsUsing`、`createUlidsUsing`、`createRandomStringsUsing`、`freezeUuids`、`freezeUlids` | 一致なし、終了コード`1` | 変更しない |
+| `Js::from` unescaped Unicode | 該当・変更不要 | `resources/views/`; `Js::from`、`Illuminate\Support\Js`、`@js`、`@json` | Bladeの`@js`を`resources/views/components/modal.blade.php`で6箇所、`resources/views/profile/partials/delete-user-form.blade.php`で1箇所、合計7箇所確認した。Laravel 13の`CompilesJs`では`@js`が`Js::from(...)->toHtml()`へコンパイルされる。現行の呼び出しで渡す値はboolean、ASCII識別子または`null`であり、エスケープ済みUnicodeに依存する出力比較はない。Laravel 13の`Js::REQUIRED_FLAGS`でも`JSON_HEX_*`は維持される | `JSON_UNESCAPED_UNICODE`追加による現行動作への影響はないため、コードは変更しない |
+| PHP 8.5 polyfill / global helper conflicts | 非該当 | 基本検索範囲のPHPファイル; `array_first`、`array_last` | 独自helperの一致なし、終了コード`1`。実行PHPは8.4.24 | PHP 8.5更新を混在させず変更しない |
+| Pagination Bootstrap view names | 非該当 | `app/`、`resources/views/`; `useBootstrapThree`、`pagination::default`、`pagination::simple-default`、`bootstrap-3`、`pagination::bootstrap-3`、`Paginator::`、`->links()` | Laravel 13で名称変更された旧view名とBootstrap 3設定への直接参照はない。paginatorの表示呼び出しは2箇所で、`resources/views/items/index.blade.php`は独自viewの`vendor.pagination.movie`を明示し、`resources/views/reviews/mine.blade.php`は既定の`->links()`を使用している。名称変更された旧view名には依存していない | 変更しない |
+
+公式ガイド末尾の案内に従ってLaravel 13の`laravel/laravel` skeleton差分も確認し、`cache.serializable_classes`、`session.serialization`、両設定の説明コメントだけを選択的に採用した。Laravel 10形式のapplication structureは一括同期していない。
+
+### 8.5 レビューで得た教訓
+
+アプリ側CSRF middlewareの継承元変更後、`config/sanctum.php`にdeprecated aliasの直接参照が残っていることをレビューで検出した。今後はmiddleware classの改名時に、`app/`、`bootstrap/`、`config/`、`routes/`、`tests/`を横断して旧class名と新class名を検索する。この手順を`LARAVEL_UPGRADE_GUIDE.md`へ追加した。
+
+`Js::from`はPHPコードから直接呼ばれていなかったが、Bladeの`@js`ディレクティブを通じて利用していた。framework APIの変更を調査するときは、class・method名だけでなく、Bladeディレクティブ、helper、Facadeなどの間接的な呼び出し形も確認する。GuideのUpgrade Guide確認手順へ、PHP呼び出し形とテンプレート構文の両方を検索するルールを追加した。
+
+### 8.6 最終ローカル品質ゲート
+
+| 確認 | 作業ブランチ上の結果 |
+|---|---|
+| `composer validate` | PASS |
+| `composer audit --locked` | advisoryなし |
+| `composer check-platform-reqs --lock` | 全項目`success` |
+| PHPUnit | 12.5.33 / 128 tests / 1375 assertions / PASS |
+| PHPUnit / Laravel deprecation | 表示なし |
+| `SanctumApiUserTest` | 2 tests / 3 assertions / PASS |
+| `ProfileTest` | 44 tests / 611 assertions / PASS |
+| PHPStan / Larastan | 66/66 / No errors |
+| Pint | 109 files / PASS |
+| Vite build | Vite 6.4.3 / 56 modules transformed / PASS |
+| Routes | 30 routes / route name重複0 |
+| `git diff --check` | 問題なし |
+
+CSRFは、不正tokenでHTTP 419、`Sec-Fetch-Site: same-origin`でHTTP 302、`Sec-Fetch-Site: cross-site`でHTTP 419となることを再確認した。
+
+### 8.7 手動回帰
+
+シークレットウィンドウで次を確認した。
+
+- ログイン、失敗時validation、ログアウト、intended redirect
+- パスワードリセットメール受信、パスワード再設定、再ログイン
+- profileのvalidation、old input、名前付きerror bag
+- アバター登録、差し替え、再読み込み後の保持
+- レビュー投稿、返信投稿、入力エラー
+- 平均評価3.0 / 2件から5星追加後3.7 / 3件への小数点丸め
+- 作品一覧および本人レビュー一覧のpagination
+- desktop幅・mobile幅の主要画面
+- 退会時の誤パスワード拒否
+- 正しいパスワードでの退会、ログアウト、profileアクセス拒否、旧認証情報でのログイン不可
+- 退会後もレビューと返信を匿名表示で保持し、平均評価3.7 / 3件を維持
+
+### 8.8 npmの引継ぎ
+
+`npm ci`は成功した。一方、1件のhigh severity vulnerabilityと、`esbuild@0.25.12`のinstall scriptがブロックされた警告が残っている。
+
+npm更新、`npm audit fix`、install script承認はIssue #134へ混在させない。Laravel 13更新完了および`main`反映後に、Dependabot alertsを別Issueで対応する。Issue番号は未確定のため記録しない。
+
+### 8.9 未確定事項
+
+GitHub ActionsはPR作成後に確認する。PR番号、CI結果、マージ結果、`develop`・`main`・本番環境への反映は、確定後に別途記録する。

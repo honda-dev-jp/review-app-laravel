@@ -3,6 +3,7 @@
 ## 目次
 
 - [セキュリティ方針](#セキュリティ方針)
+- [cache・sessionのデシリアライズ対策](#cachesessionのデシリアライズ対策)
 - [1. 認証方針](#1-認証方針)
 - [2. ログアウト時のセッション方針](#2-ログアウト時のセッション方針)
 - [3. 認可方針](#3-認可方針)
@@ -46,6 +47,20 @@
 - 画像アップロードは拡張子だけで判断しない
 - `.env` や秘密情報はGit管理しない
 - Composer / npm依存関係の差分を確認してから導入する
+
+---
+
+## cache・sessionのデシリアライズ対策
+
+Issue #134のLaravel 13更新では、`config/cache.php`の`serializable_classes`を`false`、`config/session.php`の`serialization`を`json`とする。
+
+脅威モデルは、`APP_KEY`が漏えいした場合に、攻撃者が暗号化または署名されたpayloadを作成・改変し、PHPのobject deserializationに利用可能なgadget chainを悪用する状況である。`APP_KEY`を漏えいさせないことが第一の防御であり、これらの設定は漏えい時の攻撃面を縮小する多層防御として採用する。
+
+現在のアプリケーションはcacheやsessionへ独自objectを保存することを前提としていない。将来object保存が必要になった場合も、安易に全classのserializationを再許可せず、保存形式と必要なclassを再評価する。
+
+sessionの保存形式をJSONへ変更すると、既存形式のsessionは引き継がれず、ログイン中の利用者は再ログインが必要になる。ユーザー、レビュー、返信などのDBデータは削除されない。Issue #134では、ログイン・ログアウト、validation error、old input、名前付きerror bag、退会を含む手動回帰で移行後のsession動作を確認した。
+
+`CACHE_PREFIX`、`REDIS_PREFIX`、`SESSION_COOKIE`の既存fallbackは維持する。デシリアライズ対策と無関係な識別子変更を同時に行わず、既存環境との混同を避けるためである。
 
 ---
 

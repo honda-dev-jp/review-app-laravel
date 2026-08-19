@@ -289,11 +289,17 @@ Node.jsとnpmのバージョンを確認します。
 # composer.jsonとcomposer.lockの整合性を確認
 ./vendor/bin/sail composer validate --strict
 
-# PHPUnitテストを実行し、既存機能の回帰がないか確認
-./vendor/bin/sail artisan test
+# lock済み依存の既知脆弱性と実行環境の要件を確認
+./vendor/bin/sail composer audit --locked
+./vendor/bin/sail composer check-platform-reqs --lock
+
+# PHPUnitテストを実行し、既存機能の回帰と非推奨事項を確認
+./vendor/bin/sail php ./vendor/bin/phpunit \
+  --display-deprecations \
+  --display-phpunit-deprecations
 
 # PHPStan / Larastanで静的解析を実行
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse --memory-limit=1G
 
 # Pintでコードスタイル違反がないか確認（自動修正はしない）
 ./vendor/bin/sail php ./vendor/bin/pint --test
@@ -338,13 +344,62 @@ Issueまたは実施履歴には、確認した対象majorと公式URLを記録�
 
 ### 何を見る？
 
-Laravel Upgrade Guideの各項目を次へ分類します。
+Laravel Upgrade Guideの見出しを上から最後まで列挙し、各項目を次へ分類します。影響度がLowまたはVery Lowでも省略しません。
 
 ```text
 該当
 非該当
 追加確認が必要
 ```
+
+Issueまたは実施履歴には、最低限次の列を持つ判定表を残します。
+
+| 公式項目 | 判定 | 調査対象・検索語 | 根拠・結果 | 対応 |
+|---|---|---|---|---|
+| 項目名 | 該当 / 非該当 / 追加確認 | 対象directory、class、method、設定key | 一致箇所、0件、実測結果 | 修正内容または変更不要の理由 |
+
+判定ルール:
+
+- **該当**: 修正、設定判断、または専用回帰確認が必要
+- **非該当**: 現行コードに対象の実装・参照がないことを検索結果とともに記録
+- **追加確認が必要**: 静的検索だけでは決められず、Composer solver、実行時確認、手動回帰などが必要
+- 全項目の判定が閉じるまで、Upgrade Guide確認を完了扱いにしない
+- 全テスト成功だけを、個別のBreaking Changeが非該当である根拠にしない
+
+アプリコードの横断検索は、原則として次の管理対象directoryを含めます。調査対象に応じて拡張し、除外したdirectoryがある場合は理由を記録します。
+
+```text
+app/
+bootstrap/
+config/
+database/
+resources/
+routes/
+tests/
+```
+
+Breaking Changeの対象APIが、アプリコードから直接呼ばれているとは限りません。Bladeディレクティブ、helper、Facadeなどを経由してframework APIへ展開される場合は、PHPのclass・method名だけでなく、テンプレート上の呼び出し形も検索します。
+
+例えば`Js::from`の影響を調べる場合は、少なくとも次を確認します。
+
+```text
+Js::from
+Illuminate\Support\Js
+@js
+@json
+```
+
+直接のclass・method名が一致しないことだけを根拠に「非該当」と判断しません。間接的に利用する構文が見つかった場合は、frameworkでの展開先、実際に渡す値、出力比較テストの有無を確認し、「該当・変更不要」または「該当・対応済み」として根拠を記録します。
+
+`rg`は、一致なしの場合に終了コード`1`を返します。これは検索エラーではありません。終了コードを記録する場合は、次のように区別します。
+
+```text
+0: 1件以上一致
+1: 一致なし
+2以上: 検索エラー
+```
+
+「非該当」と記録できるのは、検索対象・検索語・一致なしを確認し、終了コードが`1`であって検索エラーではないと判断できた場合です。
 
 例:
 
@@ -826,7 +881,7 @@ Security Blockingの実例は
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
 を参照します。
 
-`--no-security-blocking`、advisory ignore、audit結果を回避する設定は通常手順へ持ち越しません。過去の実施履歴に例外が記録されていても、新しいIssueで自動的に再利用しないでください。
+`--no-blocking`、advisory ignore、audit結果を回避する設定は通常手順へ持ち越しません。旧`--no-security-blocking`はComposer公式CLIでdeprecatedとされているため、現行手順では使用しません。過去の実施履歴に例外が記録されていても、新しいIssueで自動的に再利用しないでください。
 
 Security Blockingが発生した場合は停止し、対象advisory、影響version、修正版、今回の移行経路を人間が評価します。例外使用をIssueが明示的に許可しない限り、解除せずに依存解決方法を見直します。
 
@@ -976,11 +1031,31 @@ composer.lockの解決version
 公式Guideに必要と書いてある
 または
 実際にテスト・静的解析で必要と判明した
+または
+対象majorのlaravel/laravel skeleton差分から、現行アプリにも採用すると判断した
 ```
 
 差分だけ修正します。
 
-新Laravel skeletonへ全面作り替えません。
+公式Upgrade Guideに加えて、対象majorの`laravel/laravel` skeleton差分も確認します。設定keyやセキュリティ上重要な既定値、誤解を防ぐコメントは個別に採否を判断し、採用・見送りの理由を実施履歴へ残します。
+
+新Laravel skeletonへ全面作り替えません。既存アプリケーション構造や設定を一括置換せず、必要性を確認できた差分だけを取り込みます。
+
+### 旧middleware classの直接参照を横断確認する
+
+Laravelのmiddleware classが改名またはdeprecated alias化された場合は、アプリ側middlewareの継承元だけで確認を終えません。旧class名と新class名の両方を、少なくとも次の範囲で検索します。
+
+```text
+app/
+bootstrap/
+config/
+routes/
+tests/
+```
+
+検索結果では、middlewareの継承、Kernelまたは`bootstrap/app.php`での登録、パッケージ設定、route、テストからの直接参照を分類します。アプリ固有のclass名として意図的に残す参照と、Laravel Frameworkの旧classを直接参照している箇所を区別します。
+
+Laravel 12から13への更新では、アプリ側CSRF middlewareの継承元を変更した後も、`config/sanctum.php`に旧classの直接参照が残り、レビューで検出しました。設定ファイルを含む横断検索が完了するまで、middleware移行を完了扱いにしません。
 
 ---
 
@@ -1019,11 +1094,18 @@ composer.lockの解決version
 ## 21. Step 17: 自動回帰
 
 ```bash
-# PHPUnitテストを実行し、既存機能の回帰がないか確認
-./vendor/bin/sail artisan test
+# composer.json・lock・既知脆弱性・実行環境要件を再確認
+./vendor/bin/sail composer validate --strict
+./vendor/bin/sail composer audit --locked
+./vendor/bin/sail composer check-platform-reqs --lock
+
+# PHPUnitテストを実行し、既存機能の回帰と非推奨事項を確認
+./vendor/bin/sail php ./vendor/bin/phpunit \
+  --display-deprecations \
+  --display-phpunit-deprecations
 
 # PHPStan / Larastanで静的解析を実行
-./vendor/bin/sail php ./vendor/bin/phpstan analyse
+./vendor/bin/sail php ./vendor/bin/phpstan analyse --memory-limit=1G
 
 # Pintでコードスタイル違反がないか確認（自動修正はしない）
 ./vendor/bin/sail php ./vendor/bin/pint --test
@@ -1143,17 +1225,23 @@ GitHub ActionsのCI結果を確認します。
 
 ## 25. Step 21: develop baseline
 
-PRマージ後に`develop`上で再度:
+PRマージ後は、作業ブランチの結果と混同しないよう、最新の`develop`へ切り替えてから確定baselineを再確認します。
 
-- Laravel / PHP version
-- PHPUnit
-- PHPStan
+確認するもの:
+
+- `develop`と`origin/develop`のcommit一致、`git status --short`がclean
+- Laravel / PHP / Composer / DBの実測version
+- `composer validate --strict`
+- `composer audit --locked`
+- `composer check-platform-reqs --lock`
+- PHPUnitとdeprecation表示
+- PHPStan / Larastan
 - Pint
-- build
-- docs
-- advisory
+- Vite build
+- route数、route name重複、主要route
+- 関連docsの現在値と、既知warning・advisory
 
-を確認します。
+PR CIの結果、マージ前の作業ブランチ実測、マージ後の`develop`実測は別の事実として記録します。実装PRへマージ後の結果を後付けできない場合は、baseline記録専用Issue / PRへ分離します。
 
 ここが次majorの開始地点です。
 
@@ -1244,8 +1332,9 @@ PRマージ後に`develop`上で再度:
 
 毎回最新を確認します。
 
-- Laravel Upgrade Guide: 対象majorの公式ページ
-- Laravel Release Notes / Support Policy
+- Laravel Upgrade Guide: `https://laravel.com/framework/docs/{major}.x/upgrade`
+- Laravel Release Notes / Support Policy: `https://laravel.com/framework/docs/{major}.x/releases`
+- Laravel application skeleton: `https://github.com/laravel/laravel`
 - Composer CLI: https://getcomposer.org/doc/03-cli.md
 - Composer Config / Security policy: https://getcomposer.org/doc/06-config.md
 - PHP supported versions: https://www.php.net/supported-versions.php
