@@ -7,6 +7,7 @@
 - [3. Laravel 11 → 12への引継ぎ](#3-laravel-11--12への引継ぎ)
 - [4. Laravel 10 → 11 完了確認](#4-laravel-10--11-完了確認)
 - [5. Laravel 11.55.1 → 12.66.0](#5-laravel-11551--12660)
+- [6. PHP 8.2.30 → 8.4.24](#6-php-8230--8424)
 
 ---
 
@@ -1101,3 +1102,175 @@ PHP 8.4への実更新はIssue #128では行わず、別Issueで扱う。後続I
 PHP 8.4更新後は、5.11で確定したLaravel 12.66.0 / PHP 8.2.30 baselineと、品質ゲートおよび手動回帰結果を比較する。
 
 Laravel 12 → 13はPHP 8.4更新と分離する。PHP 8.4更新後の`develop` baselineを確定してから、Laravel 12 → 13を別Issueとして開始する。Issue #128ではPHP 8.4およびLaravel 13の依存変更を行わない。
+
+---
+
+## 6. PHP 8.2.30 → 8.4.24
+
+### 6.1 記録範囲
+
+```text
+親Issue: #69
+子Issue: #130
+branch: chore/130-upgrade-php-84
+起点: develop / 810a059
+記録時点: 作業ブランチ上（PR・CI・developマージ前）
+```
+
+Issue #130では、PR #127で`develop`へマージ済みのLaravel 12.66.0を維持し、ローカルSailとGitHub ActionsのPHP対象を8.2から8.4へ変更した。
+
+この記録時点で、Issue #130の変更は`main`およびXServer本番環境へ未反映である。
+
+### 6.2 更新前baseline
+
+Issue #128で確定した、PHP更新前の`develop` baselineは次のとおり。
+
+```text
+Laravel: 12.66.0
+PHP: 8.2.30
+Composer: 2.9.7
+Database: MySQL
+```
+
+詳細は5.11の確定記録を正本とする。
+
+### 6.3 PHP実行環境とルート要件の変更
+
+| 対象 | 変更前 | 変更後 |
+|---|---:|---:|
+| `composer.json` PHP要件 | `^8.2` | `^8.4` |
+| `composer.lock` platform PHP | `^8.2` | `^8.4` |
+| Sail runtime | `runtimes/8.2` | `runtimes/8.4` |
+| Sail image | `sail-8.2/app` | `sail-8.4/app` |
+| GitHub Actions PHP指定 | `8.2` | `8.4` |
+
+`composer.lock`の差分はcontent hashとplatform PHPの変更に限定されている。packageのname、version、source、distに変更はなく、`plugin-api-version`は`2.9.0`を維持している。
+
+### 6.4 PHP 8.4の丸め変更に対する回帰テスト
+
+`ItemRatingService`は、1から5の整数評価の平均を`round(..., 1)`で小数第1位へ丸めて`items.rating`へ保存する。
+
+PHP 8.4の丸め処理変更に対する最小限の回帰確認として、評価17件の`3`と3件の`2`から平均`2.85`を作り、`2.9`と評価件数20件が保存されることを検証するFeatureテストを追加した。追加後の全PHPUnit 128件がPHP 8.4.24上で成功した。
+
+### 6.5 作業ブランチ上で実測済みのversion
+
+| 項目 | 実測値 |
+|---|---:|
+| PHP | 8.4.24 |
+| Composer | 2.10.2（ローカルSailコンテナ内。実行PHP 8.4.24、PHP path `/usr/bin/php8.4`） |
+| Laravel | 12.66.0 |
+| PHPUnit | 11.5.56 |
+| Vite | 6.4.3 |
+| Node.js | 24.19.0 |
+| npm | 12.0.2 |
+
+`composer.lock`の`plugin-api-version`は`2.9.0`を維持している。
+
+### 6.6 XServer本番環境との区別
+
+XServerで過去に実測したPHPは次のとおり。これらはIssue #130のローカルSail更新結果ではない。
+
+| 対象 | XServer実測値 |
+|---|---:|
+| Web実行PHP | 8.4.20 |
+| SSH上の通常`php`（`~/bin/php`） | 8.3.30 |
+| `/usr/bin/php8.4` | 8.4.20 |
+
+ローカルSailコンテナ内の`/usr/bin/php8.4`はPHP 8.4.24、XServer上の`/usr/bin/php8.4`はPHP 8.4.20であり、同じpath表記でも別の実行環境である。
+
+Issue #130でXServerのPHP設定変更、Composer実行経路の確定、本番デプロイは行っていない。
+
+### 6.7 関連ドキュメント
+
+作業ブランチ上のPHP 8.4.24 baseline候補と、`develop`・`main`・本番環境へ未反映である状態を関連ドキュメントへ反映した。
+
+また、`docs/LARAVEL_UPGRADE_GUIDE.md`にPHPバージョン更新の標準手順を追加した。標準手順とIssue #130の実測履歴を分け、後続のPHP更新で再利用する手順はガイド、今回の値と結果は本履歴を正本とする。
+
+### 6.8 ComposerとPHP platform確認
+
+| 項目 | 結果 |
+|---|---|
+| `composer validate --strict` | PASS（`./composer.json is valid`） |
+| `composer audit --locked` | PASS（`No security vulnerability advisories found.`） |
+| `composer check-platform-reqs --lock` | 全項目`success` |
+| PHP platform | PHP 8.4.24および必要なPHP拡張がすべて適合 |
+
+2026-08-19に作業ブランチ上のローカルSail環境で`./vendor/bin/sail composer install`を実行した。lock fileから依存関係を確認した結果は`Nothing to install, update or remove`で、optimized autoloadの生成、`Illuminate\Foundation\ComposerScripts::postAutoloadDump`、`php artisan package:discover`が成功した。discovery対象の`askdkc/breezejp`、`barryvdh/laravel-ide-helper`、`laravel/breeze`、`laravel/sail`、`laravel/sanctum`、`laravel/tinker`、`nesbot/carbon`、`nunomaduro/collision`、`nunomaduro/termwind`、`spatie/laravel-ignition`はすべて`DONE`となった。package versionの変更および`composer.lock`の追加変更はなかった。
+
+### 6.9 自動回帰結果
+
+| 項目 | 結果 |
+|---|---|
+| PHPUnit | 11.5.56 / Runtime PHP 8.4.24 / 128 tests / 1375 assertions / OK |
+| PHPUnit deprecation | `--display-deprecations`および`--display-phpunit-deprecations`で表示なし |
+| PHPStan / Larastan | 66/66、No errors |
+| Pint | 109 files、PASS |
+| `npm ci` | 121 packages added / 122 packages audited / 完了 |
+| Vite build | Vite 6.4.3 / 56 modules transformed / 805ms / 成功 |
+| route | 30件 / route name重複0件 |
+
+`jq`は未導入のため、route数とroute name重複は`route:list --json`の出力をSail内のPHPで解析して確認した。
+
+### 6.10 npmの既知警告
+
+`npm ci`では、更新前から継続する`1 high severity vulnerability`を再検出した。この1件はIssue #126の実施履歴5.2および5.7で既知の別npm課題として記録済みである。Issue #130で`npm audit fix`は実行していない。
+
+また、npm 12.0.2による`esbuild@0.25.12`のinstall scriptブロック警告を再確認した。install scriptの承認は行っていない。`esbuild@0.25.12`は`package-lock.json`の現在値であり、Viteとesbuildの既知Dependabot alertsはIssue #113で対応済みである。一方、このinstall scriptブロック警告自体の専用管理Issueまたはdocs記録は、この記録時点では確認できなかった。専用の調査Issueは現時点で作成せず、Laravel 14を`main`へマージした後に作成要否を検討する。
+
+package更新、`npm audit fix`、install script承認は、いずれもPHP 8.4更新に必要な変更とは確認されていないため、Issue #130へ混在させていない。
+
+### 6.11 手動回帰結果
+
+2026-08-19に人間が、Issue #130の作業ブランチ上のPHP 8.4.24ローカルSail環境で画面表示と操作結果を確認した。これはPR CIまたは`develop`マージ後の確認ではない。
+
+#### ゲスト
+
+- 作品一覧13件を表示した
+- 1ページ目に1〜10件、2ページ目に11〜13件を表示し、ページネーションを操作できた
+- 作品詳細、平均評価、評価件数、レビュー、返信を表示できた
+- 未認証時のレビュー・返信ログイン案内を表示できた
+
+#### 認証・プロフィール
+
+- 新規登録後に自動ログインし、作品一覧へ遷移できた
+- ログインとログアウトを実行できた
+- ニックネームと自己紹介を更新できた
+- アバターを新規登録・差し替えし、アカウント画面とヘッダーへの反映を確認した
+- パスワードを変更し、旧パスワードによるログインが拒否されることを確認した
+- Mailpitでパスワードリセットメールを受信し、再設定後の新パスワードでログインできた
+
+#### レビュー・返信・評価キャッシュ
+
+- `Cupiditate exercitationem ut.`へ5星レビューを投稿できた
+- 投稿前の`2.0 / 2件`から投稿後の`3.0 / 3件`へ平均評価と評価件数が更新された
+- `PHP 8.4返信テスト`を親レビュー内へ表示できた
+- 本人レビュー一覧からレビューを削除し、配下の返信も表示から消失した
+- 削除後、平均評価と評価件数が`2.0 / 2件`へ復元した
+
+#### 本人レビュー一覧
+
+- 全11件を確認した
+- 1ページ目に1〜10件、2ページ目に11件目を表示できた
+- ページ番号、前後移動、作品詳細への導線を操作・表示できた
+
+#### アカウント削除
+
+- 確認モーダルを表示し、現在のパスワード入力後にアカウントを削除できた
+- 削除後に自動ログアウトし、作品一覧へ遷移できた
+- `Quidem perspiciatis omnis minus eos.`の5星レビューは削除されず、退会後の投稿者が「匿名」と表示された
+- レビュー本文と評価が保持され、平均評価と評価件数は`4.0 / 4件`を維持した
+
+#### 表示幅
+
+- デスクトップ幅とモバイル幅で主要画面を表示できた
+- モバイル幅でレスポンシブヘッダーとメニューを開閉できた
+- 作品一覧、作品詳細、本人レビュー一覧、アカウント、ログイン画面を確認した
+- 横方向の重大な表示崩れはなかった
+
+### 6.12 この記録時点で未確認の結果
+
+次の項目は、この依頼で実測結果が提示されていないため、実行済みまたはPASSとは記録しない。
+
+- GitHub Actions CI
+
+今後、これらの結果を実測した場合は、作業ブランチ上、PR CI、マージ後の`develop`のどの時点で確認したかを区別して追記する。

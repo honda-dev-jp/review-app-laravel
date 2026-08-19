@@ -44,8 +44,8 @@ Laravelメジャーアップグレードの標準手順は
 を参照する。
 
 MVP2では一般公開を目標とする。
-Issue #126の作業ブランチではLaravel 12.66.0を短期baselineとして確認しているが、
-このIssueでは`main`への同期およびXServerへのデプロイは行わない。
+Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineである。
+Issue #130の作業ブランチでは、ローカル開発環境をPHP 8.4.24へ更新した後のbaseline候補を確認している。この変更はPR未作成で、`develop`・`main`およびXServerの本番環境へ未反映である。
 
 現時点で分かっている情報を以下の区分で整理する。
 
@@ -72,8 +72,9 @@ Issue #126の作業ブランチではLaravel 12.66.0を短期baselineとして�
 
 | 項目 | 状態 | 備考 |
 |---|---|---|
-| 開発中のLaravel版 | 確認済み | Issue #126の作業ブランチでLaravel 12.66.0へ更新した短期baseline |
-| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #126では`main`への同期およびXServerへのデプロイを行わない |
+| 開発中のLaravel版 | 確認済み | Laravel 12.66.0。PR #127で`develop`へマージ済みの確定baseline |
+| ローカル開発環境のPHP版 | 確認中 | PHP 8.4.24。Issue #130の作業ブランチ上で更新後baseline候補を確認中。PR未作成、`develop`未反映 |
+| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #130では`main`への同期およびXServerへのデプロイを行わない |
 | Laravel 11を`main`へ同期する | 方針決定済み | 実施しない |
 | Laravel 11をXServerへデプロイする | 方針決定済み | 実施しない |
 | Laravel Sail をローカル開発で使用する | 確定 | 本番環境では使用しない |
@@ -109,7 +110,8 @@ Issue #126の作業ブランチではLaravel 12.66.0を短期baselineとして�
 
 - 本番反映時は、その時点でプロジェクトが採用すると決定した**本番反映対象のLaravel版**を使用する
 - メジャーアップグレード途中の中継baselineを、動作確認済みという理由だけで`main`や本番環境へ反映しない
-- Issue #126のLaravel 12.66.0は作業ブランチ上の短期baselineとし、このIssueでは`main`への同期およびXServerへのデプロイを行わない
+- Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineとする
+- Issue #130のPHP 8.4.24は作業ブランチ上の更新後baseline候補とし、PR作成前で`develop`へも未反映である。このIssueでは`main`への同期およびXServerへのデプロイを行わない
 - MySQL を使用する
 - Laravel Breeze 導入済み
 - Laravel Sail はローカル開発環境専用とする
@@ -351,7 +353,10 @@ composer install --no-dev --optimize-autoloader
 ### 注意点
 
 - Composer実行前に、SSH上で実際に使用されるCLI PHPバージョンを確認する
-- 現時点では通常の`php`はPHP 8.3.30、`/usr/bin/php8.4`ではPHP 8.4.20を確認済み
+- Issue #130で`composer.json`のPHP要件は`^8.4`となる
+- XServerのWeb実行PHPは8.4.20、SSH上の通常の`php`は`~/bin/php`経由の8.3.30、`/usr/bin/php8.4`は8.4.20を確認済み
+- 通常のCLI PHP 8.3.30は`php: ^8.4`を満たさないため、Issue #130反映後の本プロジェクトのComposer実行時PHPには使用できない
+- XServer上の具体的なComposer実行方法は未検証であり、Issue #130で本番操作やデプロイは行わない
 - 本番反映時は、採用するLaravel版のPHP要件とXServerのWeb実行PHP・CLI PHPの整合を確認する
 - LaravelアップグレードとPHPバージョン変更は、原因切り分けのため無計画に同じ作業へ混ぜない
 - メモリ制限やタイムアウトで失敗する可能性がある

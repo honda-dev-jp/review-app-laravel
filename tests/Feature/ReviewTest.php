@@ -177,6 +177,39 @@ class ReviewTest extends TestCase
     }
 
     /**
+     * PHP 8.4環境でも、平均値が丸め境界となる場合に
+     * 小数第1位へ期待どおり丸められることを保証する。
+     */
+    public function test_item_rating_cache_rounds_half_boundary_to_one_decimal_place(): void
+    {
+        $item = Item::factory()->create();
+        $users = User::factory()->count(20)->create();
+        $now = now();
+
+        // ReviewFactoryのafterCreatingによる自動集計を避け、
+        // 集計対象を準備してからItemRatingServiceを1回だけ実行する。
+        Review::query()->insert(
+            $users
+                ->map(fn (User $user, int $index): array => [
+                    'user_id' => $user->id,
+                    'item_id' => $item->id,
+                    'rating' => $index < 17 ? 3 : 2,
+                    'body' => 'PHP 8.4の丸め境界確認用レビューです。',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])
+                ->all()
+        );
+
+        app(ItemRatingService::class)->refresh($item);
+        $item->refresh();
+
+        // (3 × 17 + 2 × 3) ÷ 20 = 2.85
+        $this->assertSame(2.9, (float) $item->rating);
+        $this->assertSame(20, $item->rating_count);
+    }
+
+    /**
      * レビュー投稿は会員機能なので、
      * 未ログインユーザーが投稿できないことを保証する。
      */
