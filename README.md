@@ -14,7 +14,7 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravelへ移�
 
 ## 使用技術
 
-- PHP 8.2.30
+- PHP 8.4.24（Issue #130の作業ブランチ上で確認した更新後baseline候補。PR未作成、`develop`・`main`・本番環境へ未反映）
 - Laravel 12.66.0（PR #127を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
 - Laravel Sail
 - MySQL

@@ -32,7 +32,8 @@
 - [28. やってはいけないこと](#28-やってはいけないこと)
 - [29. 用語集](#29-用語集)
 - [30. 公式一次情報](#30-公式一次情報)
-- [31. 最後に](#31-最後に)
+- [31. PHPバージョン更新の標準手順](#31-phpバージョン更新の標準手順)
+- [32. 最後に](#32-最後に)
 
 ---
 
@@ -1260,7 +1261,371 @@ Composer公式では:
 
 ---
 
-## 31. 最後に
+## 31. PHPバージョン更新の標準手順
+
+### 31.1 この手順の目的
+
+LaravelのメジャーアップグレードやDependabot Alertsへの対応により、
+PHPの対応バージョンを変更する必要が生じた場合の標準手順を定める。
+
+PHP更新はLaravelメジャーアップグレードと別Issue・別Pull Requestで扱う。
+一度に変更すると、依存関係、Sail、CI、PHP自体の仕様変更のどれが原因で失敗したか切り分けにくくなるためである。
+
+各PHP更新で実際に使用したバージョン、実行結果、発生した問題は、
+[Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
+へ記録する。
+
+### 31.2 対象範囲を決める
+
+PHP更新Issueでは、原則として次の項目だけを扱う。
+
+- `composer.json`のPHP要件
+- `composer.lock`のplatform情報
+- `compose.yaml`のSail runtimeとimage
+- GitHub Actionsで使用するPHPバージョン
+- PHP仕様変更の影響を確認するために必要な最小限のテスト
+- PHP更新後の関連ドキュメント
+
+次の変更は混ぜない。
+
+- Laravelのメジャーアップグレード
+- Composer依存パッケージの不要な更新
+- npm依存パッケージの更新
+- UI・UXの変更
+- 無関係なリファクタリング
+- XServer本番環境への反映
+
+### 31.3 作業開始条件
+
+PHP更新を始める前に、次の条件をすべて満たしていることを確認する。
+
+- 更新前のLaravel baselineが`develop`で確定している
+- 更新対象のPHPバージョンが明確である
+- 対象Laravel版が更新先PHPをサポートしている
+- Sailに更新先PHPのruntimeが存在する
+- Composer依存関係に明らかな互換性阻害要因がない
+- 作業ブランチが最新の`develop`から作成されている
+- 作業開始時点の作業ツリーがcleanである
+
+Laravelのサポート状況、PHP要件、Sail runtimeについては、
+Laravelおよび各パッケージの公式一次情報を確認する。
+
+### 31.4 変更前baselineを記録する
+
+変更前に、ブランチ、コミット、作業ツリー、実行環境、依存関係、回帰確認の結果を記録する。
+
+```bash
+git branch --show-current
+git log --oneline -n 1
+git status --short
+
+./vendor/bin/sail artisan about
+./vendor/bin/sail php -v
+./vendor/bin/sail composer show --locked --direct
+./vendor/bin/sail composer validate --strict
+./vendor/bin/sail composer audit --locked
+./vendor/bin/sail composer check-platform-reqs --lock
+
+./vendor/bin/sail php ./vendor/bin/phpunit \
+  --display-deprecations \
+  --display-phpunit-deprecations
+
+./vendor/bin/sail php ./vendor/bin/phpstan analyse --memory-limit=1G
+./vendor/bin/sail php ./vendor/bin/pint --test
+./vendor/bin/sail npm run build
+```
+
+次のいずれかに該当する場合は、PHP更新を開始せず停止する。
+
+- Issueの作業ブランチではない
+- 作業開始前から未確認の差分がある
+- PHPUnit、PHPStan、Pint、Vite buildが失敗する
+- Composerのplatform要件を満たしていない
+- 未調査のSecurity Advisoryが新たに検出される
+
+既知のSecurity Advisoryが残っている場合は、関連Issue、対象パッケージ、影響範囲、今回のPHP更新へ混ぜない理由を実施履歴へ記録する。
+
+### 31.5 更新先PHPとの互換性を事前確認する
+
+更新先PHPを指定し、現在の依存関係がそのPHPバージョンを拒否していないか確認する。
+
+```bash
+./vendor/bin/sail composer prohibits php <更新先PHPの完全なバージョン>
+```
+
+例:
+
+```bash
+./vendor/bin/sail composer prohibits php 8.4.24
+```
+
+`prohibits`で阻害パッケージが表示された場合は、次を確認する。
+
+- 直接依存か間接依存か
+- 現在のlock fileに固定されたversion
+- 互換versionが存在するか
+- Laravel更新Issueで既に対応済みか
+- PHP更新Issueへ依存パッケージ更新を含める必要があるか
+
+依存パッケージの更新が必要になった場合は、その更新がPHP対応に不可欠であることを確認する。
+無関係なパッケージ更新が必要になる場合は、PHP更新を停止してIssueの分割を検討する。
+
+### 31.6 SailとCIの変更対象を確認する
+
+変更前に、PHPバージョンを固定している箇所を横断確認する。
+
+```bash
+rg -n \
+  "runtimes/[0-9]+\\.[0-9]+|sail-[0-9]+\\.[0-9]+|php-version|PHP_VERSION|\"php\"" \
+  compose.yaml composer.json .github README.md CLAUDE.md docs .claude
+```
+
+Sailに更新先PHPのruntimeが存在することも確認する。
+
+```bash
+find vendor/laravel/sail/runtimes -maxdepth 1 -mindepth 1 -type d -print
+```
+
+主な変更対象は次のとおりとする。
+
+| ファイル                       | 確認・変更内容                   |
+| -------------------------- | ------------------------- |
+| `composer.json`            | ルートのPHP要件                 |
+| `composer.lock`            | content hashとplatform情報   |
+| `compose.yaml`             | Sailのruntimeとimage        |
+| `.github/workflows/ci.yml` | CIで使用するPHPバージョン           |
+| テスト                        | PHP仕様変更の影響を確認する最小限の境界値テスト |
+| 関連docs                     | 開発環境の現在値と実施履歴             |
+
+XServerのWeb実行PHPとCLI PHPは、ローカルのSail PHPとは別に管理する。
+ローカルPHPの更新だけを根拠に、XServer側のPHPバージョン記録を書き換えない。
+
+### 31.7 PHPバージョンを固定しているファイルを変更する
+
+事前確認で特定した箇所だけを変更する。
+
+主な変更内容は次のとおりとする。
+
+| ファイル | 変更内容の例 |
+|---|---|
+| `composer.json` | PHP要件を更新先の範囲へ変更する |
+| `compose.yaml` | Sail runtimeのパスとimage名を更新する |
+| `.github/workflows/ci.yml` | CIで使用するPHPバージョンを更新する |
+
+例としてPHP 8.4へ更新する場合は、プロジェクトで採用する要件に従い、次のように変更する。
+
+```diff
+-        "php": "^8.2",
++        "php": "^8.4",
+```
+
+```diff
+-            context: './vendor/laravel/sail/runtimes/8.2'
++            context: './vendor/laravel/sail/runtimes/8.4'
+```
+
+```diff
+-        image: 'sail-8.2/app'
++        image: 'sail-8.4/app'
+```
+
+CIの指定方法はworkflowの既存構造を維持し、PHPバージョンの値だけを変更する。
+Laravel、Composer依存パッケージ、npm依存パッケージ、UI、アプリケーション機能はこの段階で変更しない。
+
+変更後に対象差分を確認する。
+
+```bash
+git diff -- composer.json compose.yaml .github/workflows/ci.yml
+git diff --check
+```
+
+想定外のファイルや設定が変更されている場合は、Sailを再構築せず停止する。
+
+### 31.8 Sailイメージを再構築する
+
+`compose.yaml`のruntime変更は、既存コンテナの再起動だけでは反映されない。
+コンテナを停止し、更新先runtimeからSailイメージを再構築する。
+
+```bash
+./vendor/bin/sail down
+./vendor/bin/sail build --no-cache
+./vendor/bin/sail up -d
+```
+
+runtime変更の反映には上記の`down`、`build --no-cache`、`up -d`を使用する。volume削除を伴う`./vendor/bin/sail down -v`は、ローカルDBデータを失う可能性があるため使用しない。
+
+起動後、コンテナの状態と実際のPHPバージョンを確認する。
+
+```bash
+./vendor/bin/sail ps
+./vendor/bin/sail php -v
+./vendor/bin/sail artisan about
+```
+
+次のいずれかに該当する場合は、lock fileを更新せず停止する。
+
+- イメージのbuildに失敗する
+- `laravel.test`、MySQL、Mailpitなど必要なserviceが起動しない
+- 実測したPHPバージョンが更新先と一致しない
+- `artisan about`が実行できない
+
+失敗原因を確認する場合も、`.env`の値や秘密情報をログへ残さない。
+
+### 31.9 composer.lockのplatform情報を整合させる
+
+更新先PHPでSailが正常起動した後、package versionを更新せずに、
+`composer.json`の変更と`composer.lock`のcontent hashおよびplatform情報を整合させる。
+
+```bash
+./vendor/bin/sail composer update --lock --no-install --no-scripts
+```
+
+続けてlock fileの整合性とplatform要件を確認する。
+
+```bash
+./vendor/bin/sail composer validate --strict
+./vendor/bin/sail composer check-platform-reqs --lock
+./vendor/bin/sail composer show --locked --direct
+```
+
+`composer update --lock`の前後で、`composer.lock`に記録されたpackageのname、version、source、distが意図せず変わっていないことを差分で確認する。これらが変わった場合は停止する。`plugin-api-version`など、説明できない`composer.lock`のmetadata差分が発生した場合も停止し、使用したComposerのversionと差分内容を記録する。
+
+```bash
+git diff -- composer.lock
+git diff --stat
+git diff --check
+```
+
+lock差分が想定どおりであることを人間が確認した後、更新先PHPのSailコンテナ内で通常の`composer install`を実行する。
+
+```bash
+./vendor/bin/sail composer install
+```
+
+`composer install`は`composer.lock`に記録されたpackage versionをvendorへ再現し、通常のscriptsとLaravel package discoveryを含む起動経路を確認するために使用する。package versionを更新する工程ではない。`composer update --lock --no-install --no-scripts`でlock差分を先に分離して確認する意図は維持する。
+
+`composer install`でlockどおりのpackageをvendorへ新規インストールする正常な`Installing`表示自体は停止理由にしない。一方、次のいずれかに該当する場合は、そのまま検証へ進まず停止する。
+
+- `composer.lock`に記録されたversionと異なるpackageの導入・更新・削除が発生した
+- PHP以外のplatform要件が意図せず変わった
+- `composer validate`が失敗する
+- `composer check-platform-reqs --lock`が失敗する
+- Composer scriptまたはpackage discoveryが失敗する
+
+PHP対応に不可欠な依存パッケージ更新が必要と判明した場合は、
+更新理由と影響範囲を調査し、PHP更新Issueへ含めるか別Issueへ分割するかを人間が判断する。
+
+### 31.10 更新後の品質ゲートを実行する
+
+更新前baselineと同じ品質ゲートを、更新後のSail環境で実行する。
+
+```bash
+./vendor/bin/sail composer validate --strict
+./vendor/bin/sail composer audit --locked
+./vendor/bin/sail composer check-platform-reqs --lock
+
+./vendor/bin/sail php ./vendor/bin/phpunit \
+  --display-deprecations \
+  --display-phpunit-deprecations
+
+./vendor/bin/sail php ./vendor/bin/phpstan analyse --memory-limit=1G
+./vendor/bin/sail php ./vendor/bin/pint --test
+./vendor/bin/sail npm run build
+```
+
+PHPUnitの成功だけで完了とせず、deprecationおよびPHPUnit deprecationの出力も確認する。
+既知のSecurity Advisoryが残る場合は、更新前からの継続であること、関連Issue、今回のPHP更新へ混ぜない理由を記録する。
+
+自動検証後、既存のMVP回帰確認手順に従って主要機能を目視確認する。
+少なくとも、認証、プロフィール、レビュー、返信、退会、メール送信、Viteで生成した画面資産について、
+今回のPHP更新による回帰がないことを確認する。
+
+更新前は成功していた品質ゲートまたは主要機能が失敗した場合は、
+PHP仕様変更、Sail runtime、Composer platform要件、CI設定のどこで差異が生じたか切り分ける。
+原因が分からない状態で回避コードや依存パッケージ更新を追加しない。
+
+### 31.11 ドキュメントと実施履歴を更新する
+
+すべての品質ゲートと必要な目視確認が完了した後、現在値を記載する関連ドキュメントを更新する。
+
+確認対象の例:
+
+- `README.md`
+- `CLAUDE.md`
+- `docs/COMMANDS.md`
+- `docs/DEVELOPMENT_FLOW.md`
+- `docs/DEPLOYMENT.md`
+- `docs/SECURITY.md`
+- `docs/CLAUDE_CODE_PERMISSION_DESIGN.md`
+- `docs/CLAUDE_CODE_REVIEW.md`
+- `docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md`
+- `.claude/skills/pre-implementation-review/SKILL.md`
+- `.claude/skills/pr-diff-review/SKILL.md`
+
+現在の開発環境、過去の実測記録、本番環境の値を区別する。
+ローカルSailのPHP更新だけを根拠に、XServerのWeb実行PHPまたはCLI PHPの実測記録を変更しない。
+
+`docs/LARAVEL_UPGRADE_HISTORY.md`には、少なくとも次を記録する。
+
+- Issue番号と作業ブランチ
+- 更新前後のPHPバージョン
+- Laravel、Sail、Composer、Node.js、npmなどの実測値
+- 変更したファイル
+- `composer update --lock`の結果
+- PHPUnit、PHPStan、Pint、Vite buildの結果
+- deprecationの有無
+- `composer audit`の結果と既知advisoryの扱い
+- 目視確認の結果
+- 発生した問題と解決内容
+- `main`および本番環境へ未反映である場合はその状態
+
+歴史的記録は現在値へ書き換えない。
+再現しない一時的なWSLやエディタの停止は、PHP更新固有の実施履歴へ混ぜない。
+
+### 31.12 完了条件と停止・切り戻し条件
+
+PHP更新は、次の条件をすべて満たした場合だけレビューへ進める。
+
+- 更新先PHPがSail内で実測できた
+- `composer.json`と`composer.lock`が整合している
+- Composer依存パッケージの意図しないversion変更がない
+- `composer check-platform-reqs --lock`が成功した
+- PHPUnit、PHPStan、Pint、Vite buildが成功した
+- deprecationを確認し、必要な対応または記録を行った
+- Security Advisoryの状態を確認し、未解決分を記録した
+- 必要な主要機能の目視確認が完了した
+- CI設定と関連ドキュメントが更新先PHPと整合している
+- 秘密情報および対象外変更が差分へ含まれていない
+
+最終差分を確認する。
+
+```bash
+git status --short
+git diff --stat
+git diff --check
+git diff -- composer.json composer.lock compose.yaml .github README.md CLAUDE.md docs .claude
+```
+
+次のいずれかに該当する場合は、コミットやPull Request作成へ進まず停止する。
+
+- 失敗原因を特定できていない
+- 品質ゲートに失敗が残っている
+- 依存パッケージの想定外変更がある
+- 更新対象外の機能変更が混在している
+- 本番環境の値を未確認のまま書き換えている
+- 未評価のSecurity Advisoryがある
+
+切り戻しが必要な場合は、作業ブランチ内の今回の変更対象だけを更新前へ戻し、
+更新前の`compose.yaml`からSailイメージを再構築する。
+再構築には`./vendor/bin/sail down`、`./vendor/bin/sail build --no-cache`、`./vendor/bin/sail up -d`を使用する。ローカルDBデータを失う可能性があるため、volume削除を伴う`./vendor/bin/sail down -v`は使用しない。
+ユーザーの未確認変更や別Issueの差分をまとめて破棄しない。
+
+レビュー完了後、人間がGitHub運用ルールに従ってPull Requestを`develop`向けに作成する。
+マージ後は`develop`上でPHPの実測値と品質ゲートを再確認し、その結果を確定baselineとして記録する。
+
+---
+
+## 32. 最後に
 
 Laravelアップグレードで大事なのは、コマンドを全部覚えることではありません。
 

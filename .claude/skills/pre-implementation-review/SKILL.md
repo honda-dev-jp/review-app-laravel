@@ -150,7 +150,7 @@ git update-ref
 
 このSkillは、映画レビューアプリLaravel移植版の既存方針を優先します。
 
-- PHP 8.2.30 / Laravel 12.66.0（Issue #126の作業ブランチ上の短期baseline。`main`および本番環境へは未反映） / Laravel Sail / MySQLを前提とします。
+- PHP 8.4.24 / Laravel 12.66.0（PHPはIssue #130の作業ブランチ上で確認した更新後baseline候補。PR未作成、`develop`・`main`・本番環境へ未反映。Laravel 12.66.0はPR #127で`develop`へマージ済み） / Laravel Sail / MySQLを前提とします。
 - 認証はLaravel BreezeとLaravel標準機能を優先します。
 - 認可はPolicy、Gate、middlewareなどLaravel標準機能を優先します。
 - バリデーションはForm RequestまたはLaravel標準バリデーションを優先します。
