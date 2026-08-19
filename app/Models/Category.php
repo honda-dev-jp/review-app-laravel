@@ -11,14 +11,14 @@ class Category extends Model
     use HasFactory;
 
     /**
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'name',
     ];
 
     /**
-     * @return HasMany<Item>
+     * @return HasMany<Item, $this>
      */
     public function items(): HasMany
     {

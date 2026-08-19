@@ -12,7 +12,7 @@ class Item extends Model
     use HasFactory;
 
     /**
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'category_id',
@@ -24,7 +24,7 @@ class Item extends Model
     ];
 
     /**
-     * @return BelongsTo<Category, Item>
+     * @return BelongsTo<Category, $this>
      */
     public function category(): BelongsTo
     {
@@ -32,7 +32,7 @@ class Item extends Model
     }
 
     /**
-     * @return HasMany<Review>
+     * @return HasMany<Review, $this>
      */
     public function reviews(): HasMany
     {

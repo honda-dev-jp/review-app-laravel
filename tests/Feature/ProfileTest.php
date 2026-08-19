@@ -301,7 +301,7 @@ class ProfileTest extends TestCase
 
             $this->assertNotFalse($attributes);
             $this->assertCount(1, $attributes);
-            $this->assertStringContainsString($expectedValue, $attributes->item(0)?->nodeValue ?? '');
+            $this->assertStringContainsString($expectedValue, $attributes->item(0)->nodeValue ?? '');
         }
 
         $errorShowAttributes = $xpath->query('@*[name()="x-show"]', $error);
@@ -1233,7 +1233,7 @@ class ProfileTest extends TestCase
 
             $this->assertNotFalse($attributes);
             $this->assertCount(1, $attributes);
-            $this->assertStringContainsString($expectedValue, $attributes->item(0)?->nodeValue ?? '');
+            $this->assertStringContainsString($expectedValue, $attributes->item(0)->nodeValue ?? '');
         }
 
         $response

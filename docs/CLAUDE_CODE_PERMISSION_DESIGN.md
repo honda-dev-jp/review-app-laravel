@@ -582,18 +582,18 @@ Hook自身はredirectを追跡せず、HTTP通信も行わない。Claude Code�
 | ホスト | 用途 | apex | サブドメイン | 初期判定 | 根拠 |
 |---|---|---:|---:|---|---|
 | `code.claude.com` | Claude Code公式仕様 | 対象 | 対象外 | ask候補 | Claude Codeの現行公式host |
-| `laravel.com` | Laravel 10公式仕様 | 対象 | 対象外 | ask候補 | Laravel 10.50.2を使用 |
+| `laravel.com` | Laravel公式仕様 | 対象 | 対象外 | ask候補 | `develop`確定baselineはLaravel 13.26.1。PR #135で`develop`へマージ済みで、`main`・本番環境へ未反映 |
 | `docs.github.com` | GitHub公式仕様 | 対象 | 対象外 | ask候補 | GitHub運用・Security |
 | `cli.github.com` | GitHub CLI公式manual | 対象 | 対象外 | ask候補 | ghコマンド設計 |
 | `git-scm.com` | Git公式manual | 対象 | 対象外 | ask候補 | Gitコマンド設計 |
 | `getcomposer.org` | Composer公式仕様 | 対象 | 対象外 | ask候補 | PHP依存管理 |
-| `docs.phpunit.de` | PHPUnit公式仕様 | 対象 | 対象外 | ask候補 | PHPUnit 10系 |
+| `docs.phpunit.de` | PHPUnit公式仕様 | 対象 | 対象外 | ask候補 | `develop`確定baselineはPHPUnit 12.5.33。PR #135で`develop`へマージ済みで、`main`・本番環境へ未反映 |
 | `phpstan.org` | PHPStan公式仕様 | 対象 | 対象外 | ask候補 | PHPStan / Larastan |
-| `docs.npmjs.com` | npm公式仕様 | 対象 | 対象外 | ask候補 | npm 11.13.0を使用 |
-| `www.php.net` | PHP公式manual | 対象 | 対象外 | ask候補 | PHP 8.2.30を使用 |
+| `docs.npmjs.com` | npm公式仕様 | 対象 | 対象外 | ask候補 | npm 12.0.2を使用 |
+| `www.php.net` | PHP公式manual | 対象 | 対象外 | ask候補 | PHP 8.4.24はPR #131で`develop`へマージ済みの確定baseline。`main`・本番環境へ未反映 |
 | `v3.tailwindcss.com` | Tailwind CSS 3公式docs | 対象 | 対象外 | ask候補 | Tailwind CSS 3.4.19を使用 |
-| `vite.dev` | Vite公式docs | 対象 | 対象外 | ask候補 | Vite 5.4.21を使用 |
-| `nodejs.org` | Node.js公式docs | 対象 | 対象外 | ask候補 | Node.js 24.15.0を使用 |
+| `vite.dev` | Vite公式docs | 対象 | 対象外 | ask候補 | Vite 6.4.3を使用 |
+| `nodejs.org` | Node.js公式docs | 対象 | 対象外 | ask候補 | Node.js 24.19.0を使用 |
 | `www.xserver.ne.jp` | XServer公式情報 | 対象 | 対象外 | ask候補 | 本番環境としてXServerを使用 |
 
 初期導入では、上表の14hostをWebFetchのask候補を限定するallowlistとして使用する。自動allowは行わない。各hostは、プロジェクトで使用する技術または運用サービスの公式一次情報であることを、プロジェクト資料または実行環境の実測値で確認済みである。

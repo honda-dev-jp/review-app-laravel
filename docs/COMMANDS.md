@@ -1,5 +1,30 @@
 # コマンド集
 
+## 目次
+
+- [基本方針](#基本方針)
+- [Sailエイリアス設定](#sailエイリアス設定)
+- [Sail起動・停止](#sail起動停止)
+- [コンテナ状態確認](#コンテナ状態確認)
+- [Laravel関連](#laravel関連)
+- [データベース関連](#データベース関連)
+- [ルーティング確認](#ルーティング確認)
+- [認証・Breeze関連](#認証breeze関連)
+- [メール確認（Mailpit）](#メール確認mailpit)
+- [テスト](#テスト)
+- [Claude Code用Python品質確認](#claude-code用python品質確認)
+- [コード整形](#コード整形)
+- [静的解析](#静的解析)
+- [フロントエンド関連](#フロントエンド関連)
+- [キャッシュクリア](#キャッシュクリア)
+- [Composer関連](#composer関連)
+- [npm関連](#npm関連)
+- [Git操作](#git操作)
+- [PR前確認](#pr前確認)
+- [注意点](#注意点)
+
+---
+
 ## 基本方針
 
 このドキュメントでは、映画レビューアプリ Laravel移植版の開発で使用する主なコマンドをまとめる。
@@ -18,6 +43,8 @@ Claude Codeで許可する確認系コマンドと禁止する変更系コマン
 
 - [Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
 - [Claude Codeレビュー運用手順](CLAUDE_CODE_REVIEW.md)
+
+---
 
 ## Sailエイリアス設定
 
@@ -45,12 +72,16 @@ sail test
 
 このプロジェクトのドキュメントでは、環境差を避けるため、基本的に `./vendor/bin/sail` 形式で記述する。
 
+---
+
 ## Sail起動・停止
 
 ```bash
 ./vendor/bin/sail up -d
 ./vendor/bin/sail down
 ```
+
+---
 
 ## コンテナ状態確認
 
@@ -65,6 +96,8 @@ Sailで起動するコンテナの状態を確認する。
 ```bash
 ./vendor/bin/sail ps -a
 ```
+
+---
 
 ## Laravel関連
 
@@ -118,6 +151,8 @@ Controller、Model、FormRequest、Policyなどを作成するときに使用す
 ```
 
 XServer上での実行可否は未検証であるため、本番手順としては確定しない。詳細は `docs/DEPLOYMENT.md` を参照する。
+
+---
 
 ## データベース関連
 
@@ -217,6 +252,8 @@ Seederも同時に実行する場合は、以下を使用する。
 
 誤って実行した場合の復旧手順は、必要に応じて `docs/TROUBLESHOOTING.md` に整理する。
 
+---
+
 ## ルーティング確認
 
 Laravelで定義されているルートを確認する。
@@ -301,6 +338,8 @@ GETやPOSTなど、特定のHTTPメソッドに絞って確認する。
 
 ルーティング設計は `docs/ROUTES.md` に整理し、実装後は `route:list` で差分を確認する。
 
+---
+
 ## 認証・Breeze関連
 
 Laravel Breezeによる認証機能に関する確認コマンドをまとめる。
@@ -369,6 +408,8 @@ Laravel Breezeが導入されているか確認する。
 
 会員のみ利用できる機能は、原則として `auth` ミドルウェアで制御する。
 
+---
+
 ## メール確認（Mailpit）
 
 ローカル環境では、送信されたメールをMailpitで確認する。
@@ -396,6 +437,8 @@ http://localhost:8025
 - ホスト側ポートは `.env` の `FORWARD_MAILPIT_PORT` / `FORWARD_MAILPIT_DASHBOARD_PORT` で変更する
 - Mailpitはローカル開発専用であり、CIおよび本番環境では使用しない
 - Mailpitサービスは `compose.yaml` へ手動追加し、`sail:add` は使用しない
+
+---
 
 ## テスト
 
@@ -451,6 +494,8 @@ PHPUnitによるテスト実行コマンドをまとめる。
 
 認証、認可、レビュー投稿、削除処理など、データ更新を伴う機能はテストで確認する。
 
+---
+
 ## Claude Code用Python品質確認
 
 Claude Code用Python Hook・helperの回帰テストは、Sailを使用せずrepository rootから実行する。
@@ -475,6 +520,8 @@ ruff format --check .claude/hooks/pre_tool_use.py .claude/helpers/ .claude/hooks
 ```
 
 `ruff check --fix`や`ruff format`による自動変更は、CIでは実行しない。
+
+---
 
 ## コード整形
 
@@ -522,6 +569,8 @@ Laravel Pintによるコード整形コマンドをまとめる。
 ```
 
 PR前には、コードスタイル確認を実行する。
+
+---
 
 ## 静的解析
 
@@ -574,6 +623,8 @@ PR前には、テストとあわせて静的解析を実行する。
 
 型エラーや未定義プロパティなどが出た場合は、エラー内容を確認してから修正する。
 
+---
+
 ## フロントエンド関連
 
 Vite、npm、Tailwind CSSなど、フロントエンド関連のコマンドをまとめる。
@@ -615,6 +666,8 @@ PR前には、以下でビルドが成功することを確認する。
 PR前には、`npm run build` が成功することを確認する。
 
 `node_modules/` はGit管理対象に含めない。
+
+---
 
 ## キャッシュクリア
 
@@ -669,6 +722,8 @@ Bladeファイルの変更が反映されない場合に使用する。
 ```
 
 本番環境では、キャッシュ削除により一時的にパフォーマンスへ影響する可能性があるため、実行タイミングに注意する。
+
+---
 
 ## Composer関連
 
@@ -760,7 +815,11 @@ Composer依存パッケージに既知の脆弱性がないか確認する。
 
 `composer audit` で警告が出た場合は、内容を確認してから対応する。
 
-安易に `composer update` を実行せず、Laravel 10との互換性、`composer.json` / `composer.lock` の差分、影響範囲を確認する。
+安易に `composer update` を実行せず、現在使用しているLaravelバージョンとの互換性、`composer.json` / `composer.lock` の差分、影響範囲を確認する。
+
+Laravel本体のメジャーアップグレードを伴う場合は、
+[Laravelメジャーアップグレードガイド](LARAVEL_UPGRADE_GUIDE.md)
+に従う。
 
 ### 注意点
 
@@ -774,6 +833,8 @@ Composer依存パッケージに既知の脆弱性がないか確認する。
 ```
 
 `vendor/` はGit管理対象に含めない。
+
+---
 
 ## npm関連
 
@@ -885,6 +946,8 @@ git diff package.json package-lock.json
 ```
 
 `node_modules/` はGit管理対象に含めない。
+
+---
 
 ## Git操作
 
@@ -1082,6 +1145,8 @@ force pushは使用しない。
 
 Gitコマンド単体の意味と書式はこの章を正本とし、作業開始、コミット前、PR前、マージ後の実行順序と正常系チェックリストは[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を正本とする。
 
+---
+
 ## PR前確認
 
 Pull Request前に使用する各確認コマンドをまとめる。正常系チェックリストと実行順序は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。
@@ -1163,6 +1228,8 @@ PHPUnitはMySQLの`testing`データベースを使用する。
 ### 注意点
 
 実行する確認は変更内容に応じて選ぶ。通常PRと同期PRのマージ前チェック、GitHub ActionsのCI成功確認、Merge commit方式の確認は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)に従う。
+
+---
 
 ## 注意点
 
