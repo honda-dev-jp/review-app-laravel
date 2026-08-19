@@ -50,8 +50,7 @@ Claude Codeは、次の **読み取り専用の検証用途** に限定して使
 このプロジェクトでは、次の技術と方針を使用しています。
 
 - PHP 8.4.24（PR #131を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
-- Laravel 12.66.0（PR #127を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
-- Laravel 13.26.1 / PHPUnit 12.5.33（Issue #134作業ブランチ上の候補状態。`develop`、`main`、本番環境へは未反映）
+- Laravel 13.26.1 / PHPUnit 12.5.33（PR #135を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
 - Laravel Sail
 - MySQL
 - Laravel Breeze

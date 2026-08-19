@@ -10,6 +10,7 @@
 - [6. PHP 8.2.30 → 8.4.24](#6-php-8230--8424)
 - [7. PHP 8.4のdevelop baseline確定](#7-php-84のdevelop-baseline確定)
 - [8. Laravel 12.66.0 → 13.26.1](#8-laravel-12660--13261)
+- [9. Laravel 13のdevelop baseline確定](#9-laravel-13のdevelop-baseline確定)
 
 ---
 
@@ -1504,3 +1505,99 @@ npm更新、`npm audit fix`、install script承認はIssue #134へ混在させ�
 ### 8.9 未確定事項
 
 GitHub ActionsはPR作成後に確認する。PR番号、CI結果、マージ結果、`develop`・`main`・本番環境への反映は、確定後に別途記録する。
+
+---
+
+## 9. Laravel 13のdevelop baseline確定
+
+### 9.1 Issue #136の目的
+
+Issue #136では、第8章に記録したIssue #134作業ブランチ上の候補結果を歴史的記録として維持したまま、PR #135のGitHub Actionsと、マージ後の`develop`上で再確認したLaravel 13 baselineを分離して確定記録する。
+
+本Issueでは依存関係、PHP・JavaScriptコード、設定、テスト、DBを変更しない。
+
+### 9.2 PR #135とGitHub Actions
+
+| 項目 | 確定値 |
+|---|---|
+| PR | #135 |
+| タイトル | `chore: Laravel 12から13へ段階的にアップグレードする` |
+| Base | `develop` |
+| Head | `chore/134-upgrade-laravel-13` |
+| Merge commit | `40594726caf9cb7dd5cf98539c6da36875b6c33f` |
+| mergedAt | 2026-08-19 16:42:24 UTC / 2026-08-20 01:42:24 JST |
+| 実装commit | `d83b89b` |
+| 文書commit | `9c0c1ea` |
+
+PR #135では、次の2 checksが成功した。
+
+| Check | 結果 | 所要時間 |
+|---|---:|---:|
+| `CI/python-quality-checks (pull_request)` | PASS | 8秒 |
+| `CI/quality-checks (pull_request)` | PASS | 1分4秒 |
+
+集計はsuccessful 2件で、cancelled、failing、skipped、pendingはいずれも0件であった。
+
+マージ後、作業ブランチ`chore/134-upgrade-laravel-13`はローカル・リモートとも削除済みである。`git fetch --prune`後、同名のremote-tracking branchが残っていないことも確認した。
+
+### 9.3 マージ後のdevelop確定baseline
+
+PR #135のMerge commitを反映した`develop`上で、本Issueの文書編集を開始する前に次を確認した。
+
+| 項目 | 確定値 |
+|---|---:|
+| PHP | 8.4.24 |
+| Laravel Framework | 13.26.1 |
+| Composer | 2.10.2 |
+| Composer実行PHP | 8.4.24（ローカルSailコンテナ内） |
+| PHPUnit | 12.5.33 |
+| Database | MySQL |
+| `develop` / `origin/develop` | `40594726caf9cb7dd5cf98539c6da36875b6c33f`で一致 |
+| Git状態 | `git status --short`は無出力 |
+
+ローカルSailコンテナ内のPHP 8.4.24と、XServer上の`/usr/bin/php8.4` PHP 8.4.20は別環境である。本IssueではXServerの設定変更、実platform requirements確認、デプロイを行っていない。
+
+### 9.4 直接依存のlock version
+
+| Package | Version |
+|---|---:|
+| `askdkc/breezejp` | 2.6.3 |
+| `barryvdh/laravel-ide-helper` | 3.7.0 |
+| `fakerphp/faker` | 1.24.1 |
+| `guzzlehttp/guzzle` | 7.15.3 |
+| `larastan/larastan` | 3.10.0 |
+| `laravel/breeze` | 2.4.2 |
+| `laravel/framework` | 13.26.1 |
+| `laravel/pint` | 1.30.4 |
+| `laravel/sail` | 1.58.0 |
+| `laravel/sanctum` | 4.3.3 |
+| `laravel/tinker` | 3.0.2 |
+| `mockery/mockery` | 1.6.12 |
+| `nunomaduro/collision` | 8.9.5 |
+| `phpunit/phpunit` | 12.5.33 |
+| `spatie/laravel-ignition` | 2.12.0 |
+
+### 9.5 マージ後のdevelop品質確認
+
+| 品質ゲート | 結果 |
+|---|---|
+| `composer check-platform-reqs --lock` | 全項目`success` |
+| `composer validate --strict` | エラーなし |
+| `composer audit --locked` | `No security vulnerability advisories found.` |
+| PHPUnit | 12.5.33 / 128 tests / 1375 assertions / PASS |
+| PHPUnit / framework deprecation | 表示なし |
+| PHPStan / Larastan | 66/66 / No errors |
+| Pint | 109 files / PASS |
+| Vite | 6.4.3 / 56 modules transformed / 1.00s / PASS |
+| Routes | 30件 / route name重複0 |
+| `git diff --check` | 問題なし |
+| `git status --short` | 無出力 |
+
+### 9.6 確認時点の区別
+
+- CSRF、session、認証、プロフィール、レビュー、退会、デスクトップ幅・モバイル幅の画面表示などの手動回帰は、Issue #134作業ブランチ上で確認した結果である
+- GitHub Actions 2 checksは、PR #135のpull request eventで確認した結果である
+- 9.3〜9.5のbaseline、lock version、品質ゲートは、PR #135マージ後の`develop`上で再確認した結果である
+- Laravel 13.26.1は`develop`へ反映済みだが、`main`およびXServer本番環境へは未反映である
+- `session.serialization=json`は現在の`develop` baselineであり、Laravel 12時点の既存session失効と再ログインは、将来の本番反映時に発生する既知影響である
+- session失効は認証状態への影響であり、DBに保存された永続データを削除するものではない

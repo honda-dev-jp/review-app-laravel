@@ -44,9 +44,8 @@ Laravelメジャーアップグレードの標準手順は
 を参照する。
 
 MVP2では一般公開を目標とする。
-Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineである。
 PHP 8.4.24はPR #131で`develop`へマージ済みの確定baselineである。`main`およびXServerの本番環境へは未反映である。
-Laravel 13.26.1はIssue #134作業ブランチ上の候補状態であり、`develop`、`main`、XServerの本番環境へは未反映である。
+Laravel 13.26.1はPR #135で`develop`へマージ済みの確定baselineである。`main`およびXServerの本番環境へは未反映である。
 
 現時点で分かっている情報を以下の区分で整理する。
 
@@ -73,10 +72,9 @@ Laravel 13.26.1はIssue #134作業ブランチ上の候補状態であり、`dev
 
 | 項目 | 状態 | 備考 |
 |---|---|---|
-| `develop`確定Laravel版 | 確認済み | Laravel 12.66.0。PR #127で`develop`へマージ済みの確定baseline |
-| Issue #134作業ブランチのLaravel版 | 確認済み | Laravel 13.26.1。候補状態であり、`develop`、`main`、本番環境へは未反映 |
+| `develop`確定Laravel版 | 確認済み | Laravel 13.26.1。PR #135で`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映 |
 | ローカル開発環境のPHP版 | 確認済み | PHP 8.4.24。PR #131で`develop`へマージ済みの確定baseline |
-| 本番反映対象のLaravel版 | 要確認 | サポート対象版へ到達後に確定する。Issue #132でも`main`への同期およびXServerへのデプロイを行わない |
+| 本番反映対象のLaravel版 | 要確認 | Laravel 13.26.1は`develop`へ反映済みだが、`main`への同期およびXServerへのデプロイ前に最終判断する |
 | Laravel 11を`main`へ同期する | 方針決定済み | 実施しない |
 | Laravel 11をXServerへデプロイする | 方針決定済み | 実施しない |
 | Laravel Sail をローカル開発で使用する | 確定 | 本番環境では使用しない |
@@ -112,9 +110,8 @@ Laravel 13.26.1はIssue #134作業ブランチ上の候補状態であり、`dev
 
 - 本番反映時は、その時点でプロジェクトが採用すると決定した**本番反映対象のLaravel版**を使用する
 - メジャーアップグレード途中の中継baselineを、動作確認済みという理由だけで`main`や本番環境へ反映しない
-- Laravel 12.66.0はPR #127で`develop`へマージ済みの確定baselineとする
-- Laravel 13.26.1はIssue #134作業ブランチ上の候補状態であり、本番反映対象としてはまだ確定していない
-- PHP 8.4.24はPR #131で`develop`へマージ済みの確定baselineとする。Issue #132では`main`への同期およびXServerへのデプロイを行わない
+- Laravel 13.26.1はPR #135で`develop`へマージ済みの確定baselineとする。ただし、本番反映対象としての最終判断はまだ確定していない
+- PHP 8.4.24はPR #131で`develop`へマージ済みの確定baselineとする
 - MySQL を使用する
 - Laravel Breeze 導入済み
 - Laravel Sail はローカル開発環境専用とする
@@ -137,9 +134,9 @@ Laravel 13.26.1はIssue #134作業ブランチ上の候補状態であり、`dev
 
 ### Laravel 13を本番反映する際の既知影響
 
-Issue #134作業ブランチでは、session serializationをJSONへ変更している。Laravel 13を将来本番反映する際は、Laravel 12時点の既存sessionが引き継がれないため、ログイン中の利用者は再ログインが必要になる。
+PR #135で`develop`へマージされたLaravel 13設定では、session serializationにJSONを使用する。Laravel 13を将来本番反映する際は、Laravel 12時点の既存sessionが引き継がれないため、ログイン中の利用者は再ログインが必要になる。
 
-このsession失効は認証状態への影響であり、DBに保存されたユーザー、作品、レビュー、返信コメント、評価集計に関係する永続データを削除するものではない。Laravel 13.26.1は現時点では作業ブランチ上の候補状態であり、`develop`、`main`、本番環境へは未反映である。
+このsession失効は認証状態への影響であり、DBに保存されたユーザー、作品、レビュー、返信コメント、評価集計に関係する永続データを削除するものではない。この設定は現在`develop`だけに反映済みで、`main`および本番環境へは未反映である。
 
 ---
 
