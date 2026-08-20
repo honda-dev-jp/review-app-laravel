@@ -72,14 +72,15 @@ git branch
 - Vite開発サーバーが起動しているか確認する
 - 開発中は `npm run dev` が必要
 - 本番反映前は `npm run build` を実行する
-- `node_modules/` がない場合は `npm install` を実行する
+- 依存関係を変更する意図がなく、`node_modules/` がない場合は `npm ci` でlockfileどおりに再現する
+- `npm ci` は既存の `node_modules/` がある場合も削除して再インストールする
 - ブラウザキャッシュの可能性を確認する
 - Tailwind CSSのクラス名が正しいか確認する
 - Bladeに `@vite(['resources/css/app.css', 'resources/js/app.js'])` があるか確認する
 - Tailwindの対象ファイルにBladeのパスが含まれているか確認する
 
 ```bash
-./vendor/bin/sail npm install
+./vendor/bin/sail npm ci
 ./vendor/bin/sail npm run dev
 ./vendor/bin/sail npm run build
 ```
@@ -457,17 +458,21 @@ return view('items.index', compact('items'));
 
 確認手順：
 
-- `node_modules/` がない場合は `npm install` を実行する
-- `package.json` と `package-lock.json` を確認する
-- パッケージ追加後は差分を確認する
+- `package.json` と `package-lock.json` の有無と差分を確認する
+- 依存関係を変更する意図がない復旧やCI相当の再現では `npm ci` を実行する
+- `npm ci` は既存の `node_modules/` を削除し、lockfileどおりに再インストールすることを確認してから実行する
+- `package.json` とlockfileが不整合な場合、`npm ci` はlockfileを書き換えずに失敗する
+- direct dependencyの追加は `npm install <package>`、既存依存の更新は `npm update <package>`、lockfileどおりの再現は `npm ci` として目的を混同しない
+- `npm ci` が失敗した場合は、安易な `npm install` や全面更新でlockfileを上書きせず、差分とエラー原因を確認する
 - `npm audit` は脆弱性確認に使う
-- `npm ci` は今すぐ必須ではなく、CI/CDや自動デプロイで検討する
 
 ```bash
-./vendor/bin/sail npm install
+./vendor/bin/sail npm ci
 ./vendor/bin/sail npm run build
 ./vendor/bin/sail npm audit
 ```
+
+依存追加・更新や脆弱性対応の詳細な手順は[コマンド集](COMMANDS.md)を参照する。
 
 ## 29. キャッシュが原因で変更が反映されない
 
