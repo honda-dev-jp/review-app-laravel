@@ -508,7 +508,7 @@ Laravel 10→11で実際に行ったSecurity Blockingの切り分けと判断は
 
 ## 16. npm依存関係の注意
 
-npmパッケージを追加する場合は、必要性を確認する。
+npmパッケージを追加・更新する場合は、必要性と影響範囲を確認する。
 
 公式レジストリから取得していても、サプライチェーン攻撃により悪意あるコードが混入する可能性がある。
 
@@ -519,11 +519,26 @@ npmパッケージを追加する場合は、必要性を確認する。
 - 不要な依存が増えていないか
 - メンテナンスされているパッケージか
 
+Dependabot Alertなどの脆弱性へ対応する場合は、次を確認する。
+
+- GitHub Advisory Databaseやpackageの公式情報で、影響範囲、severity、patched versionを確認する
+- 対象がdirect dependencyかtransitive dependencyか、productionかdevelopmentかなどのscopeを確認する
+- manifestとlockfileから、実際の依存経路と解決versionを確認する
+- 対象packageの新しい依存制約を満たすために必要な子依存更新と、無関係な大規模更新を区別する
+- transitive dependencyの対応だけを目的として、不要なroot direct dependencyを追加しない
+- `npm audit fix`や`npm audit fix --force`を、差分を確認しない一括更新として安易に使用しない
+
 確認コマンド：
 
 ```bash
 ./vendor/bin/sail npm audit
 ```
+
+Dependabotはrepositoryのdefault branchを基準に依存関係を解析する。Alertの最終状態は、修正がdefault branchへ反映され、GitHub側で再解析された後に確認する。
+
+作業ブランチや`develop`で修正済みでも、default branchへの反映前はAlertがOpenのままになる場合がある。その表示だけで修正失敗と判断せず、ローカルの依存version・audit・build・CIと、default branch反映後のAlertを分けて確認する。
+
+対象packageを限定した更新、lockfile差分確認、再現インストールの具体的な手順は[コマンド集](COMMANDS.md)を参照する。
 
 `node_modules/` はGit管理しない。
 

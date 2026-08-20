@@ -886,6 +886,68 @@ npmパッケージを更新する。
 ./vendor/bin/sail npm update
 ```
 
+### 特定packageの脆弱性対応
+
+Dependabot Alertなどで特定のnpm packageを既存のsemver制約内で更新する場合は、対象を限定し、変更予定と実際の差分を段階的に確認する。
+
+まず、現在のversionと依存経路を確認する。
+
+```bash
+./vendor/bin/sail npm list <package>
+```
+
+次に、実更新を行わず、解決予定versionと巻き込み範囲を確認する。
+
+```bash
+./vendor/bin/sail npm update <package> --dry-run
+```
+
+`--dry-run`は変更予定を表示するための確認であり、実更新ではない。対象package、更新予定version、付随して更新されるpackageを確認してから次へ進む。
+
+既存の`node_modules`を変更せず、lockfile側の依存解決だけを更新する場合は、`npm update`に`--package-lock-only`を指定する。
+
+```bash
+./vendor/bin/sail npm update <package> --package-lock-only
+```
+
+`npm update <package>`は対象packageを限定し、projectと依存packageのsemver制約を尊重して更新する。ただし、対象package自身の新しい依存制約を満たすため、子依存packageも更新される場合がある。
+
+`npm update`で`--package-lock-only`を使用した場合は、`node_modules`を確認・更新せず、`package-lock.json`だけを更新する。実行後は、`package.json`が意図せず変更されていないことも含めて差分を確認する。
+
+```bash
+git diff package.json package-lock.json
+```
+
+差分では、次を確認する。
+
+- 対象packageが脆弱性修正版へ更新されている
+- 対象packageの新しい依存制約を満たすために必要な子依存更新だけが含まれている
+- `package.json`のroot direct dependencyが意図せず変更・追加されていない
+- 対象と無関係なpackageの大規模更新が含まれていない
+- `package-lock.json`の`lockfileVersion`が意図せず変更されていない
+
+必要な子依存更新は必要差分として扱う。root direct dependencyの意図しない変更、無関係な大規模更新、説明できないlockfile差分がある場合は、そのまま進めず更新方針を再確認する。
+
+lockfileの差分を確認した後、lockfileどおりに依存関係を再現する。
+
+```bash
+./vendor/bin/sail npm ci
+```
+
+`npm ci`は既存の`node_modules`を削除し、`package-lock.json`どおりに全packageを再インストールする。`package.json`とlockfileが不整合な場合は、lockfileを書き換えずに失敗する。
+
+`--package-lock-only`による更新直後の通常の`npm list`は、更新前の`node_modules`を参照する場合がある。実体のversionは`npm ci`成功後に確認する。
+
+```bash
+./vendor/bin/sail npm list <package>
+./vendor/bin/sail npm audit
+./vendor/bin/sail npm run build
+```
+
+ローカル確認後はGitHub Actions CIの成功を確認する。Dependabot Alertの最終状態は、修正がdefault branchへ反映され、GitHub側で再解析された後に確認する。一般的なセキュリティ判断原則は[セキュリティ方針](SECURITY.md)を参照する。
+
+`npm audit fix`と`npm audit fix --force`は、この対象限定手順の代わりに使用しない。想定外の差分、`npm ci`失敗、Vite build失敗が発生した場合も、一括更新や追加更新で押し切らず、停止して原因と方針を再確認する。
+
 ### 古いnpmパッケージの確認
 
 更新可能なnpmパッケージを確認する。
