@@ -388,12 +388,7 @@ XServer上で `npm install` / `npm run build` を実行する運用にはしな�
 ./vendor/bin/sail npm run build
 ```
 
-ただし、初回導入時や依存パッケージを追加・更新する場合は `npm install` を使用し、`package.json` と `package-lock.json` の差分を確認する。
-
-```bash
-./vendor/bin/sail npm install
-git diff package.json package-lock.json
-```
+依存packageの追加・更新は本番反映作業中に行わず、作業ブランチ上で実施する。`npm install` / `npm update`を含む詳細な手順は[コマンド集](COMMANDS.md)を参照する。
 
 本番反映対象の候補。
 
@@ -412,11 +407,12 @@ public/build
 - `package-lock.json` をGit管理する
 - `node_modules/` はGit管理しない
 - 本番反映用ビルドでは `npm ci` を優先する
-- 依存関係を追加・更新する場合のみ `npm install` を使う
 - `npm audit` で脆弱性を確認する
 - `npm audit fix` は自動で依存関係を変更する可能性があるため、実行前に内容を確認する
 - `npm audit fix --force` は破壊的なメジャー更新を含む可能性があるため、安易に実行しない
 - 脆弱性対応で依存関係を更新した場合は、ビルドとテストを確認する
+
+npm依存関係の追加・更新と脆弱性対応の詳細な手順は[コマンド集](COMMANDS.md)を参照する。
 
 ### Vite開発用URLの公開防止
 
