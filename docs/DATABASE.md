@@ -54,7 +54,7 @@ Laravel Breezeの認証機能をベースに使用する。
 | `id` | bigint unsigned | 主キー |
 | `name` | varchar(255) | ユーザー名 |
 | `email` | varchar(255) | 一意 |
-| `email_verified_at` | timestamp nullable | メール認証を使用する場合に利用 |
+| `email_verified_at` | timestamp nullable | メール認証状態。未認証時は `null`、認証完了後は日時、メールアドレス変更時は `null` |
 | `password` | varchar(255) | ハッシュ化したパスワード |
 | `role` | varchar(20) | 権限。初期値は `user` |
 | `profile` | text nullable | 自己紹介文 |
@@ -70,6 +70,8 @@ Laravel Breezeの認証機能をベースに使用する。
 アカウント画面でプロフィール情報とユーザーアイコンを扱うため、Breeze標準の `users` テーブルへ、このプロジェクトで `profile` と `avatar_path` を追加している。
 
 ユーザーアイコン機能では既存の `avatar_path` を使用するため、追加マイグレーションは行っていない。
+
+メール認証では既存の `email_verified_at` を使用する。Laravel版はまだ本番デプロイしていないため、Issue #93では本番既存ユーザー向けのバックフィルやデータ補正用マイグレーションは追加しない。
 
 `avatar_path` には `avatars/...` 形式のpublicディスク内相対パスを保存し、公開URL、元ファイル名、共通のNo Image画像のパスは保存しない。未設定時は `null` とする。
 

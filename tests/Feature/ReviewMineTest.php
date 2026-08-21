@@ -55,6 +55,24 @@ class ReviewMineTest extends TestCase
     }
 
     /**
+     * Issue #93で本人レビュー一覧はメール認証不要の既存会員機能として維持するため、
+     * verified ミドルウェアが過剰適用されても検出できるように未認証ユーザーの表示を保証する。
+     */
+    public function test_unverified_user_can_view_my_reviews_page(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('reviews.mine'));
+
+        $response
+            ->assertOk()
+            ->assertSee('投稿したレビュー')
+            ->assertSee('レビュー履歴');
+    }
+
+    /**
      * 本人レビュー一覧固有の表示とPC・モバイル用ナビゲーションは別要素であるため、
      * いずれか一つだけアバター表示が欠落する回帰を防ぐ。
      */
