@@ -180,7 +180,7 @@ CodexおよびClaude Codeのレビューでは、Critical・High・Mediumの修�
 | 作品一覧の並び順専用テスト | 追加不要 | ページネーションテストで時刻と代表項目を確認しており、専用テストは重複になる |
 | 本人レビュー一覧のHTML構造固定 | 追加不要 | 作品・本文・評価・削除導線の意味的な表示契約を確認済み |
 | モーダルのJavaScript実動作・フォーカス移動 | 手動確認 | Featureテストでは実ブラウザ操作を保証できないため、Issue #40・Issue #75・Issue #80で対象を限定して確認済み |
-| メール認証 | MVP2以降 | MVP1では`MustVerifyEmail`を有効化しておらず、メール認証機能は後続フェーズで実装する |
+| メール認証 | MVP2以降 | MVP1時点では`MustVerifyEmail`を有効化していなかった。Issue #93でLaravel標準のメール認証を実装し、既存4 testsに6 testsを追加して`EmailVerificationTest`を計10 tests構成とした |
 | E2E・Playwright | MVP2以降 | MVP1では新しいテスト基盤を導入しない |
 | `fillable`方針の整理 | 別Issue | 現時点で具体的な脆弱性は確認されておらず、設計・文書・実装方針の整理として分離する |
 

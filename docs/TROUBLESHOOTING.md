@@ -289,9 +289,12 @@ grep APP_KEY .env
 確認手順：
 
 - `auth` middlewareが付いているか確認する
+- メール認証必須の操作では `verified` middlewareが付いているか確認する
 - ログイン状態か確認する
+- ログイン済み・メール未認証の状態と未ログイン状態を区別する
 - Policyを使う場合はPolicyが登録されているか確認する
 - ルート、Controller、Policyの責務を分けて確認する
+- レビュー投稿とレビュー返信投稿はメール認証済みユーザーだけ許可しているか確認する
 - レビュー削除は自分のレビューのみ許可しているか確認する
 - レビュー削除導線は本人のレビュー一覧画面にのみ表示する方針になっているか確認する
 - 会員退会はログインユーザー本人のみ実行できる設計になっているか確認する
@@ -305,7 +308,8 @@ grep APP_KEY .env
 確認手順：
 
 - `POST /items/{item}/reviews` のルートが存在するか確認する
-- `auth` middlewareが付いているか確認する
+- `auth` と `verified` middlewareが付いているか確認する
+- ログイン済みでもメール未認証の場合は、`verification.notice` へリダイレクトされる
 - フォームに `@csrf` があるか確認する
 - `body` と `rating` のname属性がControllerやForm Requestと一致しているか確認する
 - `rating` が1〜5の範囲でバリデーションされているか確認する
@@ -340,7 +344,8 @@ grep APP_KEY .env
 
 - `POST /reviews/{review}/comments` のルートが存在するか確認する
 - ルート名が `reviews.comments.store` と一致しているか確認する
-- `auth` middlewareが付いているか確認する
+- `auth` と `verified` middlewareが付いているか確認する
+- ログイン済みでもメール未認証の場合は、`verification.notice` へリダイレクトされる
 - フォームに `@csrf` があるか確認する
 - `review_comments` テーブルを使用しているか確認する
 - 初期移植フェーズでは1階層コメントのみ対応する方針になっているか確認する
@@ -910,3 +915,63 @@ http://localhost:8025
 ```
 
 9. ホスト側ポートを変更している場合は、`.env` の `FORWARD_MAILPIT_DASHBOARD_PORT` を確認する
+
+## 45. 認証メールがMailpitに届かない
+
+確認手順：
+
+1. `mailpit` コンテナが起動しているか確認する
+
+```bash
+./vendor/bin/sail ps
+```
+
+2. ローカル環境の `.env` でMailpit向けのMAIL設定になっているか確認する
+
+`.env` の実値はドキュメントへ転載しない。
+
+3. `.env` を変更した場合は設定キャッシュをクリアする
+
+```bash
+./vendor/bin/sail artisan config:clear
+```
+
+4. メール認証関連ルートを確認する
+
+```bash
+./vendor/bin/sail artisan route:list --name=verification
+```
+
+5. `User` モデルが `MustVerifyEmail` を実装しているか確認する
+
+6. 会員登録時に `Registered` イベントが発火しているか確認する
+
+7. Mailpit Web UIを確認する
+
+```text
+http://localhost:8025
+```
+
+## 46. 認証URLが403になる
+
+確認手順：
+
+- URLに署名が付いているか確認する
+- 署名付きURLの有効期限が切れていないか確認する
+- ログイン中のユーザーと認証URLの対象ユーザーが一致しているか確認する
+- メール本文の認証URLを途中で欠けた状態で開いていないか確認する
+
+Issue #93のFeatureテストでは、署名なしURL、期限切れ署名URL、別ユーザー用署名URLが403になることを確認している。
+
+## 47. メール未認証でレビュー投稿・レビュー返信投稿ができない
+
+これは現行仕様である。
+
+レビュー投稿とレビュー返信投稿は `auth` と `verified` ミドルウェアで保護しているため、ログイン済みでもメール未認証の場合は認証案内画面へリダイレクトされ、保存されない。
+
+確認手順：
+
+- Mailpitで認証メールを確認する
+- メール本文の認証URLから認証を完了する
+- 認証完了後にレビュー投稿またはレビュー返信投稿を再実行する
+- アカウント画面の「メールアドレスが未確認です」の表示が消えているか確認する

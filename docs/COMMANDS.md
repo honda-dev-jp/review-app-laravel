@@ -393,7 +393,7 @@ Laravel Breezeが導入されているか確認する。
 
 ### 認証ミドルウェアの確認
 
-ログイン必須ページに `auth` ミドルウェアが付いているか確認する。
+ログイン必須ページに `auth` ミドルウェアが付いているか、メール認証必須の操作に `verified` ミドルウェアが付いているか確認する。
 
 ```bash
 ./vendor/bin/sail artisan route:list
@@ -406,7 +406,32 @@ Laravel Breezeが導入されているか確認する。
 - Action
 - Middleware
 
-会員のみ利用できる機能は、原則として `auth` ミドルウェアで制御する。
+会員のみ利用できる機能は `auth` ミドルウェアで制御する。レビュー投稿とレビュー返信投稿は、メール認証済みユーザーに限定するため `verified` ミドルウェアも確認する。
+
+### メール認証関連ルートの確認
+
+メール認証案内、認証URL、認証メール再送のルートを確認する。
+
+```bash
+./vendor/bin/sail artisan route:list --name=verification
+./vendor/bin/sail artisan route:list --path=verify-email
+./vendor/bin/sail artisan route:list --path=email/verification-notification
+```
+
+確認時は、次を見て実装と `docs/ROUTES.md` が一致していることを確認する。
+
+- `verification.notice` は `auth`
+- `verification.verify` は `auth`、`signed`、`throttle`
+- `verification.send` は `auth`、`throttle`
+
+### レビュー投稿の `verified` 確認
+
+レビュー投稿とレビュー返信投稿だけが `auth` と `verified` の両方で保護されていることを確認する。
+
+```bash
+./vendor/bin/sail artisan route:list --name=reviews
+./vendor/bin/sail artisan route:list --name=reviews.comments
+```
 
 ---
 
@@ -424,7 +449,7 @@ Laravel Breezeが導入されているか確認する。
 
 ### Mailpit Web UI
 
-ブラウザで以下を開き、受信したメールの件名、本文、再設定URLを確認する。
+ブラウザで以下を開き、受信したメールの件名、本文、URLを確認する。
 
 ```text
 http://localhost:8025
@@ -437,6 +462,7 @@ http://localhost:8025
 - ホスト側ポートは `.env` の `FORWARD_MAILPIT_PORT` / `FORWARD_MAILPIT_DASHBOARD_PORT` で変更する
 - Mailpitはローカル開発専用であり、CIおよび本番環境では使用しない
 - Mailpitサービスは `compose.yaml` へ手動追加し、`sail:add` は使用しない
+- パスワードリセットでは再設定URL、メール認証では認証URLを確認する
 
 ---
 
