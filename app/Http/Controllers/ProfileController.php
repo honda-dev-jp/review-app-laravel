@@ -117,8 +117,10 @@ class ProfileController extends Controller
             throw new \RuntimeException('退会処理に失敗しました。');
         }
 
-        // logout時に削除済みUserのremember_tokenが更新され、再保存されることを防ぐ
-        $user->setRememberToken(null);
+        // Auth::logout() はremember tokenが空でない場合にトークンを再生成するため、
+        // 削除済みUserの再保存を防ぐ目的で、string型契約を満たす空文字列を設定する。
+        // 退会時ログアウト方式の詳細な検討はIssue #150を参照。
+        $user->setRememberToken('');
 
         Auth::logout();
 
