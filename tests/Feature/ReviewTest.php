@@ -275,6 +275,27 @@ class ReviewTest extends TestCase
     }
 
     /**
+     * メール未認証ユーザーからの公開レビュー投稿を防ぐため、
+     * 認証案内画面へリダイレクトされ、レビューが保存されないことを保証する。
+     */
+    public function test_unverified_user_cannot_store_review(): void
+    {
+        $user = User::factory()->unverified()->create();
+        $item = Item::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->post(route('reviews.store', $item), [
+                'rating' => 5,
+                'body' => '未認証ユーザーのレビューです。',
+            ]);
+
+        $response->assertRedirect(route('verification.notice'));
+
+        $this->assertDatabaseCount('reviews', 0);
+    }
+
+    /**
      * 不正な評価値や空の本文を保存しないため、
      * StoreReviewRequest のバリデーションが効くことを保証する。
      */
@@ -560,6 +581,48 @@ class ReviewTest extends TestCase
     }
 
     /**
+     * Issue #93でレビュー削除はメール未認証でも使える既存管理機能として維持するため、
+     * verified ミドルウェアが過剰適用されても検出できるように自分のレビュー削除を保証する。
+     */
+    public function test_unverified_user_can_delete_own_review_and_rating_cache_is_recalculated(): void
+    {
+        $user = User::factory()->unverified()->create();
+        $otherUser = User::factory()->create();
+        $item = Item::factory()->create();
+
+        $ownReview = Review::factory()->create([
+            'user_id' => $user->id,
+            'item_id' => $item->id,
+            'rating' => 5,
+            'body' => '未認証ユーザーが削除するレビューです。',
+        ]);
+
+        Review::factory()->create([
+            'user_id' => $otherUser->id,
+            'item_id' => $item->id,
+            'rating' => 3,
+            'body' => '未認証ユーザーの削除後に残るレビューです。',
+        ]);
+
+        $response = $this
+            ->actingAs($user)
+            ->delete(route('reviews.destroy', $ownReview));
+
+        $response
+            ->assertRedirect(route('items.show', $item))
+            ->assertSessionHas('status', 'レビューを削除しました。');
+
+        $this->assertDatabaseMissing('reviews', [
+            'id' => $ownReview->id,
+        ]);
+
+        $item->refresh();
+
+        $this->assertSame(3.0, (float) $item->rating);
+        $this->assertSame(1, $item->rating_count);
+    }
+
+    /**
      * 最後のレビュー削除時は平均評価を表示できなくなるため、
      * rating を null、rating_count を 0 に戻せることを保証する。
      */
@@ -716,6 +779,10 @@ class ReviewTest extends TestCase
         ]);
     }
 
+    /**
+     * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するため、
+     * HTMLを安全に解析してXPathを生成する。
+     */
     private function createXPath(string $html): DOMXPath
     {
         // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
@@ -733,6 +800,10 @@ class ReviewTest extends TestCase
         }
     }
 
+    /**
+     * 重複IDや対象要素の欠落を見逃さず、ARIA属性などを対象要素自身で検証するため、
+     * 指定IDの要素が1件だけ存在することを確認してDOMElementとして返す。
+     */
     private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
     {
         $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));

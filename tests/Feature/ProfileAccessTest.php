@@ -21,7 +21,21 @@ class ProfileAccessTest extends TestCase
     }
 
     /**
-     * 未認証の退会リクエストではユーザーが削除されないことを保証する。
+     * Issue #93でアカウント管理はメール認証前でも使える既存会員機能として維持するため、
+     * verified ミドルウェアが過剰適用されても検出できるように未認証ユーザーのプロフィール表示を保証する。
+     */
+    public function test_unverified_user_can_view_profile_page(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this
+            ->actingAs($user)
+            ->get(route('profile.edit'))
+            ->assertOk();
+    }
+
+    /**
+     * 未ログインの退会リクエストではユーザーが削除されないことを保証する。
      */
     public function test_guest_cannot_delete_account(): void
     {
@@ -39,7 +53,7 @@ class ProfileAccessTest extends TestCase
     }
 
     /**
-     * 未認証のプロフィール更新リクエストではユーザー情報が変わらないことを保証する。
+     * 未ログインのプロフィール更新リクエストではプロフィールが更新されないことを保証する。
      */
     public function test_guest_cannot_update_profile(): void
     {

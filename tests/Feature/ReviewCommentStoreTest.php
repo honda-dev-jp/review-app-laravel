@@ -117,6 +117,27 @@ class ReviewCommentStoreTest extends TestCase
     }
 
     /**
+     * メール未認証ユーザーからの公開レビュー返信を防ぐため、
+     * 認証案内画面へリダイレクトされ、返信が保存されないことを保証する。
+     */
+    public function test_unverified_user_cannot_store_review_comment(): void
+    {
+        $user = User::factory()->unverified()->create();
+        $review = Review::factory()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->post(route('reviews.comments.store', $review), [
+                'body' => '未認証ユーザーのレビュー返信です。',
+                'form_review_id' => $review->id,
+            ]);
+
+        $response->assertRedirect(route('verification.notice'));
+
+        $this->assertDatabaseCount('review_comments', 0);
+    }
+
+    /**
      * 存在しないレビューへの返信投稿が404となり、返信を保存しないことを保証する。
      */
     public function test_store_returns_not_found_for_missing_review(): void
@@ -352,6 +373,10 @@ class ReviewCommentStoreTest extends TestCase
             ->assertSee('作品詳細に表示される返信です。');
     }
 
+    /**
+     * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するため、
+     * HTMLを安全に解析してXPathを生成する。
+     */
     private function createXPath(string $html): DOMXPath
     {
         // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
@@ -369,6 +394,10 @@ class ReviewCommentStoreTest extends TestCase
         }
     }
 
+    /**
+     * 重複IDや対象要素の欠落を見逃さず、ARIA属性などを対象要素自身で検証するため、
+     * 指定IDの要素が1件だけ存在することを確認してDOMElementとして返す。
+     */
     private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
     {
         $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));
