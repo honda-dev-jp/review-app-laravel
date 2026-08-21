@@ -25,14 +25,17 @@ Route::get('/items/{item}', [ItemController::class, 'show'])
     ->name('items.show');
 
 Route::middleware('auth')->group(function () {
+    Route::middleware('verified')->group(function () {
+
+        Route::post('/items/{item}/reviews', [ReviewController::class, 'store'])
+            ->name('reviews.store');
+
+        Route::post('/reviews/{review}/comments', [ReviewCommentController::class, 'store'])
+            ->name('reviews.comments.store');
+    });
+
     Route::get('/my-reviews', [ReviewController::class, 'mine'])
         ->name('reviews.mine');
-
-    Route::post('/items/{item}/reviews', [ReviewController::class, 'store'])
-        ->name('reviews.store');
-
-    Route::post('/reviews/{review}/comments', [ReviewCommentController::class, 'store'])
-        ->name('reviews.comments.store');
 
     Route::delete('/reviews/{review}', [ReviewController::class, 'destroy'])
         ->name('reviews.destroy');

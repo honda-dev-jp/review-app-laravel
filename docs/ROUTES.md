@@ -17,6 +17,7 @@
 - 共通画面は認証不要とする
 - 未ログイン限定画面は `guest` ミドルウェアで保護する
 - 会員機能は `auth` ミドルウェアで保護する
+- メール認証必須の会員機能は `auth` と `verified` ミドルウェアで保護する
 - 自分のレビュー削除など本人確認が必要な処理は、PolicyまたはController側で認可を行う
 - POST、PATCH、DELETEなど状態変更を伴う処理ではCSRF保護を前提とする
 
@@ -49,7 +50,7 @@ Laravel Breezeの認証ルートを使用する。
 
 ### 会員画面
 
-会員画面は `auth` ミドルウェアで保護する。
+会員画面は `auth` ミドルウェアで保護する。アカウント画面、本人のレビュー一覧、レビュー削除、会員退会はメール未認証でも利用できる。
 
 | HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
 |---|---|---|---|---|---|
@@ -61,11 +62,11 @@ Laravel Breezeの認証ルートを使用する。
 
 ### レビュー機能
 
-レビュー・評価投稿、レビュー削除は `auth` ミドルウェアで保護する。
+レビュー・評価投稿は `auth` と `verified` ミドルウェアで保護する。レビュー削除は `auth` ミドルウェアで保護し、メール未認証でも自分のレビューを削除できる。
 
 | HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
 |---|---|---|---|---|---|
-| POST | `/items/{item}/reviews` | `reviews.store` | `ReviewController@store` | 必要 | 作品にレビュー本文と評価を投稿する |
+| POST | `/items/{item}/reviews` | `reviews.store` | `ReviewController@store` | 必要 + メール認証必須 | 作品にレビュー本文と評価を投稿する |
 | DELETE | `/reviews/{review}` | `reviews.destroy` | `ReviewController@destroy` | 必要 | 自分のレビューを削除する |
 
 レビュー削除ルートは存在するが、初期移植フェーズでは削除導線を本人のレビュー一覧画面にのみ表示する。
@@ -74,11 +75,11 @@ Laravel Breezeの認証ルートを使用する。
 
 ### レビュー返信機能
 
-レビュー返信投稿は `auth` ミドルウェアで保護する。
+レビュー返信投稿は `auth` と `verified` ミドルウェアで保護する。
 
 | HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
 |---|---|---|---|---|---|
-| POST | `/reviews/{review}/comments` | `reviews.comments.store` | `ReviewCommentController@store` | 必要 | レビューに返信を投稿する |
+| POST | `/reviews/{review}/comments` | `reviews.comments.store` | `ReviewCommentController@store` | 必要 + メール認証必須 | レビューに返信を投稿する |
 
 ### ログアウト
 
@@ -90,7 +91,7 @@ Laravel Breezeの認証ルートを使用する。
 
 ## middleware設計
 
-`routes/auth.php` には、上表のMVP1で利用するルートに加えて、Breezeが提供するメール認証・パスワード確認の補助ルートも登録されている。MVP1では `User` モデルで `MustVerifyEmail` を有効化しておらず、メール認証はMVP2以降の対象とする。
+`User` モデルは `MustVerifyEmail` を実装し、Laravel Breeze標準のメール認証ルートを使用する。
 
 ### 認証不要
 
@@ -120,10 +121,29 @@ Laravel Breezeの認証ルートを使用する。
 - パスワード更新
 - 会員退会
 - 本人のレビュー一覧表示
-- レビュー・評価投稿
 - レビュー削除
-- レビュー返信投稿
 - ログアウト
+- メール認証案内表示
+- 認証メール再送
+
+### 認証 + メール認証必須（`auth` + `verified`）
+
+以下は `auth` と `verified` ミドルウェアで保護する。
+
+- レビュー・評価投稿
+- レビュー返信投稿
+
+### メール認証関連
+
+以下は `routes/auth.php` で定義するLaravel Breeze標準のメール認証ルートである。
+
+| HTTPメソッド | URL | ルート名 | Controller | middleware | 概要 |
+|---|---|---|---|---|---|
+| GET | `/verify-email` | `verification.notice` | `Auth\EmailVerificationPromptController` | `auth` | メール認証案内画面を表示する |
+| GET | `/verify-email/{id}/{hash}` | `verification.verify` | `Auth\VerifyEmailController` | `auth`, `signed`, `throttle:6,1` | 署名付きURLからメール認証を完了する |
+| POST | `/email/verification-notification` | `verification.send` | `Auth\EmailVerificationNotificationController@store` | `auth`, `throttle:6,1` | 認証メールを再送する |
+
+会員登録後は未認証状態でログインし、`RouteServiceProvider::HOME` である `/` へリダイレクトする。登録直後に `/verify-email` へ自動遷移しない。
 
 ## 認可方針
 

@@ -2,17 +2,24 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * 会員登録画面の初期表示で入力欄とラベルが正しく関連付けられ、
+     * エラーがない状態では不要なARIA属性やエラー要素が表示されないことを保証する。
+     */
     public function test_registration_screen_can_be_rendered(): void
     {
         $response = $this->get('/register');
@@ -39,6 +46,10 @@ class RegistrationTest extends TestCase
         }
     }
 
+    /**
+     * 会員登録のバリデーションエラーを支援技術へ正しく伝えるため、
+     * 対象入力欄に必要なARIA属性が付与され、他の入力欄へ誤って影響しないことを保証する。
+     */
     public function test_registration_validation_errors_have_accessible_aria_attributes(): void
     {
         $cases = [
@@ -105,6 +116,10 @@ class RegistrationTest extends TestCase
         }
     }
 
+    /**
+     * 正常な入力で会員登録でき、登録後にログイン状態となって
+     * アプリケーションのホームへ遷移できることを保証する。
+     */
     public function test_new_users_can_register(): void
     {
         $response = $this->post('/register', [
@@ -116,6 +131,30 @@ class RegistrationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(RouteServiceProvider::HOME);
+    }
+
+    /**
+     * 会員登録時にLaravel標準のメール認証通知が送信されることを保証する。
+     */
+    public function test_new_users_receive_email_verification_notification(): void
+    {
+        Notification::fake();
+
+        $this->post('/register', [
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ]);
+
+        $user = User::where('email', 'test@example.com')->firstOrFail();
+
+        $this->assertNull($user->email_verified_at);
+
+        Notification::assertSentTo(
+            $user,
+            VerifyEmail::class,
+        );
     }
 
     /**
@@ -136,6 +175,10 @@ class RegistrationTest extends TestCase
         }
     }
 
+    /**
+     * 重複IDや対象要素の欠落を見逃さず、ARIA属性などを対象要素自身で検証するため、
+     * 指定IDの要素が1件だけ存在することを確認してDOMElementとして返す。
+     */
     private function getSingleElementById(DOMXPath $xpath, string $id): DOMElement
     {
         $elements = $xpath->query(sprintf('//*[@id="%s"]', $id));

@@ -98,6 +98,8 @@ PR checksは最初にcanonicalな`gh pr checks`で確認します。exit code 8�
 ## Laravelレビュー観点
 
 - Laravel Breeze、Policy、Form Request、middlewareの適用漏れ
+- `auth` および `verified` middlewareの適用対象が `docs/ROUTES.md`、要件、現行実装と一致しているか
+- 未ログイン、ログイン済み・メール未認証、認可違反を区別しているか
 - CSRF、Blade自動エスケープ、Mass Assignment対策
 - Eloquentリレーション、Eager Loading、N+1
 - DB制約、外部キー、UNIQUE制約、nullable、削除時動作
@@ -105,7 +107,7 @@ PR checksは最初にcanonicalな`gh pr checks`で確認します。exit code 8�
 - 会員退会時の匿名表示方針
 - ルート名、URL、画面遷移との互換性
 - Controller、Service、Model、Blade、テストの整合性
-- Featureテスト（正常系・境界値・未認証・権限違反）
+- Featureテスト（正常系・境界値・未ログイン・メール未認証・権限違反）
 - README、docs更新漏れ
 - MVPでは要件外の改善や大規模リファクタリングを優先しない
 
