@@ -14,8 +14,8 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravelへ移�
 
 ## 使用技術
 
-- PHP 8.4.24（PR #131を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
-- Laravel 13.26.1（PR #135を`develop`へマージ済みの確定baseline。`main`および本番環境へは未反映）
+- PHP 8.4.24（PR #131を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
+- Laravel 13.26.1（PR #135を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
 - Laravel Sail
 - MySQL
 - phpMyAdmin
