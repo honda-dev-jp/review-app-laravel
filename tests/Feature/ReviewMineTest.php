@@ -91,8 +91,12 @@ class ReviewMineTest extends TestCase
             ->get(route('reviews.mine'));
 
         $response->assertOk();
+
+        $html = $response->getContent();
+        $this->assertIsString($html);
+
         $this->assertSame(3, substr_count(
-            $response->getContent(),
+            $html,
             'src="'.$avatarUrl.'"'
         ));
     }
@@ -533,8 +537,10 @@ class ReviewMineTest extends TestCase
             ->assertSee('name="redirect_to" value="reviews.mine"', false);
     }
 
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 
         try {

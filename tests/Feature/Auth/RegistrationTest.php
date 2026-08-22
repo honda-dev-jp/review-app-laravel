@@ -160,8 +160,10 @@ class RegistrationTest extends TestCase
     /**
      * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するためXPathを生成する。
      */
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 
         try {

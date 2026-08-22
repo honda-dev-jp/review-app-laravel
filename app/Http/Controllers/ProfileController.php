@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -28,13 +29,24 @@ class ProfileController extends Controller
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
+
+        assert($user instanceof User);
+
         $oldAvatarPath = $user->avatar_path;
         $newAvatarPath = null;
 
+        $validated = $request->safe();
+
+        $profile = $validated->input('profile');
+
+        assert(is_string($profile) || $profile === null);
+
         // アップロードファイルは一括代入せず、保存後の相対パスだけを avatar_path へ設定する
-        $user->fill(
-            $request->safe()->except('avatar_image')
-        );
+        $user->fill([
+            'name' => $validated->string('name')->toString(),
+            'email' => $validated->string('email')->toString(),
+            'profile' => $profile,
+        ]);
 
         if ($request->hasFile('avatar_image')) {
             $avatarImage = $request->file('avatar_image');
@@ -111,14 +123,19 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+
+        assert($user instanceof User);
+
         $avatarPath = $user->avatar_path;
 
         if (! $user->delete()) {
             throw new \RuntimeException('退会処理に失敗しました。');
         }
 
-        // logout時に削除済みUserのremember_tokenが更新され、再保存されることを防ぐ
-        $user->setRememberToken(null);
+        // Auth::logout() はremember tokenが空でない場合にトークンを再生成するため、
+        // 削除済みUserの再保存を防ぐ目的で、string型契約を満たす空文字列を設定する。
+        // 退会時ログアウト方式の詳細な検討はIssue #150を参照。
+        $user->setRememberToken('');
 
         Auth::logout();
 
