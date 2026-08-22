@@ -269,8 +269,11 @@ class PasswordResetTest extends TestCase
         // 翻訳変更で壊れないよう、メッセージ本文ではなくエラー対象フィールドを検証する。
         $response->assertSessionHasErrors('email');
 
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
         // トークン検証失敗時の意図しない更新を直接検出し、Factory既定の平文パスワードには依存しない。
-        $this->assertSame($originalPasswordHash, $user->fresh()->password);
+        $this->assertSame($originalPasswordHash, $freshUser->password);
     }
 
     /**
@@ -295,8 +298,11 @@ class PasswordResetTest extends TestCase
 
             $response->assertSessionHasErrors('password');
 
+            $freshUser = $user->fresh();
+
+            $this->assertInstanceOf(User::class, $freshUser);
             // バリデーション失敗時の意図しない更新を直接検出し、Factory既定の平文パスワードには依存しない。
-            $this->assertSame($originalPasswordHash, $user->fresh()->password);
+            $this->assertSame($originalPasswordHash, $freshUser->password);
 
             return true;
         });
@@ -324,8 +330,11 @@ class PasswordResetTest extends TestCase
 
             $response->assertSessionHasErrors('password');
 
+            $freshUser = $user->fresh();
+
+            $this->assertInstanceOf(User::class, $freshUser);
             // ルール違反時の意図しない更新を検出するため、バリデーション前後のハッシュ同一性を確認する。
-            $this->assertSame($originalPasswordHash, $user->fresh()->password);
+            $this->assertSame($originalPasswordHash, $freshUser->password);
 
             return true;
         });

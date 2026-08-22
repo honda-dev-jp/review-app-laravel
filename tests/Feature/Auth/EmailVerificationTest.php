@@ -103,7 +103,11 @@ class EmailVerificationTest extends TestCase
         $response = $this->actingAs($user)->get($verificationUrl);
 
         Event::assertDispatched(Verified::class);
-        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
+        $this->assertTrue($freshUser->hasVerifiedEmail());
         $response->assertRedirect(RouteServiceProvider::HOME.'?verified=1');
     }
 
@@ -125,7 +129,10 @@ class EmailVerificationTest extends TestCase
 
         $this->actingAs($user)->get($verificationUrl);
 
-        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
+        $this->assertFalse($freshUser->hasVerifiedEmail());
     }
 
     /**
@@ -147,7 +154,10 @@ class EmailVerificationTest extends TestCase
 
         $response->assertForbidden();
 
-        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
+        $this->assertFalse($freshUser->hasVerifiedEmail());
     }
 
     /**
@@ -173,7 +183,10 @@ class EmailVerificationTest extends TestCase
 
         $response->assertForbidden();
 
-        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
+        $this->assertFalse($freshUser->hasVerifiedEmail());
     }
 
     /**
@@ -204,7 +217,10 @@ class EmailVerificationTest extends TestCase
 
         $response->assertForbidden();
 
-        $this->assertFalse($otherUser->fresh()->hasVerifiedEmail());
+        $freshOtherUser = $otherUser->fresh();
+
+        $this->assertInstanceOf(User::class, $freshOtherUser);
+        $this->assertFalse($freshOtherUser->hasVerifiedEmail());
     }
 
     /**

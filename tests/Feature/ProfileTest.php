@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Item;
 use App\Models\Review;
 use App\Models\ReviewComment;
 use App\Models\User;
@@ -1484,7 +1485,13 @@ class ProfileTest extends TestCase
         $review = Review::factory()->for($user)->create([
             'body' => '退会後も残るレビューです。',
         ]);
-        $item = $review->item->refresh();
+
+        $item = $review->item;
+
+        $this->assertInstanceOf(Item::class, $item);
+
+        $item->refresh();
+
         $ratingBeforeDeletion = $item->rating;
         $ratingCountBeforeDeletion = $item->rating_count;
         $comment = ReviewComment::query()->create([
