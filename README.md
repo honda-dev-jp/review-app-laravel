@@ -35,7 +35,7 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravelへ移�
 GitHub Actionsを使用し、Pull Requestおよび`main` / `develop`ブランチへのpush時に、次の品質チェックを自動実行します。
 
 - Laravel Pint
-- PHPStan / Larastan Level 4
+- PHPStan / Larastan Level 10
 - Vite build
 - PHPUnit（MySQL環境）
 - Ruff lint
