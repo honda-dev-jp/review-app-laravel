@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Mockery\Expectation;
+use Mockery\MockInterface;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -854,7 +855,7 @@ class ProfileTest extends TestCase
             ->andReturnFalse();
         Storage::set('public', $failingDisk);
 
-        $this->mock(ExceptionHandler::class, function ($mock): void {
+        $this->mock(ExceptionHandler::class, function (MockInterface $mock): void {
             $mock->expects('report');
         });
 
@@ -1386,7 +1387,7 @@ class ProfileTest extends TestCase
             ->andReturnFalse();
         Storage::set('public', $failingDisk);
 
-        $this->mock(ExceptionHandler::class, function ($mock): void {
+        $this->mock(ExceptionHandler::class, function (MockInterface $mock): void {
             $mock->expects('report');
         });
 

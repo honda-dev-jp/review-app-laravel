@@ -12,6 +12,8 @@ use DOMElement;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Mockery\Expectation;
+use Mockery\MockInterface;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -674,9 +676,14 @@ class ReviewTest extends TestCase
         $ratingCountBeforeDeletion = $item->rating_count;
 
         // FactoryのafterCreatingによる評価更新が完了してから、削除処理だけを失敗させる。
-        $this->mock(ItemRatingService::class, function ($mock): void {
-            $mock->shouldReceive('refresh')
-                ->andThrow(new RuntimeException('評価キャッシュ更新失敗'));
+        $this->mock(ItemRatingService::class, function (MockInterface $mock): void {
+            $refreshExpectation = $mock->shouldReceive('refresh');
+
+            assert($refreshExpectation instanceof Expectation);
+
+            $refreshExpectation->andThrow(
+                new RuntimeException('評価キャッシュ更新失敗')
+            );
         });
 
         $this->withoutExceptionHandling();

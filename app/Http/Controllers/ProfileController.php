@@ -35,10 +35,18 @@ class ProfileController extends Controller
         $oldAvatarPath = $user->avatar_path;
         $newAvatarPath = null;
 
+        $validated = $request->safe();
+
+        $profile = $validated->input('profile');
+
+        assert(is_string($profile) || $profile === null);
+
         // アップロードファイルは一括代入せず、保存後の相対パスだけを avatar_path へ設定する
-        $user->fill(
-            $request->safe()->except('avatar_image')
-        );
+        $user->fill([
+            'name' => $validated->string('name')->toString(),
+            'email' => $validated->string('email')->toString(),
+            'profile' => $profile,
+        ]);
 
         if ($request->hasFile('avatar_image')) {
             $avatarImage = $request->file('avatar_image');

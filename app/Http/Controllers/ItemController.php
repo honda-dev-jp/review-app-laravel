@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Item;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\View\View;
 
 class ItemController extends Controller
@@ -21,10 +22,10 @@ class ItemController extends Controller
     {
         $item->load([
             'category',
-            'reviews' => function ($query) {
+            'reviews' => function (Builder $query) {
                 $query->with([
                     'user',
-                    'comments' => function ($query) {
+                    'comments' => function (Builder $query) {
                         $query->with('user')
                             ->orderBy('created_at')
                             ->orderBy('id');
