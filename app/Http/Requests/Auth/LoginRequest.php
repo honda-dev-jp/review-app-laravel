@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Auth;
 
 use Illuminate\Auth\Events\Lockout;
-use Illuminate\Contracts\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -23,7 +22,10 @@ class LoginRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, Rule|array|string>
+     * @return array{
+     *     email: list<string>,
+     *     password: list<string>
+     * }
      */
     public function rules(): array
     {

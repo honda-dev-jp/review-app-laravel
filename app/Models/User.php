@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,6 +14,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
+    /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -49,6 +51,8 @@ class User extends Authenticatable implements MustVerifyEmail
 
     /**
      * 表示用のユーザーアイコンURLを取得する。
+     *
+     * @return Attribute<string, never>
      */
     protected function avatarUrl(): Attribute
     {
