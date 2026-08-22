@@ -377,8 +377,10 @@ class ReviewCommentStoreTest extends TestCase
      * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するため、
      * HTMLを安全に解析してXPathを生成する。
      */
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 

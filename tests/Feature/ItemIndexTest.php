@@ -87,8 +87,10 @@ class ItemIndexTest extends TestCase
         $this->assertCount(0, $statusElements);
     }
 
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 
         try {

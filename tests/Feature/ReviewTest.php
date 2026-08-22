@@ -12,6 +12,8 @@ use DOMElement;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Mockery\Expectation;
+use Mockery\MockInterface;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -674,9 +676,14 @@ class ReviewTest extends TestCase
         $ratingCountBeforeDeletion = $item->rating_count;
 
         // FactoryのafterCreatingによる評価更新が完了してから、削除処理だけを失敗させる。
-        $this->mock(ItemRatingService::class, function ($mock): void {
-            $mock->shouldReceive('refresh')
-                ->andThrow(new RuntimeException('評価キャッシュ更新失敗'));
+        $this->mock(ItemRatingService::class, function (MockInterface $mock): void {
+            $refreshExpectation = $mock->shouldReceive('refresh');
+
+            assert($refreshExpectation instanceof Expectation);
+
+            $refreshExpectation->andThrow(
+                new RuntimeException('評価キャッシュ更新失敗')
+            );
         });
 
         $this->withoutExceptionHandling();
@@ -783,8 +790,10 @@ class ReviewTest extends TestCase
      * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するため、
      * HTMLを安全に解析してXPathを生成する。
      */
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 

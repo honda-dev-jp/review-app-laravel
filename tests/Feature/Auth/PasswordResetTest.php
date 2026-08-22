@@ -118,13 +118,16 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-            $response = $this->get('/reset-password/'.$notification->token);
+        Notification::assertSentTo(
+            $user,
+            ResetPassword::class,
+            function (ResetPassword $notification) {
+                $response = $this->get('/reset-password/'.$notification->token);
 
-            $response->assertStatus(200);
+                $response->assertStatus(200);
 
-            return true;
-        });
+                return true;
+            });
     }
 
     /**
@@ -217,38 +220,41 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($newPassword, $user) {
-            $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => $newPassword,
-                'password_confirmation' => $newPassword,
-            ]);
+        Notification::assertSentTo(
+            $user,
+            ResetPassword::class,
+            function (ResetPassword $notification) use ($newPassword, $user) {
+                $response = $this->post('/reset-password', [
+                    'token' => $notification->token,
+                    'email' => $user->email,
+                    'password' => $newPassword,
+                    'password_confirmation' => $newPassword,
+                ]);
 
-            $response
-                ->assertSessionHasNoErrors()
-                ->assertRedirect(route('login'));
+                $response
+                    ->assertSessionHasNoErrors()
+                    ->assertRedirect(route('login'));
 
-            $loginResponse = $this->get(route('login'));
-            $loginResponse->assertOk();
+                $loginResponse = $this->get(route('login'));
+                $loginResponse->assertOk();
 
-            $statusElements = $this->createXPath($loginResponse->getContent())
-                ->query('//*[@role="status"]');
+                $statusElements = $this->createXPath($loginResponse->getContent())
+                    ->query('//*[@role="status"]');
 
-            $this->assertNotFalse($statusElements);
-            $this->assertCount(1, $statusElements);
+                $this->assertNotFalse($statusElements);
+                $this->assertCount(1, $statusElements);
 
-            $statusElement = $statusElements->item(0);
-            $this->assertInstanceOf(DOMElement::class, $statusElement);
-            $this->assertSame('status', $statusElement->getAttribute('role'));
-            $this->assertSame(__(Password::PASSWORD_RESET), trim($statusElement->textContent));
+                $statusElement = $statusElements->item(0);
+                $this->assertInstanceOf(DOMElement::class, $statusElement);
+                $this->assertSame('status', $statusElement->getAttribute('role'));
+                $this->assertSame(__(Password::PASSWORD_RESET), trim($statusElement->textContent));
 
-            $user->refresh();
+                $user->refresh();
 
-            $this->assertTrue(Hash::check($newPassword, $user->password));
+                $this->assertTrue(Hash::check($newPassword, $user->password));
 
-            return true;
-        });
+                return true;
+            });
     }
 
     /**
@@ -269,8 +275,11 @@ class PasswordResetTest extends TestCase
         // 翻訳変更で壊れないよう、メッセージ本文ではなくエラー対象フィールドを検証する。
         $response->assertSessionHasErrors('email');
 
+        $freshUser = $user->fresh();
+
+        $this->assertInstanceOf(User::class, $freshUser);
         // トークン検証失敗時の意図しない更新を直接検出し、Factory既定の平文パスワードには依存しない。
-        $this->assertSame($originalPasswordHash, $user->fresh()->password);
+        $this->assertSame($originalPasswordHash, $freshUser->password);
     }
 
     /**
@@ -285,21 +294,27 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($originalPasswordHash, $user) {
-            $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => 'new-password-1234',
-                'password_confirmation' => 'different-password-1234',
-            ]);
+        Notification::assertSentTo(
+            $user,
+            ResetPassword::class,
+            function (ResetPassword $notification) use ($originalPasswordHash, $user) {
+                $response = $this->post('/reset-password', [
+                    'token' => $notification->token,
+                    'email' => $user->email,
+                    'password' => 'new-password-1234',
+                    'password_confirmation' => 'different-password-1234',
+                ]);
 
-            $response->assertSessionHasErrors('password');
+                $response->assertSessionHasErrors('password');
 
-            // バリデーション失敗時の意図しない更新を直接検出し、Factory既定の平文パスワードには依存しない。
-            $this->assertSame($originalPasswordHash, $user->fresh()->password);
+                $freshUser = $user->fresh();
 
-            return true;
-        });
+                $this->assertInstanceOf(User::class, $freshUser);
+                // バリデーション失敗時の意図しない更新を直接検出し、Factory既定の平文パスワードには依存しない。
+                $this->assertSame($originalPasswordHash, $freshUser->password);
+
+                return true;
+            });
     }
 
     /**
@@ -314,21 +329,27 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($originalPasswordHash, $user) {
-            $response = $this->post('/reset-password', [
-                'token' => $notification->token,
-                'email' => $user->email,
-                'password' => 'short',
-                'password_confirmation' => 'short',
-            ]);
+        Notification::assertSentTo(
+            $user,
+            ResetPassword::class,
+            function (ResetPassword $notification) use ($originalPasswordHash, $user) {
+                $response = $this->post('/reset-password', [
+                    'token' => $notification->token,
+                    'email' => $user->email,
+                    'password' => 'short',
+                    'password_confirmation' => 'short',
+                ]);
 
-            $response->assertSessionHasErrors('password');
+                $response->assertSessionHasErrors('password');
 
-            // ルール違反時の意図しない更新を検出するため、バリデーション前後のハッシュ同一性を確認する。
-            $this->assertSame($originalPasswordHash, $user->fresh()->password);
+                $freshUser = $user->fresh();
 
-            return true;
-        });
+                $this->assertInstanceOf(User::class, $freshUser);
+                // ルール違反時の意図しない更新を検出するため、バリデーション前後のハッシュ同一性を確認する。
+                $this->assertSame($originalPasswordHash, $freshUser->password);
+
+                return true;
+            });
     }
 
     /**
@@ -351,8 +372,10 @@ class PasswordResetTest extends TestCase
     /**
      * 文字列一致へ依存せず、対象DOM要素自身の属性を検証するためXPathを生成する。
      */
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 
         try {

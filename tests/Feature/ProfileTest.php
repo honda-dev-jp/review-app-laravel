@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Item;
 use App\Models\Review;
 use App\Models\ReviewComment;
 use App\Models\User;
@@ -13,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Mockery\Expectation;
+use Mockery\MockInterface;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -853,7 +855,7 @@ class ProfileTest extends TestCase
             ->andReturnFalse();
         Storage::set('public', $failingDisk);
 
-        $this->mock(ExceptionHandler::class, function ($mock): void {
+        $this->mock(ExceptionHandler::class, function (MockInterface $mock): void {
             $mock->expects('report');
         });
 
@@ -1385,7 +1387,7 @@ class ProfileTest extends TestCase
             ->andReturnFalse();
         Storage::set('public', $failingDisk);
 
-        $this->mock(ExceptionHandler::class, function ($mock): void {
+        $this->mock(ExceptionHandler::class, function (MockInterface $mock): void {
             $mock->expects('report');
         });
 
@@ -1484,7 +1486,13 @@ class ProfileTest extends TestCase
         $review = Review::factory()->for($user)->create([
             'body' => '退会後も残るレビューです。',
         ]);
-        $item = $review->item->refresh();
+
+        $item = $review->item;
+
+        $this->assertInstanceOf(Item::class, $item);
+
+        $item->refresh();
+
         $ratingBeforeDeletion = $item->rating;
         $ratingCountBeforeDeletion = $item->rating_count;
         $comment = ReviewComment::query()->create([
@@ -1624,8 +1632,10 @@ class ProfileTest extends TestCase
         ]);
     }
 
-    private function createXPath(string $html): DOMXPath
+    private function createXPath(string|false $html): DOMXPath
     {
+        $this->assertIsString($html);
+
         // HTML5解析時の警告をテスト出力へ出さないよう、libxmlのエラー処理を一時的に内部化する。
         $previousUseInternalErrors = libxml_use_internal_errors(true);
 
