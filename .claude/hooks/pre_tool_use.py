@@ -152,6 +152,7 @@ COMPOSER_METADATA_PACKAGES = {
 NPM_METADATA_PACKAGES = {
     "@playwright/test",
     "@tailwindcss/forms",
+    "@types/node",
     "alpinejs",
     "autoprefixer",
     "axios",

@@ -33,3 +33,8 @@ _ide_helper.php
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.auth/
