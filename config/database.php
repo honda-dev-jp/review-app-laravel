@@ -63,6 +63,26 @@ return [
             ]) : [],
         ],
 
+        'e2e_mysql' => [
+            'driver' => 'mysql',
+            'url' => '',
+            'host' => env('E2E_DB_HOST'),
+            'port' => env('E2E_DB_PORT'),
+            'database' => env('E2E_DB_DATABASE'),
+            'username' => env('E2E_DB_USERNAME'),
+            'password' => env('E2E_DB_PASSWORD'),
+            'unix_socket' => env('E2E_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),
