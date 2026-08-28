@@ -11,7 +11,7 @@ export default defineConfig({
     reporter: isCI ? [['github'], ['list']] : undefined,
 
     use: {
-        baseURL: isCI ? 'http://127.0.0.1:83' : 'http://localhost:83',
+        baseURL: isCI ? 'http://127.0.0.1:8000' : 'http://localhost:83',
         screenshot: 'only-on-failure',
         trace: isCI ? 'off' : 'retain-on-failure',
         video: 'off',
@@ -19,8 +19,8 @@ export default defineConfig({
 
     webServer: isCI
         ? {
-              command: 'php artisan serve --host=127.0.0.1 --port=83 --no-reload',
-              url: 'http://127.0.0.1:83/login',
+              command: 'php artisan serve --host=127.0.0.1 --port=8000 --no-reload',
+              url: 'http://127.0.0.1:8000/login',
               reuseExistingServer: false,
               timeout: 60_000,
               stdout: 'pipe',
