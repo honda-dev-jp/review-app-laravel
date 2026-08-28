@@ -13,7 +13,13 @@ export default defineConfig({
 
     projects: [
         {
+            name: 'setup',
+            testMatch: /global\.setup\.ts/,
+        },
+        {
             name: 'chromium',
+            dependencies: ['setup'],
+            testIgnore: /global\.setup\.ts/,
             use: {
                 browserName: 'chromium',
             },
