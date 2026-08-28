@@ -126,3 +126,91 @@ jobs:
 
       - name: Run PHPUnit
         run: php artisan test
+
+  e2e-tests:
+    name: Playwright E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      APP_ENV: e2e
+      APP_DEBUG: false
+      # CI専用のテストキー。本番環境では使用しない。
+      APP_KEY: base64:6ftPd6RhUC2jRPdhqwdrl4HukEopAGXpepirISDfw7E=
+      SESSION_COOKIE: review_app_e2e_ci_session
+      DB_CONNECTION: e2e_mysql
+      DATABASE_URL: ''
+      DB_HOST: e2e-database-not-configured
+      DB_PORT: 3306
+      DB_DATABASE: e2e-database-not-configured
+      DB_USERNAME: e2e_not_configured
+      DB_PASSWORD: e2e_not_configured
+      E2E_DB_HOST: 127.0.0.1
+      E2E_DB_PORT: '3306'
+      E2E_DB_DATABASE: e2e_testing
+      E2E_DB_USERNAME: e2e_ci_user
+      E2E_DB_PASSWORD: e2e_ci_password
+
+    services:
+      mysql:
+        image: mysql:8.4.11
+        env:
+          MYSQL_DATABASE: e2e_testing
+          MYSQL_USER: e2e_ci_user
+          MYSQL_PASSWORD: e2e_ci_password
+          MYSQL_ROOT_PASSWORD: e2e_ci_root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=e2e_ci_user --password=e2e_ci_password --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, xml, xmlwriter, bcmath, zip
+          coverage: none
+          tools: composer:2.10.2
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24.18.0'
+          package-manager-cache: false
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Type-check Playwright tests
+        run: npm run typecheck:e2e
+
+      - name: Install Chromium and OS dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+
+      - name: Upload E2E failure screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-failure-screenshots
+          path: test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+          include-hidden-files: false

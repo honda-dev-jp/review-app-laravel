@@ -105,7 +105,7 @@ WebFetchは、人間が必要性を認めた場合に限り、読み取り専用
 Global Security Advisories、現行CI ActionのRelease/Release-linked Tag、現在のrepositoryのDependabot alertsとActions run/job metadataは、[Claude Code権限設計](docs/CLAUDE_CODE_PERMISSION_DESIGN.md) §14.4〜§14.7のcanonical形だけを使用できます。
 
 - Global Advisories helperは`.claude/helpers/github_global_advisories.py`のrepository相対path、`view`または`list`、固定option順、許可済みGHSA IDまたはecosystem/packageだけを使用してください。任意endpoint、method、query、header、optionを渡さないでください。
-- Action Release参照は`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`astral-sh/ruff-action`の5 repositoryだけを対象とし、固定JSON projectionを変更しないでください。
+- Action Release参照は`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`actions/upload-artifact`、`astral-sh/ruff-action`の6 repositoryだけを対象とし、固定JSON projectionを変更しないでください。
 - Dependabot alerts helperは`.claude/helpers/github_dependabot_alerts.py`のrepository相対pathで、引数なしの`list`または人間が指定した1〜`2^63-1`のalert番号を持つ`view`だけを使用してください。repository、method、endpoint、query、header、projection、optionを追加しないでください。
 - Actions helperは`.claude/helpers/github_actions_runs.py`のrepository相対pathで、`list`または人間が指定した1〜`2^63-1`のrun IDを持つ`view`だけを使用してください。repository、limit、filter、field、optionを追加せず、logs、steps、URL、artifactを参照しないでください。PR差分レビューでは`gh pr checks`を先に使い、checksだけで不足し人間がrun IDを明示した場合だけ`view`を候補にします。PR外pushの調査で人間が明示した場合だけ一般read-only運用として`list`を候補にし、Skill既定フローへ混ぜません。
 - Release asset、source archive、Releaseに紐づかないTag、任意repositoryは参照しないでください。Dependabot alertやActions runの変更、影響分析、package更新は行わないでください。

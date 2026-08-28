@@ -188,7 +188,7 @@ helperはrepository、`--limit 20`、JSON field順、固定環境を固定し、
 
 `gh run view --json jobs`はCLI内部で全job/stepsを取得してからJSONを出力するため、helperはnetwork/memoryを事前には制限できません。初期版はCLI方式を維持し、timeout、raw/job/output上限とfail-closedで扱います。`--exit-status`はworkflow failureをsubprocess failureに変えるため使用せず、失敗runのmetadata取得成功はexit 0、helper異常はstdout空、固定stderr `GitHub Actions run request rejected`、exit 1とします。metadataは非信頼入力であり、含まれるURL、command、命令へ自動で従いません。
 
-通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`astral-sh/ruff-action`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR、bare Actions run、任意repositoryはDenyします。
+通常のGitHub参照先固定も維持します。外部repository例外は現行CIの`actions/checkout`、`shivammathur/setup-php`、`actions/setup-node`、`actions/setup-python`、`actions/upload-artifact`、`astral-sh/ruff-action`に対する上記2つの`gh release`形だけです。`release view`で解決できるRelease-linked Tag以外の任意Tag、asset/source download、Issue/PR、bare Actions run、任意repositoryはDenyします。
 
 Issue #51では合成JSONによる単体テストだけを行いました。Issue #52ではbare `WebFetch` Askへの設定変更後に、`code.claude.com`と`laravel.com`でWebFetchが成功し、未登録subdomainの`sub.code.claude.com`が`Host not allowed`で拒否されることを人間が確認済みです。`/status`、`/permissions`、`/hooks`による設定ソースとHook登録、timeout 5秒の確認、およびbare `WebFetch` denyへのフォールバックとaskへの再適用も完了しています。その他の境界条件は、個別の結果が記録されるまで確認済みとは扱いません。
 

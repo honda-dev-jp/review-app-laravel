@@ -199,6 +199,7 @@ ACTION_RELEASE_REPOSITORIES = {
     "github.com/actions/checkout",
     "github.com/actions/setup-node",
     "github.com/actions/setup-python",
+    "github.com/actions/upload-artifact",
     "github.com/astral-sh/ruff-action",
     "github.com/shivammathur/setup-php",
 }
