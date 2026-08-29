@@ -24,6 +24,35 @@ services:
         depends_on:
             - mysql
             - mailpit
+    laravel.e2e:
+        image: 'sail-8.4/app'
+        ports:
+            - '83:80'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+            APP_ENV: e2e
+            SESSION_COOKIE: review_app_e2e_session
+            DB_CONNECTION: e2e_mysql
+            DATABASE_URL: ''
+            DB_HOST: e2e-database-not-configured
+            DB_USERNAME: e2e_not_configured
+            DB_PASSWORD: e2e_not_configured
+            E2E_DB_HOST: '${E2E_DB_HOST:?E2E_DB_HOST is required}'
+            E2E_DB_PORT: '${E2E_DB_PORT:?E2E_DB_PORT is required}'
+            E2E_DB_DATABASE: '${E2E_DB_DATABASE:?E2E_DB_DATABASE is required}'
+            E2E_DB_USERNAME: '${E2E_DB_USERNAME:?E2E_DB_USERNAME is required}'
+            E2E_DB_PASSWORD: '${E2E_DB_PASSWORD:?E2E_DB_PASSWORD is required}'
+            # E2E用DB/session環境変数を子PHP serverへ引き継ぐためreloadを無効化する
+            SUPERVISOR_PHP_COMMAND: '/usr/bin/php -d variables_order=EGPCS /var/www/html/artisan serve --host=0.0.0.0 --port=80 --no-reload'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            mysql:
+                condition: service_healthy
     mysql:
         image: 'mysql:8.4'
         ports:

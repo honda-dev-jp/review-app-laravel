@@ -812,13 +812,14 @@ python3 .claude/helpers/github_global_advisories.py list --ecosystem <composer|n
 
 ### 14.5 現行CI GitHub ActionsのReleaseとReleaseに紐づくTag
 
-通常のIssue・PR参照に対する`REPOSITORY = github.com/honda-dev-jp/review-app-laravel`は変更しない。外部repository例外は`.github/workflows/ci.yml`で実際に使用中の次の5件に対するRelease情報だけとする。
+通常のIssue・PR参照に対する`REPOSITORY = github.com/honda-dev-jp/review-app-laravel`は変更しない。外部repository例外は`.github/workflows/ci.yml`で実際に使用中の次の6件に対するRelease情報だけとする。
 
 ```text
 github.com/actions/checkout
 github.com/shivammathur/setup-php
 github.com/actions/setup-node
 github.com/actions/setup-python
+github.com/actions/upload-artifact
 github.com/astral-sh/ruff-action
 ```
 
@@ -1481,6 +1482,7 @@ Issue #52ではbare `Bash` askを維持し、bare `WebFetch`だけをdenyからa
 | 2026-08-13 | Issue #90のrepository固有Dependabot alerts専用helperを追加。public preview API version 2026-03-10、固定list/view、pagination・byte・schema・projection・C1境界を記録し、Allow 0件とbare `gh api` denyを維持 |
 | 2026-08-13 | Issue #91のrepository固有Actions run/job metadata専用helperを追加。固定list/view、minimal projection、nullable・byte・job・subprocess境界を記録し、Allow 0件とbare `gh run` denyを維持 |
 | 2026-08-14 | Issue #88の`/save-local-artifact`、trusted preflight、closed-world Hook、confirmation digest、dirfd・hard-link publish、residueと状態機械を追加。Allow 0件と編集tool denyを維持 |
+| 2026-08-28 | Issue #159のPlaywright E2E CI追加に合わせ、`actions/upload-artifact`を現行CI Action Release allowlistへ追加し、6 repositoryへ同期 |
 
 ## 27. 決定事項と実装前提
 
