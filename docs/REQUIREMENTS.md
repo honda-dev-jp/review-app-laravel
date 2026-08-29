@@ -191,11 +191,13 @@ Laravel BreezeおよびLaravel標準のメール認証を使用する。
 ### テスト・運用
 
 - MVP2で追加する機能に対応したFeatureテストの拡充
-- E2E・Playwrightの導入
+- 導入済みのPlaywright E2Eを、追加するブラウザ動作に応じて拡充する
 - トラブルシューティング整理
 - デプロイ手順整理
 
 MVP1主要機能のFeatureテストはIssue #60・PR #78で整備済みであり、Issue #80・PR #81ではレビュー削除モーダルの構造・ARIA契約に関するFeatureテストを追加している。
+
+Playwright E2EはMVP1完了後に導入済みである。責務、実行方法、E2E DB、fixture、CIの詳細は[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)を参照する。
 
 ## 今回やらないこと
 
@@ -213,7 +215,7 @@ MVP1主要機能のFeatureテストはIssue #60・PR #78で整備済みであり
 - パスワードリセットとメール認証以外のメール通知（退会完了メール、お問い合わせメールなど）
 - 本番デプロイ
 - 既存DBデータの本格移行
-- E2Eテスト導入
+- MVP1内でのE2Eテスト導入（MVP1完了後の後続フェーズで導入済み）
 
 ## 設計方針
 

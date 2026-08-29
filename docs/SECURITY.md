@@ -26,7 +26,8 @@
 - [20. 外部API利用方針](#20-外部api利用方針)
 - [21. AI共用ローカル成果物の信頼境界](#21-ai共用ローカル成果物の信頼境界)
 - [22. Claude Codeの安全運用](#22-claude-codeの安全運用)
-- [23. 今後検討する項目](#23-今後検討する項目)
+- [23. Playwright E2Eの安全運用](#23-playwright-e2eの安全運用)
+- [24. 今後検討する項目](#24-今後検討する項目)
 
 ---
 
@@ -685,7 +686,17 @@ auto memoryは無効にする。セッション開始時、再開時、終了前
 
 ---
 
-## 23. 今後検討する項目
+## 23. Playwright E2Eの安全運用
+
+Playwright E2Eでは、本番データや実在ユーザーを使用せず、通常開発DB・PHPUnit用DBと分離した`e2e_testing`へ合成fixtureだけを作成する。E2E専用MySQL accountには`e2e_testing.*`に必要な権限だけを付与し、credentialをrepository、docs、Issue、Pull Request、ログへ記録しない。
+
+認証状態やテスト成果物にはcookie、session、token、画面上の情報が含まれ得る。現行運用ではstorageStateを使用せず、CI Artifactを失敗時PNG screenshotだけに限定する。auth state、trace、video、report全体はArtifact化せず、生成物をGit管理しない。
+
+E2E DBの初回セットアップ、resetの多段ガード、fixture、Artifactの詳細は[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)を正本とする。
+
+---
+
+## 24. 今後検討する項目
 
 以下は初期移植フェーズでは必須にしないが、後続フェーズで検討する。
 
@@ -700,5 +711,4 @@ auto memoryは無効にする。セッション開始時、再開時、終了前
 - 本番環境のバックアップ方針
 - アクセスログ解析
 - 不正アクセス傾向の記録
-- E2Eテスト
 - お問い合わせフォームのスパム対策・個人情報取り扱い

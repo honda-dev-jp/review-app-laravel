@@ -468,7 +468,7 @@ http://localhost:8025
 
 ## テスト
 
-PHPUnitによるテスト実行コマンドをまとめる。
+PHPUnitとPlaywrightによるテスト実行コマンドをまとめる。Playwrightの環境構成、E2E DBの安全設計、fixture、CIの詳細は[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)を参照する。
 
 ### 全テスト実行
 
@@ -519,6 +519,35 @@ PHPUnitによるテスト実行コマンドをまとめる。
 ```
 
 認証、認可、レビュー投稿、削除処理など、データ更新を伴う機能はテストで確認する。
+
+### Playwright E2Eの通常実行
+
+初回セットアップ済みのSail環境で、E2E専用Laravel serviceを起動する。依存するMySQLもComposeにより起動される。
+
+```bash
+docker compose up -d laravel.e2e
+```
+
+Node.js、npm、Playwrightはホスト側から実行する。
+
+```bash
+npm run build
+npm run typecheck:e2e
+npx playwright test
+```
+
+`npx playwright test`はsetup projectから`e2e:reset`を自動実行し、`e2e_testing`をwipe、migrate、seedする。通常手順では手動resetを重ねて実行しない。
+
+### Playwright E2Eの対象限定・デバッグ実行
+
+```bash
+npx playwright test --project=chromium
+npx playwright test e2e/account-deletion-modal.spec.ts
+npx playwright test e2e/account-deletion-modal.spec.ts --headed
+npx playwright test e2e/account-deletion-modal.spec.ts --debug
+```
+
+対象を限定した場合もsetup projectが先に動作し、E2E DBをresetする。
 
 ---
 
@@ -1303,6 +1332,8 @@ Pull Requestおよび`main` / `develop`ブランチへのpush時は、GitHub Act
 | PHPStan / Larastan | `./vendor/bin/sail php ./vendor/bin/phpstan analyse` | `vendor/bin/phpstan analyse --no-progress` |
 | Vite build | `./vendor/bin/sail npm run build` | `npm run build` |
 | PHPUnit | `./vendor/bin/sail test` | `php artisan test` |
+| Playwright TypeScript | `npm run typecheck:e2e` | `npm run typecheck:e2e` |
+| Playwright E2E | `npx playwright test` | `npx playwright test --project=chromium` |
 | Ruff lint | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff check`（ruff-action経由、Claude Code用Hook本体、helpers配下、hooks/tests配下、save-local-artifact helper） |
 | Ruff format check | 事前にRuff 0.15.21が利用可能な環境のみ | `ruff format --check`（Claude Code用Hook本体、helpers配下、hooks/tests配下、save-local-artifact helper） |
 | Python unittest | `python3 -m unittest discover -s .claude/hooks/tests -p "test_*.py"` | 同左 |
