@@ -25,6 +25,7 @@ PHPスクラッチMVCで作成した映画レビューアプリをLaravelへ移�
 - Tailwind CSS
 - Vite
 - PHPUnit
+- Playwright Test / TypeScript
 - PHPStan / Larastan
 - Laravel Pint
 - Laravel IDE Helper
@@ -38,6 +39,7 @@ GitHub Actionsを使用し、Pull Requestおよび`main` / `develop`ブランチ
 - PHPStan / Larastan Level 10
 - Vite build
 - PHPUnit（MySQL環境）
+- Playwright E2E（Chromium / E2E専用MySQL環境）
 - Ruff lint
 - Ruff format check
 - Python unittest
@@ -53,6 +55,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 | 用途 | URL / ポート |
 |---|---|
 | Laravel | http://localhost:82 |
+| Playwright E2E用Laravel | http://localhost:83 |
 | MySQL外部接続 | localhost:3308 |
 | phpMyAdmin | http://localhost:8083 |
 | Mailpit SMTP | localhost:1025 |
@@ -134,6 +137,7 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 - [開発フロー](docs/DEVELOPMENT_FLOW.md)
 - [実装計画](docs/IMPLEMENTATION_PLAN.md)
 - [MVP1テスト対応状況](docs/MVP1_TEST_COVERAGE.md)
+- [Playwrightブラウザテスト運用ガイド](docs/PLAYWRIGHT_TESTING.md)
 - [Claude Code実装前検証運用手順](docs/CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
 - [Claude Codeレビュー運用手順](docs/CLAUDE_CODE_REVIEW.md)
 - [Claude Code権限設計](docs/CLAUDE_CODE_PERMISSION_DESIGN.md)

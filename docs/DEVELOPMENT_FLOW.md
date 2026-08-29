@@ -64,6 +64,7 @@ GitHub上の操作順、ブランチ命名、Issue参照、マージ後整理、
 | DB・Eloquent | [DB設計](DATABASE.md) |
 | ルート・HTTPメソッド | [ルーティング設計](ROUTES.md) |
 | セキュリティ | [セキュリティ方針](SECURITY.md) |
+| Playwrightブラウザテスト | [Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md) |
 | 実装順序・MVP1の計画記録 | [実装計画](IMPLEMENTATION_PLAN.md) |
 
 既存文書とIssueが矛盾する場合は、推測で実装へ進まず、どちらを更新するか人間が判断します。
@@ -105,6 +106,14 @@ GitHub上の操作順、ブランチ命名、Issue参照、マージ後整理、
 - 開発環境の接続先を確認した上での再構築
 - 外部キー、UNIQUE制約、nullable、削除時動作
 - 既存データとロールバックへの影響
+
+### JavaScript・ブラウザ操作へ影響する場合
+
+- modalの開閉、画面遷移、pagination等の実ブラウザ動作
+- role、accessible name、initial focus、`Tab` / `Shift+Tab`、`Escape`、close後のfocus restoration
+- 変更に関係する対象specと、必要に応じたPlaywright全体の回帰確認
+
+PlaywrightはPHPUnitの代替ではなく、ブラウザでなければ有効に確認できない挙動を担当します。実行方法、E2E DB、fixture、CIの詳細は[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)を参照してください。
 
 ### 依存関係を変更した場合
 
@@ -174,6 +183,7 @@ GitHub上のIssue、ブランチ、PR、コミットの命名は[GitHub開発運
 
 - [GitHub開発運用ガイド](GITHUB_WORKFLOW.md)
 - [コマンド集](COMMANDS.md)
+- [Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)
 - [トラブルシューティング](TROUBLESHOOTING.md)
 - [Claude Code実装前検証運用手順](CLAUDE_CODE_PRE_IMPLEMENTATION_REVIEW.md)
 - [Claude Codeレビュー運用手順](CLAUDE_CODE_REVIEW.md)
