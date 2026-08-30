@@ -8,7 +8,7 @@
 
 初期移植フェーズでは、共通画面、ゲスト画面、会員画面を中心に整理する。
 
-管理者画面は後続フェーズで検討する。
+管理者画面はMVP1では対象外とし、MVP2で管理者画面モック、登録済み作品一覧、TMDB検索からの1作品登録に必要なルートを段階的に設計する。
 
 ## ルーティング方針
 
@@ -172,25 +172,33 @@ Laravel Breezeの認証ルートを使用する。
 | `ProfileController` | アカウント画面表示、アカウント情報更新、退会 |
 | Breeze標準Controller | 会員登録、ログイン、ログアウト、パスワードリセット、パスワード更新 |
 
-## 後続フェーズで検討するルート
+## MVP2で検討するルート候補
+
+以下はMVP2の画面と操作を検討するための候補であり、URL、HTTPメソッド、ルート名、Controller、middlewareの確定仕様ではない。管理者画面モック、マルチログイン・管理者認証認可の設計、TMDB技術調査後に決定する。
+
+お問い合わせフォーム、利用規約、プライバシーポリシー、会員登録時の同意確認に必要なルートもMVP2で追加する。URL、HTTPメソッド、ルート名は各実装Issueで決定する。
 
 ### 管理者機能
 
 | HTTPメソッド | URL | ルート名 | 概要 |
 |---|---|---|---|
 | GET | `/admin/items` | `admin.items.index` | 管理者作品一覧を表示する |
-| GET | `/admin/items/create` | `admin.items.create` | 作品登録画面を表示する |
-| POST | `/admin/items` | `admin.items.store` | 作品登録処理を行う |
-| GET | `/admin/items/{item}/edit` | `admin.items.edit` | 作品編集画面を表示する |
-| PATCH | `/admin/items/{item}` | `admin.items.update` | 作品更新処理を行う |
-| DELETE | `/admin/items/{item}` | `admin.items.destroy` | 作品削除処理を行う |
+| POST | `/admin/items` | `admin.items.store` | TMDB検索結果から選択した作品を1作品登録する候補 |
 
 ### 外部API連携
 
 | HTTPメソッド | URL | ルート名 | 概要 |
 |---|---|---|---|
 | GET | `/admin/tmdb/search` | `admin.tmdb.search` | TMDB検索画面を表示する |
-| POST | `/admin/tmdb/import` | `admin.tmdb.import` | TMDBから取得した作品情報を登録する |
+
+TMDB検索の送信方法、検索結果のURL、登録操作のルート、重複時の応答は未確定とする。
+
+## MVP2対象外の将来ルート候補
+
+- 管理者作品詳細モーダルに必要な取得処理
+- 作品編集
+- 作品削除
+- お問い合わせ管理
 
 ## 補足
 

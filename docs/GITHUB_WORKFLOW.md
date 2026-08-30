@@ -66,6 +66,15 @@ fix: レビュー削除時のフォーカス制御を修正する
 
 Labelsは作業の種類と優先度、MilestoneはMVPやリリースなどの反映単位を表します。
 
+MVP2のスコープ・優先順位・進捗は、GitHub Milestone「MVP2 - 初回公開版（v1.0.0）」と所属Issue / PRを正本とします。
+
+- Milestone本文はリリース全体のスコープを扱う
+- Issueは作業単位、受け入れ条件、状態を扱う
+- PRは具体的な変更と検証結果を扱う
+- READMEとdocsは機能、設計、運用を説明する
+
+対応Issueが未作成でもMilestone本文に含まれる項目があるため、Open Issue一覧だけをMVP2全スコープとして扱いません。Milestone本文、Issue一覧、進捗表をREADMEや複数のdocsへ複製せず、各文書にはその責務に必要な説明と正本への案内だけを置きます。
+
 ### 4.1 Type Labels
 
 `Color`はGitHubでLabelを作成する際に指定する、`#`を含む6桁の16進カラーコードです。Labelの分類は名前と用途を正本とし、色は一覧性を補助するために使用します。
