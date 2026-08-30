@@ -129,7 +129,7 @@ MVP1当時の統合先であるmainへマージ
 ## 実装フェーズ
 
 | Phase | 内容 | 主な対象 |
-|---|---|---|
+| --- | --- | --- |
 | Phase 0 | DB基盤準備 | マイグレーション、Seeder |
 | Phase 1 | 設計確認・ブランチ作成 | Issue確認、作業ブランチ作成 |
 | Phase 2 | DB基盤・共通機能 | Model、Relation、作品一覧、作品詳細 |
@@ -447,7 +447,7 @@ MySQLではユニーク制約に含まれる `null` は複数許容されるた�
 以下の削除方針を検討する。
 
 | 対象 | 削除時の動作 | 理由 |
-|---|---|---|
+| --- | --- | --- |
 | `reviews.user_id` | `nullOnDelete` | 会員退会後もレビュー本文を残し、投稿者を匿名表示するため |
 | `review_comments.user_id` | `nullOnDelete` | 会員退会後も返信本文を残し、投稿者を匿名表示するため |
 | `reviews.item_id` | `cascadeOnDelete` | 作品削除時に紐づくレビューを残さないため |
