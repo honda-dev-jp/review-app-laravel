@@ -24,6 +24,9 @@ Route::get('/items', [ItemController::class, 'index'])
 Route::get('/items/{item}', [ItemController::class, 'show'])
     ->name('items.show');
 
+Route::view('/admin', 'admin.dashboard')
+    ->name('admin.dashboard');
+
 Route::middleware('auth')->group(function () {
     Route::middleware('verified')->group(function () {
 
