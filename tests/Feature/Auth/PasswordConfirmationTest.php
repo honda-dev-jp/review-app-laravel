@@ -19,7 +19,9 @@ class PasswordConfirmationTest extends TestCase
 
         $response = $this->actingAs($user)->get('/confirm-password');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('<title>パスワード確認 | 映画レビューアプリ</title>', false);
 
         $xpath = $this->createXPath($response->getContent());
         $passwordInput = $this->getSingleElementById($xpath, 'password');

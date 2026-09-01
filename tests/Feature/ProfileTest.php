@@ -52,6 +52,7 @@ class ProfileTest extends TestCase
 
         $response
             ->assertOk()
+            ->assertSee('<title>アカウント | 映画レビューアプリ</title>', false)
             ->assertDontSeeText('プロフィール編集');
     }
 

@@ -31,10 +31,31 @@ class ItemIndexTest extends TestCase
         $this
             ->get(route('items.index'))
             ->assertOk()
+            ->assertSee('<title>作品一覧 | 映画レビューアプリ</title>', false)
             ->assertSeeText($item->title)
             ->assertSeeText($category->name)
             ->assertSeeText('4.5')
             ->assertSeeText('2件');
+    }
+
+    /**
+     * app layoutでtitle slotを指定しない場合にアプリ名へフォールバックすることを保証する。
+     */
+    public function test_app_layout_uses_application_name_when_title_slot_is_not_specified(): void
+    {
+        $this
+            ->blade('<x-app-layout>Content</x-app-layout>')
+            ->assertSee('<title>映画レビューアプリ</title>', false);
+    }
+
+    /**
+     * app layoutで空のtitle slotを指定した場合にアプリ名へフォールバックすることを保証する。
+     */
+    public function test_app_layout_uses_application_name_when_title_slot_is_empty(): void
+    {
+        $this
+            ->blade('<x-app-layout><x-slot name="title"></x-slot> Content</x-app-layout>')
+            ->assertSee('<title>映画レビューアプリ</title>', false);
     }
 
     /**

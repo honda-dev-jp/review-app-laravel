@@ -24,7 +24,9 @@ class RegistrationTest extends TestCase
     {
         $response = $this->get('/register');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('<title>会員登録 | 映画レビューアプリ</title>', false);
 
         $xpath = $this->createXPath($response->getContent());
 

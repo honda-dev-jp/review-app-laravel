@@ -18,7 +18,9 @@ class AuthenticationTest extends TestCase
     {
         $response = $this->get('/login');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('<title>ログイン | 映画レビューアプリ</title>', false);
 
         $xpath = $this->createXPath($response->getContent());
 
@@ -42,6 +44,26 @@ class AuthenticationTest extends TestCase
         $statusElements = $xpath->query('//*[@role="status"]');
         $this->assertNotFalse($statusElements);
         $this->assertCount(0, $statusElements);
+    }
+
+    /**
+     * guest layoutでtitle slotを指定しない場合にアプリ名へフォールバックすることを保証する。
+     */
+    public function test_guest_layout_uses_application_name_when_title_slot_is_not_specified(): void
+    {
+        $this
+            ->blade('<x-guest-layout>Content</x-guest-layout>')
+            ->assertSee('<title>映画レビューアプリ</title>', false);
+    }
+
+    /**
+     * guest layoutで空のtitle slotを指定した場合にアプリ名へフォールバックすることを保証する。
+     */
+    public function test_guest_layout_uses_application_name_when_title_slot_is_empty(): void
+    {
+        $this
+            ->blade('<x-guest-layout><x-slot name="title"></x-slot> Content</x-guest-layout>')
+            ->assertSee('<title>映画レビューアプリ</title>', false);
     }
 
     public function test_login_validation_errors_have_accessible_aria_attributes(): void

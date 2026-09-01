@@ -24,11 +24,32 @@ class ItemShowTest extends TestCase
         $this
             ->get(route('items.show', $item))
             ->assertOk()
+            ->assertSee('<title>詳細表示確認作品 | 映画レビューアプリ</title>', false)
             ->assertSeeText($item->title)
             ->assertSeeText('平均評価')
             ->assertSeeText('4.5')
             ->assertSeeText('評価件数')
             ->assertSeeText('2件');
+    }
+
+    /**
+     * 作品詳細のブラウザタイトルでHTML特殊文字がエスケープされることを保証する。
+     */
+    public function test_item_show_escapes_html_special_characters_in_browser_title(): void
+    {
+        $itemTitle = '記号 & <作品> "二重引用" \'単一引用\'';
+        $item = Item::factory()->create([
+            'title' => $itemTitle,
+        ]);
+
+        $this
+            ->get(route('items.show', $item))
+            ->assertOk()
+            ->assertSee(
+                '<title>記号 &amp; &lt;作品&gt; &quot;二重引用&quot; &#039;単一引用&#039; | 映画レビューアプリ</title>',
+                false
+            )
+            ->assertDontSee('<title>'.$itemTitle.' | 映画レビューアプリ</title>', false);
     }
 
     /**
