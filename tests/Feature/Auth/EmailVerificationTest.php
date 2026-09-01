@@ -31,7 +31,9 @@ class EmailVerificationTest extends TestCase
 
         $response = $this->actingAs($user)->get('/verify-email');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('<title>メールアドレス確認 | 映画レビューアプリ</title>', false);
 
         $statusElements = $this->createXPath($response->getContent())
             ->query('//*[@role="status"]');

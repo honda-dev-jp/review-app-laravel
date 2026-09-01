@@ -24,7 +24,9 @@ class PasswordResetTest extends TestCase
     {
         $response = $this->get('/forgot-password');
 
-        $response->assertStatus(200);
+        $response
+            ->assertStatus(200)
+            ->assertSee('<title>パスワードリセット申請 | 映画レビューアプリ</title>', false);
 
         $xpath = $this->createXPath($response->getContent());
         $emailInput = $this->getSingleElementById($xpath, 'email');
@@ -124,7 +126,9 @@ class PasswordResetTest extends TestCase
             function (ResetPassword $notification) {
                 $response = $this->get('/reset-password/'.$notification->token);
 
-                $response->assertStatus(200);
+                $response
+                    ->assertStatus(200)
+                    ->assertSee('<title>パスワード再設定 | 映画レビューアプリ</title>', false);
 
                 return true;
             });
