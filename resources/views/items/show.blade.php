@@ -1,4 +1,6 @@
 <x-app-layout>
+    <x-slot name="title">{{ $item->title }}</x-slot>
+
     <x-slot name="header">
         <div>
             <p class="text-sm font-semibold text-blue-600">

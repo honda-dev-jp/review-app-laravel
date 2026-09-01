@@ -1,4 +1,6 @@
 <x-app-layout>
+    <x-slot name="title">作品一覧</x-slot>
+
     <x-slot name="header">
         <div>
             <h1 class="text-xl font-bold text-slate-900">
