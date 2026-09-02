@@ -253,14 +253,14 @@ db:seed --class=Database\Seeders\E2eSeeder
 
 | model | 件数 |
 |---|---:|
-| users | 4 |
+| users | 5 |
 | categories | 1 |
 | items | 11 |
 | reviews | 11 |
 
 Factoryはモデル1件の基本的な生成方法を担当し、`E2eSeeder`はPlaywrightのシナリオに必要なデータセット全体を組み立てます。Node.jsやTypeScriptからDBへ直接insertしません。
 
-4 usersは、認証済みreviewer、メール未認証、reviewなしの認証済みuser、一般操作用の認証済みuserという状態を持ちます。fixture用の認証情報は実在credentialではありません。値を複数文書へ重複させず、実装上の`UserFactory`とログインhelperを一致させます。
+5 usersは、認証済みreviewer、メール未認証、reviewなしの認証済みuser、一般操作用の認証済みuser、管理者画面の認可済みE2E操作に使用するadminという状態を持ちます。adminを含むこれらのユーザーはE2E専用DBだけに生成する合成fixtureであり、本番の管理者作成機能や実在ユーザーではありません。fixture用の認証情報は実在credentialではありません。値を複数文書へ重複させず、実装上の`E2eSeeder`、`UserFactory`とログインhelperを一致させます。
 
 作品名は`E2E Movie 01`から`E2E Movie 11`、review本文は`E2E Review 01`から`E2E Review 11`、ratingは5に固定します。11件は`paginate(10)`で2ページ目を発生させる最小構成です。
 
