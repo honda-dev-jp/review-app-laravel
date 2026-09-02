@@ -136,6 +136,24 @@ class RegistrationTest extends TestCase
     }
 
     /**
+     * 会員登録リクエストへ管理者権限を混入しても、通常ユーザーとして登録されることを保証する。
+     */
+    public function test_new_users_cannot_register_as_admin(): void
+    {
+        $this->post('/register', [
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'role' => 'admin',
+        ]);
+
+        $user = User::where('email', 'test@example.com')->firstOrFail();
+
+        $this->assertSame('user', $user->role);
+    }
+
+    /**
      * 会員登録時にLaravel標準のメール認証通知が送信されることを保証する。
      */
     public function test_new_users_receive_email_verification_notification(): void

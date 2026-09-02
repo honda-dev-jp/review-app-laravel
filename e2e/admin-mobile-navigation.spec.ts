@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 
+import { loginAs } from './support/login.js';
+
 test.use({ viewport: { width: 390, height: 844 } });
 
 test('モバイル管理メニューを開き、Escapeで閉じる', async ({ page }) => {
-    await page.goto('/admin');
+    await loginAs(page, 'e2e-admin@example.test', '/admin');
 
     const menuButton = page.getByRole('button', {
         name: '管理メニューを開閉する',
