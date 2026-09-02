@@ -31,7 +31,7 @@
         </a>
 
         <p class="hidden text-sm text-gray-300 md:block">
-            管理者：管理者名
+            管理者：{{ auth()->user()?->name }}
         </p>
 
         <button

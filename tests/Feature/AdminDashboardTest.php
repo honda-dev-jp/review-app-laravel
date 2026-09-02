@@ -2,19 +2,55 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AdminDashboardTest extends TestCase
 {
+    use RefreshDatabase;
+
     /**
-     * 管理画面ダッシュボードにページ名付きのtitleが表示されることを保証する。
+     * 未ログインユーザーには認可判定より先に認証を要求し、ログイン画面へ誘導することを保証する。
      */
-    public function test_admin_dashboard_displays_page_title(): void
+    public function test_guest_is_redirected_to_login_from_admin_dashboard(): void
     {
         $this
             ->get(route('admin.dashboard'))
+            ->assertRedirect(route('login'));
+    }
+
+    /**
+     * 一般ユーザーはLaravel標準の認可機構により管理画面へのアクセスを拒否されることを保証する。
+     */
+    public function test_user_cannot_access_admin_dashboard(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'user',
+        ]);
+
+        $this
+            ->actingAs($user)
+            ->get(route('admin.dashboard'))
+            ->assertForbidden();
+    }
+
+    /**
+     * 管理者が管理画面ダッシュボードを表示でき、ページ名付きのtitleと管理者名が表示されることを保証する。
+     */
+    public function test_admin_can_view_dashboard(): void
+    {
+        $admin = User::factory()->create([
+            'name' => '管理テストユーザー',
+            'role' => 'admin',
+        ]);
+
+        $this
+            ->actingAs($admin)
+            ->get(route('admin.dashboard'))
             ->assertOk()
-            ->assertSee('<title>ダッシュボード | 映画レビューアプリ 管理</title>', false);
+            ->assertSee('<title>ダッシュボード | 映画レビューアプリ 管理</title>', false)
+            ->assertSeeText('管理者：管理テストユーザー');
     }
 
     /**

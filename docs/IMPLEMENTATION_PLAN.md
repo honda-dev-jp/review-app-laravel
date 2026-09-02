@@ -62,7 +62,7 @@ MVP2の最新スコープ・優先順位・進捗は、GitHub Milestone「MVP2 -
   ↓
 管理者画面モック
   ↓
-マルチログイン / 管理者認証・認可
+Breeze既存認証 / users.roleによる管理者認可
   ↓
 TMDB利用条件・クレジット要件
   ↓

@@ -45,6 +45,13 @@ class E2eSeeder extends Seeder
             'email' => 'e2e-verified@example.test',
         ]);
 
+        // 管理者画面の認可済みE2E操作に使用する合成admin fixture。
+        User::factory()->create([
+            'name' => 'E2E Admin',
+            'email' => 'e2e-admin@example.test',
+            'role' => 'admin',
+        ]);
+
         // 作品一覧と本人レビュー一覧で2ページ目を発生させるため、同一カテゴリに11作品を用意する。
         $category = Category::factory()->create([
             'name' => 'E2E Category',

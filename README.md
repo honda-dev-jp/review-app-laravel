@@ -93,14 +93,13 @@ Composer依存関係は`composer.lock`、npm依存関係は`package-lock.json`�
 
 ### MVP2 - 初回公開版（v1.0.0）
 
-MVP2では、Laravel Breeze標準メール認証、PHP 8.4 / Laravel 13への更新、PHPStan / Larastan Level 10、Playwright E2E基盤等を整備済みです。
+MVP2では、Laravel Breeze標準メール認証、既存のBreeze認証と `users.role` による管理者認可、PHP 8.4 / Laravel 13への更新、PHPStan / Larastan Level 10、Playwright E2E基盤等を整備済みです。
 
 初回公開に向けて、次の領域を進めます。
 
 - 作品詳細画面への評価分布表示
 - お問い合わせフォーム、利用規約・プライバシーポリシー表示、会員登録時の同意確認
-- Laravel Breezeをベースとしたマルチログインと管理者認証・認可
-- 最小限の管理者画面と登録済み作品一覧
+- 登録済み作品一覧などの管理機能
 - TMDB APIを利用した映画検索、1作品ずつの登録、重複登録防止
 - 利用規約、プライバシーポリシー、License、本番環境、デプロイ等の公開準備
 
