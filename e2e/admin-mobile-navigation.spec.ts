@@ -25,6 +25,10 @@ test('モバイル管理メニューを開き、Escapeで閉じる', async ({ pa
     await expect(mobileMenu.getByText('登録済み作品一覧', { exact: true })).toBeVisible();
     await expect(mobileMenu.getByText('TMDB検索', { exact: true })).toBeVisible();
 
+    await expect(
+        mobileMenu.getByRole('button', { name: 'ログアウト', exact: true }),
+    ).toBeVisible();
+
     await page.keyboard.press('Escape');
 
     await expect(mobileMenu).toBeHidden();
