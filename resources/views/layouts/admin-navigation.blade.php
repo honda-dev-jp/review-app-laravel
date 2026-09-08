@@ -71,6 +71,22 @@
                         @endif
                     </li>
                 @endforeach
+
+                <li aria-hidden="true" class="my-4 border-t border-gray-500"></li>
+
+                <li>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="block w-full rounded-md border-l-2 border-transparent px-3 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                            ログアウト
+                        </button>
+                    </form>
+                </li>
+
             </ul>
         </nav>
     </aside>
@@ -121,6 +137,22 @@
                         @endif
                     </li>
                 @endforeach
+
+                <li aria-hidden="true" class="my-4 border-t border-gray-500"></li>
+
+                <li>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="block w-full rounded-md border-l-2 border-transparent px-3 py-3 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                            ログアウト
+                        </button>
+                    </form>
+                </li>
+
             </ul>
         </nav>
     </aside>
