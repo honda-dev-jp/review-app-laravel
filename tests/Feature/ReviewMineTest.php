@@ -40,6 +40,7 @@ class ReviewMineTest extends TestCase
 
         $response
             ->assertOk()
+            ->assertSee('<title>本人レビュー一覧 | 映画レビューアプリ</title>', false)
             ->assertSee('投稿したレビュー')
             ->assertSee('レビュー履歴')
             ->assertSee('サンプル映画テスト')

@@ -1,4 +1,6 @@
 <x-guest-layout>
+    <x-slot name="title">ログイン</x-slot>
+
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 

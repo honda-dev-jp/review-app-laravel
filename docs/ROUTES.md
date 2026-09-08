@@ -18,10 +18,10 @@
 - 未ログイン限定画面は `guest` ミドルウェアで保護する
 - 会員機能は `auth` ミドルウェアで保護する
 - メール認証必須の会員機能は `auth` と `verified` ミドルウェアで保護する
-- 自分のレビュー削除など本人確認が必要な処理は、PolicyまたはController側で認可を行う
+- 認可は処理の性質に応じてLaravel標準のGate、PolicyまたはController側の条件分岐を使用する
 - POST、PATCH、DELETEなど状態変更を伴う処理ではCSRF保護を前提とする
 
-## 初期移植フェーズのルート一覧
+## 主要な実装済みルート一覧
 
 ### 共通画面
 
@@ -59,6 +59,14 @@ Laravel Breezeの認証ルートを使用する。
 | PUT | `/password` | `password.update` | `Auth\PasswordController@update` | 必要 | パスワード更新処理を行う |
 | DELETE | `/profile` | `profile.destroy` | `ProfileController@destroy` | 必要 | アカウント画面の確認モーダルから会員退会処理を行う |
 | GET | `/my-reviews` | `reviews.mine` | `ReviewController@mine` | 必要 | 本人のレビュー一覧を表示する |
+
+### 管理者画面
+
+管理画面は既存のLaravel Breeze認証を使用し、`auth` と `can:access-admin-panel` ミドルウェアで保護する。メール認証は要求しない。
+
+| HTTPメソッド | URL | ルート名 | Controller | 認証 | 概要 |
+|---|---|---|---|---|---|
+| GET | `/admin` | `admin.dashboard` | `Route::view` | 必要 + 管理者認可 | 管理画面ダッシュボードを表示する |
 
 ### レビュー機能
 
@@ -133,6 +141,10 @@ Laravel Breezeの認証ルートを使用する。
 - レビュー・評価投稿
 - レビュー返信投稿
 
+### 認証 + 管理者認可（`auth` + `can:access-admin-panel`）
+
+管理画面ダッシュボードは `auth` の後に `can:access-admin-panel` で保護する。未ログインユーザーはログイン画面へ誘導し、認証済みでも管理者権限がなければ403で拒否する。`verified` ミドルウェアは使用しない。
+
 ### メール認証関連
 
 以下は `routes/auth.php` で定義するLaravel Breeze標準のメール認証ルートである。
@@ -157,10 +169,11 @@ Laravel Breezeの認証ルートを使用する。
 | アカウント情報の編集 | 自分のプロフィールのみ編集可能 |
 | 会員退会 | 自分のアカウントのみ退会可能 |
 | 本人のレビュー一覧表示 | 自分のレビューのみ表示 |
+| 管理画面ダッシュボード | `users.role` が `admin` のユーザーのみ表示可能 |
 
-認可は、LaravelのPolicyまたはController側の条件分岐で実装する。
+認可は、Laravel標準のGate、PolicyまたはController側の条件分岐で実装する。
 
-実装時は、Policyの利用を優先して検討する。
+特定モデルに紐づく操作ではPolicyを優先して検討し、管理画面ダッシュボードのようなモデル非依存の認可にはGateを使用する。
 
 ## Controller候補
 
@@ -174,7 +187,7 @@ Laravel Breezeの認証ルートを使用する。
 
 ## MVP2で検討するルート候補
 
-以下はMVP2の画面と操作を検討するための候補であり、URL、HTTPメソッド、ルート名、Controller、middlewareの確定仕様ではない。管理者画面モック、マルチログイン・管理者認証認可の設計、TMDB技術調査後に決定する。
+以下はMVP2で今後追加する画面と操作の候補であり、URL、HTTPメソッド、ルート名、Controller、middlewareの確定仕様ではない。管理画面ダッシュボードの認証・認可方式は確定済みだが、登録済み作品一覧とTMDB関連ルートは後続の技術調査・設計で決定する。
 
 お問い合わせフォーム、利用規約、プライバシーポリシー、会員登録時の同意確認に必要なルートもMVP2で追加する。URL、HTTPメソッド、ルート名は各実装Issueで決定する。
 
