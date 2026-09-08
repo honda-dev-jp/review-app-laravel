@@ -85,6 +85,68 @@ git branch
 ./vendor/bin/sail npm run build
 ```
 
+### 別PCからSail上のLaravelを閲覧する場合
+
+症状・原因：
+
+- 別PCでLaravelの画面は開けるが、CSSが読み込まれずレイアウトが崩れる
+- DevToolsのNetworkで `app.css`、`app.js`、`@vite/client` が `http://localhost:5173` 宛てとなり、`ERR_CONNECTION_REFUSED` になる
+- `public/hot` が `http://localhost:5173` を指していると、ブラウザは閲覧側PC自身へアセットを要求する
+
+このプロジェクトのSail環境では、Viteが `0.0.0.0:5173` で待ち受ける構成になっている。待受と、ブラウザへ通知する接続先を分けて確認する。
+
+確認手順：
+
+1. Viteを動かしているPCのプロジェクトで、通常開発用hot fileを確認する
+
+```bash
+cat public/hot
+```
+
+2. 別PCのDevToolsでNetworkを開いてLaravelの画面を再読み込みし、CSS・JavaScript・`@vite/client` の要求先と失敗内容を確認する
+3. Viteの起動表示を確認し、別PCのブラウザで `http://<Viteホスト>:5173/@vite/client` を開いてJavaScriptが取得できることを確認する。`<Viteホスト>` は実際のLAN側ホスト名またはIPへ置き換える
+
+対応方法：
+
+ユーザー本人が、Viteを動かすPCのGit管理外 `.env` で `APP_URL` をブラウザから利用するLaravelのOriginへ合わせる。Laravelのポートは82であり、Viteの5173を指定しない。
+
+注意：`APP_URL` はVite専用ではなく、Laravel全体で利用する設定である。変更時は絶対URL生成などへの影響も考慮し、このプロジェクトではメール認証、パスワードリセット、公開画像URL等も必要に応じて確認する。
+
+| 用途 | APP_URLの書式 |
+|---|---|
+| 同一PCからの標準閲覧 | `http://localhost:82` |
+| 別PCからのLAN閲覧 | `http://192.168.x.x:82` |
+
+`192.168.x.x` は書式を示すplaceholderであり、そのまま設定できる値ではない。ユーザー本人が到達可能なLAN側接続先へ置き換える。端末固有IPを `vite.config.js`、`.env.example`、その他のGit管理ファイルへ直書きしない。`.env` の実内容をAIへ提示したり、Git・Issue・PR・ログへ転載したりしない。
+
+APP_URLの条件：
+
+- HTTP(S) Originとして指定し、末尾スラッシュ、path、query、fragment、credentialsを含めない
+- URL解析後の `origin` と設定文字列が完全一致する書式にする
+- 未設定または空文字の場合は独自HMR設定を追加せず、Laravel Vite Plugin標準動作へ戻る
+- 不正URLは `APP_URL is not a valid URL origin.` でVite起動時に停止する
+- HTTP(S)以外や末尾スラッシュ付きなどは `APP_URL must be an HTTP(S) origin without a path, query, fragment, or credentials.` で停止する
+- 上記エラーには実際のAPP_URL値を出力しない
+
+現行の `vite.config.js` はserve時だけ `loadEnv` でAPP_URLを取得・検証し、有効な場合は `hostname` を `server.hmr.host` へ設定する。build時はこのAPP_URL取得・検証・HMR設定を実行しない。`server.host` は追加せずSailの待受を使用し、`server.cors` も追加せずLaravel Vite Plugin標準のAPP_URL許可を使用する。`.env.example` の標準値は変更しない。
+
+設定後の確認：
+
+1. 起動中のViteをそのターミナルで `Ctrl+C` により停止し、Sail経由で再起動する
+
+```bash
+./vendor/bin/sail npm run dev
+```
+
+2. 別ターミナルで `cat public/hot` を実行し、到達可能なホストとポート5173が記録されていることを確認する。`public/hot` は手編集しない
+3. 別PCでLaravelの画面を再読み込みし、NetworkでCSS・JavaScript・`@vite/client` の取得成功と、接続拒否・CORSエラーがないことを確認する
+4. Consoleでエラー・警告がなく、`[vite] connected.` が表示され、レイアウトが正常であることを確認する
+5. CSSを一時的に変更して保存し、手動再読み込みなしで反映されることを確認してから元に戻す。接続表示だけでHMRの動作確認済みとしない
+
+標準localhost環境へ戻す方法：
+
+ユーザー本人がGit管理外 `.env` のAPP_URLを `http://localhost:82` へ戻し、同じ手順でViteを停止・再起動する。`public/hot` が `http://localhost:5173` となることを確認し、同一PCのブラウザで `http://localhost:82` を開いて表示とアセット取得を確認する。
+
 ## 6. Breeze認証画面が動かない
 
 確認手順：
