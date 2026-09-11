@@ -29,6 +29,7 @@ async function openReviewDeletionDialog(page: Page): Promise<{
     const dialog = article.getByRole('dialog', { name: REVIEW_DIALOG_NAME });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAccessibleName(REVIEW_DIALOG_NAME);
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
 
     return { article, dialog, trigger };
 }

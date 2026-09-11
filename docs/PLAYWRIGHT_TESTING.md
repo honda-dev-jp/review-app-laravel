@@ -276,7 +276,7 @@ LocatorはDOM構造やCSS classだけに依存せず、ユーザーが認識す�
 
 現行E2Eでは、次の実ブラウザ動作を確認します。
 
-- dialogのroleとaccessible name
+- dialogのrole、accessible name、`aria-modal="true"`の明示検証
 - modalを開いた直後のinitial focus
 - `Tab`と`Shift+Tab`によるmodal内のfocus循環
 - `Escape`、cancel、close、背景clickによるclose
