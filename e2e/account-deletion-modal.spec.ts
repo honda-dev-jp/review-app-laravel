@@ -18,6 +18,7 @@ async function openAccountDeletionDialog(page: Page): Promise<{
     const dialog = page.getByRole('dialog', { name: ACCOUNT_DIALOG_NAME });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAccessibleName(ACCOUNT_DIALOG_NAME);
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
 
     return { dialog, trigger };
 }
