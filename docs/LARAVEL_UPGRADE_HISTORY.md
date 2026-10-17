@@ -1601,3 +1601,5 @@ PR #135のMerge commitを反映した`develop`上で、本Issueの文書編集�
 - Laravel 13.26.1は`develop`へ反映済みだが、`main`およびXServer本番環境へは未反映である
 - `session.serialization=json`は現在の`develop` baselineであり、Laravel 12時点の既存session失効と再ログインは、将来の本番反映時に発生する既知影響である
 - session失効は認証状態への影響であり、DBに保存された永続データを削除するものではない
+
+Laravel 13.26.1確定後に実施した13.30.0へのセキュリティ更新と、その後の依存関係更新実績は[依存関係更新履歴](DEPENDENCY_UPDATE_HISTORY.md)を参照する。

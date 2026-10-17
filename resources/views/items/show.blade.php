@@ -16,7 +16,7 @@
         <div class="mb-6">
             <a
                 href="{{ route('items.index') }}"
-                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-xs transition hover:bg-slate-50 hover:text-blue-600"
             >
                 ← 作品一覧へ戻る
             </a>
@@ -139,7 +139,7 @@
             </div>
         </section>
 
-        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm">
+        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-xs">
             <h3 class="text-lg font-bold text-slate-900">
                 レビュー投稿
             </h3>
@@ -171,7 +171,7 @@
                                     aria-invalid="true"
                                     aria-describedby="review-rating-error"
                                 @enderror
-                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-xs focus:border-blue-500 focus:ring-blue-500"
                             >
                                 <option value="">評価を選択してください</option>
                                 @foreach ([5, 4, 3, 2, 1] as $star)
@@ -201,7 +201,7 @@
                                 id="body"
                                 name="body"
                                 rows="5"
-                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-xs focus:border-blue-500 focus:ring-blue-500"
                                 placeholder="作品の感想を入力してください"
                                 @error('body')
                                     aria-invalid="true"
@@ -223,7 +223,7 @@
                         <div class="flex justify-end">
                             <button
                                 type="submit"
-                                class="inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                                class="cursor-pointer inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-blue-700"
                             >
                                 レビューを投稿する
                             </button>
@@ -243,7 +243,7 @@
             @endauth
         </section>
 
-        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-sm">
+        <section class="mt-10 rounded-[1.5rem] border border-slate-200 bg-white p-6 text-left shadow-xs">
             <h3 class="text-lg font-bold text-slate-900">
                 レビュー表示
             </h3>
@@ -357,7 +357,7 @@
                                     id="comment-body-{{ $review->id }}"
                                     name="body"
                                     rows="4"
-                                    class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-xs focus:border-blue-500 focus:ring-blue-500"
                                     placeholder="レビューへの返信を入力してください"
                                     @if (
                                         (string) old('form_review_id') === (string) $review->id
@@ -385,7 +385,7 @@
                             <div class="flex justify-end">
                                 <button
                                     type="submit"
-                                    class="inline-flex items-center rounded-full bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                                    class="cursor-pointer inline-flex items-center rounded-full bg-sky-600 px-5 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-sky-700"
                                 >
                                     返信を投稿する
                                 </button>

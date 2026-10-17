@@ -11,7 +11,7 @@
         </p>
 
         <div class="max-w-full overflow-x-auto px-2">
-            <div class="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div class="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
                 @if ($paginator->onFirstPage())
                     <span class="grid h-10 min-w-10 place-items-center border-r border-slate-200 px-3 text-sm font-semibold text-slate-300">
                         ‹

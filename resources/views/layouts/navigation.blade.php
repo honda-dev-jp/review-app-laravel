@@ -1,6 +1,6 @@
 <nav
     x-data="{ mobileMenuOpen: false }"
-    class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur"
+    class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur-sm"
     @keydown.escape.window="mobileMenuOpen = false"
 >
     <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
@@ -31,7 +31,7 @@
                 <div class="hidden items-center gap-3 whitespace-nowrap md:flex">
                     <a
                         href="{{ route('login') }}"
-                        class="rounded-full border border-blue-200 bg-white px-5 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:shadow-md"
+                        class="rounded-full border border-blue-200 bg-white px-5 py-2 text-sm font-bold text-blue-700 shadow-xs transition hover:border-blue-300 hover:bg-blue-50 hover:shadow-md"
                     >
                         ログイン
                     </a>
@@ -39,7 +39,7 @@
                     @if (Route::has('register'))
                         <a
                             href="{{ route('register') }}"
-                            class="rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
+                            class="rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-xs transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
                         >
                             会員登録
                         </a>
@@ -52,7 +52,7 @@
                 <div class="relative hidden items-center gap-3 whitespace-nowrap md:flex" x-data="{ open: false }" @keydown.escape.window="open = false">
                     <button
                         type="button"
-                        class="group flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/60"
+                        class="cursor-pointer group flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-xs transition hover:border-blue-200 hover:bg-blue-50/60"
                         aria-label="ユーザーメニュー"
                         :aria-expanded="open.toString()"
                         @click="open = ! open"
@@ -94,7 +94,7 @@
 
                             <button
                                 type="submit"
-                                class="block w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                                class="cursor-pointer block w-full rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
                             >
                                 ログアウト
                             </button>
@@ -108,7 +108,7 @@
         {{-- ==================== モバイルナビゲーション：開始 ==================== --}}
         <button
             type="button"
-            class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 md:hidden"
+            class="cursor-pointer inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 md:hidden"
             aria-label="メニューを開く"
             aria-controls="mobile-menu"
             :aria-expanded="mobileMenuOpen.toString()"
@@ -163,7 +163,7 @@
                 @if (Route::has('register'))
                     <a
                         href="{{ route('register') }}"
-                        class="rounded-2xl bg-blue-600 px-4 py-3 text-center text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
+                        class="rounded-2xl bg-blue-600 px-4 py-3 text-center text-white shadow-xs transition hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-md"
                         @click="mobileMenuOpen = false"
                     >
                         会員登録
@@ -205,7 +205,7 @@
 
                     <button
                         type="submit"
-                        class="w-full rounded-2xl px-4 py-3 text-left text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
+                        class="cursor-pointer w-full rounded-2xl px-4 py-3 text-left text-slate-600 transition hover:bg-slate-50 hover:text-blue-600"
                     >
                         ログアウト
                     </button>
