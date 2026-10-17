@@ -22,10 +22,10 @@
     x-data="{ mobileMenuOpen: false }"
     @keydown.escape.window="mobileMenuOpen = false"
 >
-    <header class="sticky top-0 z-40 flex h-14 items-center justify-between bg-gray-900 px-4 text-white shadow-sm sm:px-6">
+    <header class="sticky top-0 z-40 flex h-14 items-center justify-between bg-gray-900 px-4 text-white shadow-xs sm:px-6">
         <a
             href="{{ route('admin.dashboard') }}"
-            class="rounded text-lg font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+            class="rounded-sm text-lg font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
         >
             映画レビューアプリ　管理
         </a>
@@ -36,7 +36,7 @@
 
         <button
             type="button"
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md text-xl text-gray-100 transition hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-white md:hidden"
+            class="cursor-pointer inline-flex h-9 w-9 items-center justify-center rounded-md text-xl text-gray-100 transition hover:bg-gray-700 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white md:hidden"
             aria-label="管理メニューを開閉する"
             aria-controls="admin-mobile-menu"
             :aria-expanded="mobileMenuOpen.toString()"
@@ -57,7 +57,7 @@
                                 href="{{ $item['href'] }}"
                                 @if ($item['active']) aria-current="page" @endif
                                 @class([
-                                    'block rounded-md border-l-2 px-3 py-2 text-sm transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white',
+                                    'block rounded-md border-l-2 px-3 py-2 text-sm transition hover:bg-gray-600 hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white',
                                     'border-gray-200 font-semibold text-white' => $item['active'],
                                     'border-transparent font-medium text-gray-300' => ! $item['active'],
                                 ])
@@ -80,7 +80,7 @@
 
                         <button
                             type="submit"
-                            class="block w-full rounded-md border-l-2 border-transparent px-3 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            class="cursor-pointer block w-full rounded-md border-l-2 border-transparent px-3 py-2 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
                         >
                             ログアウト
                         </button>
@@ -122,7 +122,7 @@
                                 href="{{ $item['href'] }}"
                                 @if ($item['active']) aria-current="page" @endif
                                 @class([
-                                    'block rounded-md border-l-2 px-3 py-3 text-sm transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white',
+                                    'block rounded-md border-l-2 px-3 py-3 text-sm transition hover:bg-gray-600 hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white',
                                     'border-gray-200 font-semibold text-white' => $item['active'],
                                     'border-transparent font-medium text-gray-300' => ! $item['active'],
                                 ])
@@ -146,7 +146,7 @@
 
                         <button
                             type="submit"
-                            class="block w-full rounded-md border-l-2 border-transparent px-3 py-3 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            class="cursor-pointer block w-full rounded-md border-l-2 border-transparent px-3 py-3 text-left text-sm font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
                         >
                             ログアウト
                         </button>

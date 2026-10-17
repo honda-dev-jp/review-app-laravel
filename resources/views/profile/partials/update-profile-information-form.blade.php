@@ -79,7 +79,7 @@
                     file:bg-gray-800 file:px-4 file:py-2
                     file:text-sm file:font-semibold file:text-white
                     hover:file:bg-gray-700
-                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
             >
 
             <x-input-error
@@ -140,7 +140,7 @@
                     <p class="text-sm mt-2 text-gray-800">
                         {{ __('Your email address is unverified.') }}
 
-                        <button form="send-verification" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <button form="send-verification" class="cursor-pointer underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                             {{ __('Click here to re-send the verification email.') }}
                         </button>
                     </p>
@@ -164,7 +164,7 @@
             <textarea
                 id="profile"
                 name="profile"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500"
                 rows="5"
                 maxlength="1000"
                 @error('profile')

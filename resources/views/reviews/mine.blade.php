@@ -16,7 +16,7 @@
         <div class="mb-6">
             <a
                 href="{{ route('items.index') }}"
-                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+                class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-xs transition hover:bg-slate-50 hover:text-blue-600"
             >
                 ← 作品一覧へ戻る
             </a>
@@ -31,7 +31,7 @@
             </div>
         @endif
 
-        <section class="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
+        <section class="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-xs">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 
                 {{-- 左側 --}}
@@ -136,7 +136,7 @@
                     >
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div class="flex min-w-0 gap-4">
-                                <div class="h-20 w-20 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-50 sm:h-24 sm:w-24">
+                                <div class="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-50 sm:h-24 sm:w-24">
                                     <div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.9),transparent_28%),radial-gradient(circle_at_70%_20%,rgba(59,130,246,0.35),transparent_30%),linear-gradient(135deg,#312e81,#38bdf8)]">
                                         <span class="text-3xl drop-shadow-md">🎬</span>
                                     </div>
@@ -191,7 +191,7 @@
                             @if ($review->item)
                                 <a
                                     href="{{ route('items.show', $review->item) }}"
-                                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-blue-600"
+                                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-xs transition hover:bg-slate-50 hover:text-blue-600"
                                 >
                                     作品詳細を見る
                                 </a>
@@ -202,7 +202,7 @@
                             <button
                                 x-ref="deleteTrigger"
                                 type="button"
-                                class="inline-flex w-full items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 sm:w-auto"
+                                class="cursor-pointer inline-flex w-full items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-red-700 sm:w-auto"
                                 @click="open()"
                             >
                                 レビューを削除する
@@ -224,7 +224,7 @@
                             <div class="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
                                 <button
                                     type="button"
-                                    class="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                    class="cursor-pointer absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                                     aria-label="閉じる"
                                     @click="close()"
                                 >
@@ -245,7 +245,7 @@
                                     <button
                                         x-ref="cancelButton"
                                         type="button"
-                                        class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+                                        class="cursor-pointer inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
                                         @click="close()"
                                     >
                                         キャンセル
@@ -261,7 +261,7 @@
 
                                         <button
                                             type="submit"
-                                            class="inline-flex w-full items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 sm:w-auto"
+                                            class="cursor-pointer inline-flex w-full items-center justify-center rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-red-700 sm:w-auto"
                                         >
                                             削除する
                                         </button>
@@ -281,7 +281,7 @@
 
                         <a
                             href="{{ route('items.index') }}"
-                            class="mt-5 inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                            class="mt-5 inline-flex items-center rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-blue-700"
                         >
                             作品一覧を見る
                         </a>
