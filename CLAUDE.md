@@ -50,16 +50,18 @@ Claude Codeは、次の **読み取り専用の検証用途** に限定して使
 このプロジェクトでは、次の技術と方針を使用しています。
 
 - PHP 8.4.24（PR #131を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
-- Laravel 13.26.1（PR #135を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
+- Laravel 13.30.0（PR #199で更新。同期PR #204により`main`へ反映済み。13.26.1はLaravel 13移行時の過去のbaseline）
 - Laravel Sail 1.58.0
 - MySQL 8.4（Laravel SailのDocker imageは`mysql:8.4`）
 - Laravel Breeze 2.4.2
-- Blade（Laravel Framework 13.26.1に含まれる）
-- Tailwind CSS 3.4.19
+- Blade（Laravel Framework 13.30.0に含まれる）
+- Tailwind CSS 4.3.3（`@tailwindcss/vite`方式）
 - Vite 6.4.3
 - PHPUnit 12.5.33
 - PHPStan 2.2.8 / Larastan 3.10.0（解析レベル Level 10）
 - Laravel Pint 1.30.4
+
+依存更新・Tailwind CSS移行の実績とブランチへの反映履歴は[依存関係更新履歴](docs/DEPENDENCY_UPDATE_HISTORY.md)を参照してください。
 
 実装や設計を検証するときは、Laravel標準機能を優先する既存方針を尊重してください。
 
