@@ -152,12 +152,11 @@ COMPOSER_METADATA_PACKAGES = {
 NPM_METADATA_PACKAGES = {
     "@playwright/test",
     "@tailwindcss/forms",
+    "@tailwindcss/vite",
     "@types/node",
     "alpinejs",
-    "autoprefixer",
     "axios",
     "laravel-vite-plugin",
-    "postcss",
     "tailwindcss",
     "typescript",
     "vite",

@@ -25,7 +25,7 @@
         @endif
         {{-- ==================== フラッシュメッセージ：終了 ==================== --}}
 
-        <section class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+        <section class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-xs sm:p-7">
 
             {{-- ==================== 作品一覧ヘッダー：開始 ==================== --}}
             <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -82,7 +82,7 @@
                     @foreach ($items as $item)
 
                         {{-- ---------- 作品1件：開始 ---------- --}}
-                        <article class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg">
+                        <article class="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition duration-200 hover:-translate-y-1 hover:shadow-lg">
                             <a href="{{ route('items.show', $item) }}" class="block">
                                 <div class="aspect-[4/5] overflow-hidden bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-50">
                                     <div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.9),transparent_28%),radial-gradient(circle_at_70%_20%,rgba(59,130,246,0.35),transparent_30%),linear-gradient(135deg,#312e81,#38bdf8)]">
