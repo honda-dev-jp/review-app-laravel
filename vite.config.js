@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import laravel from 'laravel-vite-plugin';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ command, mode }) => {
     const config = {
@@ -11,6 +12,7 @@ export default defineConfig(({ command, mode }) => {
                 ],
                 refresh: true,
             }),
+            tailwindcss(),
         ],
     };
 
