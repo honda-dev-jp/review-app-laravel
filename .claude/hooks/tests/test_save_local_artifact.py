@@ -808,7 +808,8 @@ class DirectoryValidationTests(ValidationTestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             category = root / ".ai-work/reports"
-            category.mkdir(parents=True, mode=0o700)
+            category.parent.mkdir(mode=0o700)
+            category.mkdir(mode=0o700)
             with patch_cwd_inode_to(root):
                 directory_fd = helper.open_category_directory(root, "reports")
             try:
