@@ -15,14 +15,14 @@ MVP1で最低限のユーザー向け機能を移植し、MVP2では初回公開
 ## 使用技術
 
 - PHP 8.4.24（PR #131を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
-- Laravel 13.26.1（PR #135を`develop`へマージ済みの確定baseline。同期PR #138により`main`へ反映済み。XServer本番環境へは未反映）
+- Laravel 13.30.0（PR #199で更新。同期PR #204により`main`へ反映済み。13.26.1はLaravel 13移行時の過去のbaseline）
 - Laravel Sail
 - MySQL
 - phpMyAdmin
 - Mailpit（ローカルのメール確認用）
 - Laravel Breeze
 - Blade
-- Tailwind CSS
+- Tailwind CSS 4.3.3（`@tailwindcss/vite`方式）
 - Vite
 - PHPUnit
 - Playwright Test / TypeScript
@@ -143,6 +143,7 @@ MVP2の最新スコープ・優先順位・進捗は、GitHub Milestone「MVP2 -
 - [デプロイ方針](docs/DEPLOYMENT.md)
 - [Laravelメジャーアップグレードガイド](docs/LARAVEL_UPGRADE_GUIDE.md)
 - [Laravelメジャーアップグレード実施履歴](docs/LARAVEL_UPGRADE_HISTORY.md)
+- [依存関係更新履歴](docs/DEPENDENCY_UPDATE_HISTORY.md)
 
 ## 開発方針
 

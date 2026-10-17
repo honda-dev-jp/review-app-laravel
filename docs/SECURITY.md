@@ -548,6 +548,8 @@ Laravel 10→11で実際に行ったSecurity Blockingの切り分けと判断は
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)
 を参照する。
 
+Issue #193〜#201のComposer依存更新・監査実績は[依存関係更新履歴](DEPENDENCY_UPDATE_HISTORY.md)を参照する。
+
 ---
 
 ## 16. npm依存関係の注意
@@ -583,6 +585,8 @@ Dependabotはrepositoryのdefault branchを基準に依存関係を解析する�
 作業ブランチや`develop`で修正済みでも、default branchへの反映前はAlertがOpenのままになる場合がある。その表示だけで修正失敗と判断せず、ローカルの依存version・audit・build・CIと、default branch反映後のAlertを分けて確認する。
 
 対象packageを限定した更新、lockfile差分確認、再現インストールの具体的な手順は[コマンド集](COMMANDS.md)を参照する。
+
+npm依存更新・監査実績、Tailwind CSS v4移行と`main`反映後の未完了確認は[依存関係更新履歴](DEPENDENCY_UPDATE_HISTORY.md)を参照する。
 
 `node_modules/` はGit管理しない。
 
