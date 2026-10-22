@@ -298,7 +298,7 @@ GitHub Actionsには`Playwright E2E`専用jobがあります。ローカルと�
 |---|---|
 | runner | `ubuntu-24.04` |
 | job timeout | 20分 |
-| Node.js | workflowで固定した24.18.0 |
+| Node.js | workflowで固定した24.22.1 |
 | Laravel URL | `http://127.0.0.1:8000` |
 | ready probe | `http://127.0.0.1:8000/login` |
 | Laravel環境 | `APP_ENV=e2e`、`APP_DEBUG=false` |

@@ -103,6 +103,19 @@ jobs:
           coverage: none
           tools: composer:2.10.2
 
+      - name: Verify PHP security baseline
+        run: |
+          php -r '
+          if (
+              !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+              !version_compare(PHP_VERSION, "8.5.0", "<")
+          ) {
+              fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+              exit(1);
+          }
+          echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+          '
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
@@ -115,7 +128,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: '24.18.0'
+          node-version: '24.22.1'
           package-manager-cache: false
 
       - name: Install npm dependencies
@@ -181,13 +194,26 @@ jobs:
           coverage: none
           tools: composer:2.10.2
 
+      - name: Verify PHP security baseline
+        run: |
+          php -r '
+          if (
+              !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+              !version_compare(PHP_VERSION, "8.5.0", "<")
+          ) {
+              fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+              exit(1);
+          }
+          echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+          '
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: '24.18.0'
+          node-version: '24.22.1'
           package-manager-cache: false
 
       - name: Install npm dependencies

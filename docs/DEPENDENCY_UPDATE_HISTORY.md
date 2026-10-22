@@ -8,6 +8,8 @@
 
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)はLaravel 13移行時までの当時の記録として維持する。本書はその後の個別依存更新とTailwind移行を扱う。汎用手順は[セキュリティ方針](SECURITY.md)・[コマンド集](COMMANDS.md)、GitHub運用は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。MVP2のスコープ・進捗の正本はGitHub Milestoneと所属Issue・PRであり、本書は進捗表を複製しない。
 
+2026-10-22のIssue #219による追加対応は、第11節に追補として記録する。第1〜10節の数値・状況は、特記のない限り各節に示す当時の記録である。
+
 ## 2. 更新前ベースライン
 
 次節の更新前バージョンは各Issue着手時の記録であり、8件がすべて同時に存在した単一環境を示すものではない。
@@ -186,3 +188,130 @@ PR #204はセキュリティ対応6件を先行反映する管理者判断を明
 - [Tailwind CSS v4 Upgrade Guide](https://tailwindcss.com/docs/upgrade-guide)：Vite利用時に推奨される`@tailwindcss/vite`方式とv3→v4変更点。
 - [Laravel 13 Documentation](https://laravel.com/docs/13.x)：対象Laravel majorの仕様。
 - [Symfony HttpFoundation Advisory](https://symfony.com/cve-2026-108082) / [Symfony Yaml Advisory](https://symfony.com/cve-2026-109413)：修正版と追補修正の根拠。
+
+## 11. 2026-10-22追補：Issue #219 follow-redirects脆弱性対応
+
+この節は2026-10-22（JST）にローカルで実施した[Issue #219](https://github.com/honda-dev-jp/review-app-laravel/issues/219)の結果を記録する。第1〜10節の2026-10-16〜18の実績と分離し、PR未作成・CI未実施・main未反映の状態を完了扱いしない。
+
+### 11.1 対象と一次情報
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象 | Dependabot Alert #65・#66（いずれもHigh） |
+| パッケージ | `follow-redirects`（npm、transitive / development） |
+| 依存経路 | rootの`axios@1.20.0`（devDependencies）→ `follow-redirects@^1.16.0` |
+| 更新前・更新後 | `1.16.0` → `1.16.1` |
+| 影響範囲・修正版 | 両Advisoryとも `>=1.16.0, <1.16.1` / `1.16.1` |
+| 作業ブランチ | `security/219-fix-follow-redirects` |
+| 作業worktree | `review-app-laravel-security-219`（元のTMDB worktreeとは別） |
+| 作業開始HEAD | `6404d3a`（`origin/develop`から作成） |
+
+- **Alert #65**：[GHSA-8r9p-f939-6h3c](https://github.com/advisories/GHSA-8r9p-f939-6h3c) / CVE-2026-111755。`sensitiveHeaders`の正規表現エスケープに起因する認証情報ヘッダー漏洩のおそれ。
+- **Alert #66**：[GHSA-q3jh-wrc6-jgq8](https://github.com/advisories/GHSA-q3jh-wrc6-jgq8) / CVE-2026-111756。配列形式のヘッダーで、オリジンをまたぐリダイレクト時の認証情報除去を回避できる問題。
+
+上記はGitHub Advisory Databaseの影響範囲・修正版の記載に基づく。アプリ内での悪用経路の成立は検証していない。
+
+### 11.2 変更範囲と差分精査
+
+- 既存制約`^1.16.0`の範囲内で、`npm update follow-redirects --package-lock-only --ignore-scripts`を実行した。
+- npm 11.19.1での更新直後、lockfileにroot `name`とTailwind Oxide WASM関連の追加エントリが生じたが、今回の対象更新には含めず差分単位で取り消した。
+- 確定した差分は`package-lock.json`のみ（**3行追加・3行削除**）。変更したのは`node_modules/follow-redirects`の`version`、`resolved`、`integrity`の3値のみ。
+- `package.json`、`axios@1.20.0`の解決バージョン、rootの直接依存関係は変更していない。`git diff --check`はPASS。
+
+### 11.3 ローカル検証結果
+
+| 確認 | 実施結果 |
+| --- | --- |
+| `npm ci` | PASS（75 packages added、76 packages audited） |
+| `npm ls follow-redirects` | `axios@1.20.0 → follow-redirects@1.16.1` |
+| `npm run build` | PASS（Vite 6.4.3、59 modules transformed） |
+| `npm run typecheck:e2e` | PASS |
+| `git diff --check` | PASS |
+| `npm audit` | `follow-redirects`対象Advisoryは報告なし。**Vite 6.4.3由来のHigh 1件が残存** |
+| `npm audit --omit=dev` | 0 vulnerabilities。開発用依存を含む安全性の保証ではない |
+| ローカルPlaywright E2E / PHPUnit | **未実施**。PR作成後のGitHub Actionsで結果を確認する方針 |
+
+Viteについては`vite@6.4.5`の公開をnpmレジストリで確認したが、Issue #219には含めず、別Issue・別作業ブランチで扱う方針とした。`npm audit fix`や`npm audit fix --force`は実行していない。
+
+### 11.4 worktree分離とCI確認方針
+
+TMDB Issue #212の元worktreeには未コミットの5ファイルがあり、`git stash`・ブランチ切替・リセットを行わず、セキュリティ専用worktreeを別途作成した。確認時点でTMDBの未コミット5ファイルは維持され、Issue #219の差分は別worktreeの`package-lock.json`のみに限定された。
+
+ローカルE2Eは`http://localhost:83`の`laravel.e2e` serviceを前提とし、`compose.yaml`で実行元のディレクトリをbind mountする。さらに`global.setup.ts`が`e2e:reset`を呼び、専用DB `e2e_testing`を初期化する。別worktree用の`.env`・`vendor/`およびDocker Compose・ポート・DBの分離を未整備のまま既存環境を流用すると、Issue #219のコードでの実行保証がなく、環境競合を招き得る。そのためこのworktreeからローカルE2Eを実行していない。
+
+既存の[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)に従い、PR作成後、独立したGitHub Actions runner上の`Playwright E2E`と`quality-checks`、`python-quality-checks`の結果を確認する。CI成功は現時点では未確認である。
+
+### 11.5 未完了事項
+
+1. 本追補とlockfileの差分をレビューし、必要なローカル確認を完了させる。
+2. Issue #219の作業ブランチから`develop`へ通常PRを作成し、CI全ジョブの成功とレビューを確認する。
+3. GitHub開発運用ガイドに従いMerge commit方式で`develop`へ統合し、適切な単位で`main`へ同期する。
+4. `main`のlockfileに`follow-redirects@1.16.1`が反映された後、Dependabot Alert #65・#66の状態を再確認する。**未確認のAlert Closeや未実行のテストを完了済みと記録しない。**
+5. Viteの残存HighについてはIssue #219の更新に混ぜず、別Issueとして影響範囲・修正版と検証方針を整理する。
+
+参照資料：[Issue #219](https://github.com/honda-dev-jp/review-app-laravel/issues/219)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)。
+
+## 12. 2026-10-23追補：Issue #221 Vite 6.4.5への脆弱性対応
+
+この節は2026-10-23（JST）に[Issue #221](https://github.com/honda-dev-jp/review-app-laravel/issues/221)の専用worktreeで実施した更新・ローカル検証の記録である。第1〜10節および第11節の当時の記録は書き換えない。通常PR、CI、`develop`への統合、`main`への同期、Dependabot再解析は本節の記録時点では未実施である。
+
+### 12.1 対象・根拠となる一次情報
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象パッケージ | `vite`（rootの`devDependencies`にある直接依存） |
+| 更新前・更新後 | `6.4.3` → `6.4.5` |
+| rootのバージョン制約 | `^6.4.3`（変更なし。6.4.5は制約範囲内） |
+| 更新前の監査結果 | Issue #219で、Vite 6.4.3由来のHigh 1件が残存 |
+| 作業ブランチ | `security/221-fix-vite-high` |
+| 作業worktree | `review-app-laravel-security-221`（TMDB Issue #212のworktreeとは分離） |
+| 作業開始HEAD | `12e4455`（PR #220のMerge commit、`origin/develop`） |
+
+Issue #221に記録したVite 6.4.3に関係するAdvisoryは以下の5件である。npm監査のHigh「1件」はViteパッケージ単位の報告であり、Advisoryが1種類のみという意味ではない。
+
+- [GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+- [GHSA-r825-w8mm-5pxw](https://github.com/advisories/GHSA-r825-w8mm-5pxw)
+- [GHSA-587h-7wmj-h5pm](https://github.com/advisories/GHSA-587h-7wmj-h5pm)
+- [GHSA-9jrq-w75r-8gcw](https://github.com/advisories/GHSA-9jrq-w75r-8gcw)
+- [GHSA-rq7h-c2jc-7f22](https://github.com/advisories/GHSA-rq7h-c2jc-7f22)
+
+これらに対するVite 6系の修正は6.4.4以上だが、6.4.4には別の[GHSA-8g5g-mxqh-grgj](https://github.com/vitejs/vite/security/advisories/GHSA-8g5g-mxqh-grgj)があり、当該Advisoryで6.4.5が修正版と指定されている。そのため、[Vite公式リリース v6.4.5](https://github.com/vitejs/vite/releases/tag/v6.4.5)を更新対象とした。アプリ固有の悪用経路の成立までは検証していない。
+
+### 12.2 変更範囲と差分精査
+
+- `npm update vite --package-lock-only --dry-run --ignore-scripts`は正常終了。dry-runの表示のみを更新先バージョンの確証とはせず、実更新後にlockfileと依存ツリーを確認した。
+- `npm update vite --package-lock-only --ignore-scripts`で更新後、`package-lock.json`はVite 6.4.5を解決した。
+- npmによるlockfile自動更新時に、rootの`name`とTailwind Oxide WASM関連6エントリの追加が発生した。今回のVite更新には不要な差分として`git restore -p`で対象部分のみ取り消し、Viteの更新は残した。
+- 最終的な変更は`package-lock.json`の`node_modules/vite`の`version`・`resolved`・`integrity`の3項目のみ（**3行追加・3行削除**）。`git diff --check`はPASS。
+- `package.json`の`vite: ^6.4.3`、`@tailwindcss/vite@4.3.3`、`laravel-vite-plugin@1.3.0`のバージョンは変更していない。その他のパッケージ更新やrootへの新規直接依存追加はない。
+
+### 12.3 ローカル検証結果
+
+| 確認 | 実施結果 |
+| --- | --- |
+| `npm ci` | PASS（75 packages added、76 packages audited、0 vulnerabilities） |
+| `npm ls vite` | root、`@tailwindcss/vite@4.3.3`、`laravel-vite-plugin@1.3.0`がすべて`vite@6.4.5`を共有（deduped） |
+| `npm audit` | **found 0 vulnerabilities**（開発用依存を含むローカル監査結果） |
+| `npm run build` | PASS（Vite 6.4.5、59 modules transformed、built in 3.09s） |
+| `npm run typecheck:e2e` | PASS（`tsc -p e2e/tsconfig.json --noEmit`） |
+| `git diff --check` | PASS |
+| lockfile差分 | `package-lock.json`のVite関連3項目のみ、+3 / -3 |
+| ローカルPlaywright E2E / PHPUnit | **未実施**。独立したGitHub Actions環境で確認する方針 |
+
+`npm audit`の0件は当該worktreeの実行時点の監査結果であり、GitHubのDependabot AlertがCloseしたことや、アプリ全体の安全性の保証を意味しない。
+
+### 12.4 worktree分離とCI確認方針
+
+TMDB Issue #212の元worktreeには未コミットの5ファイルがあるため、ブランチ切替やstashを行わず、新しいworktreeにセキュリティ更新を隔離した。元worktreeの変更は本Issueの差分に含めていない。
+
+ローカルPlaywright E2Eは`laravel.e2e`・ポート83・E2E専用DBの初期化を前提とする。別worktree側の`.env`・`vendor/`・Compose環境を独立構築していないため実行せず、PR作成後にGitHub Actionsの`quality-checks`、`Playwright E2E`、`python-quality-checks`の3ジョブを確認する。**本節の記録時点ではCI結果は未確認**である。
+
+### 12.5 未完了事項
+
+1. 本追補とlockfileの最終差分をレビューし、Issue #221の受け入れ条件に照合する。
+2. 作業ブランチから`develop`へ通常PRを作成する。PR本文は`Refs #221`とし、`Closes`は使わない。
+3. GitHub Actions全3ジョブの成功とレビューを確認したうえで、Merge commit方式で`develop`へ統合する。
+4. PHP・Node.js・follow-redirectsのセキュリティ対応と合わせた`develop`→`main`同期PRについて、反映対象Issueと差分を再確認する。同期PRで対象IssueをCloseする。
+5. `main`反映後、default branchの再解析とVite関連Dependabot Alertの状態を確認する。**未確認のAlert Closeや未実施のテストを完了済みと記録しない。**
+
+参照資料：[Issue #221](https://github.com/honda-dev-jp/review-app-laravel/issues/221)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)、[npm audit公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-audit/)。
