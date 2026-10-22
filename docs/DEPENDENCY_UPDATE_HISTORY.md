@@ -250,3 +250,68 @@ TMDB Issue #212の元worktreeには未コミットの5ファイルがあり、`g
 5. Viteの残存HighについてはIssue #219の更新に混ぜず、別Issueとして影響範囲・修正版と検証方針を整理する。
 
 参照資料：[Issue #219](https://github.com/honda-dev-jp/review-app-laravel/issues/219)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)。
+
+## 12. 2026-10-23追補：Issue #221 Vite 6.4.5への脆弱性対応
+
+この節は2026-10-23（JST）に[Issue #221](https://github.com/honda-dev-jp/review-app-laravel/issues/221)の専用worktreeで実施した更新・ローカル検証の記録である。第1〜10節および第11節の当時の記録は書き換えない。通常PR、CI、`develop`への統合、`main`への同期、Dependabot再解析は本節の記録時点では未実施である。
+
+### 12.1 対象・根拠となる一次情報
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象パッケージ | `vite`（rootの`devDependencies`にある直接依存） |
+| 更新前・更新後 | `6.4.3` → `6.4.5` |
+| rootのバージョン制約 | `^6.4.3`（変更なし。6.4.5は制約範囲内） |
+| 更新前の監査結果 | Issue #219で、Vite 6.4.3由来のHigh 1件が残存 |
+| 作業ブランチ | `security/221-fix-vite-high` |
+| 作業worktree | `review-app-laravel-security-221`（TMDB Issue #212のworktreeとは分離） |
+| 作業開始HEAD | `12e4455`（PR #220のMerge commit、`origin/develop`） |
+
+Issue #221に記録したVite 6.4.3に関係するAdvisoryは以下の5件である。npm監査のHigh「1件」はViteパッケージ単位の報告であり、Advisoryが1種類のみという意味ではない。
+
+- [GHSA-698v-4r3x-3vcv](https://github.com/advisories/GHSA-698v-4r3x-3vcv)
+- [GHSA-r825-w8mm-5pxw](https://github.com/advisories/GHSA-r825-w8mm-5pxw)
+- [GHSA-587h-7wmj-h5pm](https://github.com/advisories/GHSA-587h-7wmj-h5pm)
+- [GHSA-9jrq-w75r-8gcw](https://github.com/advisories/GHSA-9jrq-w75r-8gcw)
+- [GHSA-rq7h-c2jc-7f22](https://github.com/advisories/GHSA-rq7h-c2jc-7f22)
+
+これらに対するVite 6系の修正は6.4.4以上だが、6.4.4には別の[GHSA-8g5g-mxqh-grgj](https://github.com/vitejs/vite/security/advisories/GHSA-8g5g-mxqh-grgj)があり、当該Advisoryで6.4.5が修正版と指定されている。そのため、[Vite公式リリース v6.4.5](https://github.com/vitejs/vite/releases/tag/v6.4.5)を更新対象とした。アプリ固有の悪用経路の成立までは検証していない。
+
+### 12.2 変更範囲と差分精査
+
+- `npm update vite --package-lock-only --dry-run --ignore-scripts`は正常終了。dry-runの表示のみを更新先バージョンの確証とはせず、実更新後にlockfileと依存ツリーを確認した。
+- `npm update vite --package-lock-only --ignore-scripts`で更新後、`package-lock.json`はVite 6.4.5を解決した。
+- npmによるlockfile自動更新時に、rootの`name`とTailwind Oxide WASM関連6エントリの追加が発生した。今回のVite更新には不要な差分として`git restore -p`で対象部分のみ取り消し、Viteの更新は残した。
+- 最終的な変更は`package-lock.json`の`node_modules/vite`の`version`・`resolved`・`integrity`の3項目のみ（**3行追加・3行削除**）。`git diff --check`はPASS。
+- `package.json`の`vite: ^6.4.3`、`@tailwindcss/vite@4.3.3`、`laravel-vite-plugin@1.3.0`のバージョンは変更していない。その他のパッケージ更新やrootへの新規直接依存追加はない。
+
+### 12.3 ローカル検証結果
+
+| 確認 | 実施結果 |
+| --- | --- |
+| `npm ci` | PASS（75 packages added、76 packages audited、0 vulnerabilities） |
+| `npm ls vite` | root、`@tailwindcss/vite@4.3.3`、`laravel-vite-plugin@1.3.0`がすべて`vite@6.4.5`を共有（deduped） |
+| `npm audit` | **found 0 vulnerabilities**（開発用依存を含むローカル監査結果） |
+| `npm run build` | PASS（Vite 6.4.5、59 modules transformed、built in 3.09s） |
+| `npm run typecheck:e2e` | PASS（`tsc -p e2e/tsconfig.json --noEmit`） |
+| `git diff --check` | PASS |
+| lockfile差分 | `package-lock.json`のVite関連3項目のみ、+3 / -3 |
+| ローカルPlaywright E2E / PHPUnit | **未実施**。独立したGitHub Actions環境で確認する方針 |
+
+`npm audit`の0件は当該worktreeの実行時点の監査結果であり、GitHubのDependabot AlertがCloseしたことや、アプリ全体の安全性の保証を意味しない。
+
+### 12.4 worktree分離とCI確認方針
+
+TMDB Issue #212の元worktreeには未コミットの5ファイルがあるため、ブランチ切替やstashを行わず、新しいworktreeにセキュリティ更新を隔離した。元worktreeの変更は本Issueの差分に含めていない。
+
+ローカルPlaywright E2Eは`laravel.e2e`・ポート83・E2E専用DBの初期化を前提とする。別worktree側の`.env`・`vendor/`・Compose環境を独立構築していないため実行せず、PR作成後にGitHub Actionsの`quality-checks`、`Playwright E2E`、`python-quality-checks`の3ジョブを確認する。**本節の記録時点ではCI結果は未確認**である。
+
+### 12.5 未完了事項
+
+1. 本追補とlockfileの最終差分をレビューし、Issue #221の受け入れ条件に照合する。
+2. 作業ブランチから`develop`へ通常PRを作成する。PR本文は`Refs #221`とし、`Closes`は使わない。
+3. GitHub Actions全3ジョブの成功とレビューを確認したうえで、Merge commit方式で`develop`へ統合する。
+4. PHP・Node.js・follow-redirectsのセキュリティ対応と合わせた`develop`→`main`同期PRについて、反映対象Issueと差分を再確認する。同期PRで対象IssueをCloseする。
+5. `main`反映後、default branchの再解析とVite関連Dependabot Alertの状態を確認する。**未確認のAlert Closeや未実施のテストを完了済みと記録しない。**
+
+参照資料：[Issue #221](https://github.com/honda-dev-jp/review-app-laravel/issues/221)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)、[npm audit公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-audit/)。
