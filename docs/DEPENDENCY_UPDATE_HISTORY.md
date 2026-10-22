@@ -8,6 +8,8 @@
 
 [Laravelメジャーアップグレード実施履歴](LARAVEL_UPGRADE_HISTORY.md)はLaravel 13移行時までの当時の記録として維持する。本書はその後の個別依存更新とTailwind移行を扱う。汎用手順は[セキュリティ方針](SECURITY.md)・[コマンド集](COMMANDS.md)、GitHub運用は[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)を参照する。MVP2のスコープ・進捗の正本はGitHub Milestoneと所属Issue・PRであり、本書は進捗表を複製しない。
 
+2026-10-22のIssue #219による追加対応は、第11節に追補として記録する。第1〜10節の数値・状況は、特記のない限り各節に示す当時の記録である。
+
 ## 2. 更新前ベースライン
 
 次節の更新前バージョンは各Issue着手時の記録であり、8件がすべて同時に存在した単一環境を示すものではない。
@@ -186,3 +188,65 @@ PR #204はセキュリティ対応6件を先行反映する管理者判断を明
 - [Tailwind CSS v4 Upgrade Guide](https://tailwindcss.com/docs/upgrade-guide)：Vite利用時に推奨される`@tailwindcss/vite`方式とv3→v4変更点。
 - [Laravel 13 Documentation](https://laravel.com/docs/13.x)：対象Laravel majorの仕様。
 - [Symfony HttpFoundation Advisory](https://symfony.com/cve-2026-108082) / [Symfony Yaml Advisory](https://symfony.com/cve-2026-109413)：修正版と追補修正の根拠。
+
+## 11. 2026-10-22追補：Issue #219 follow-redirects脆弱性対応
+
+この節は2026-10-22（JST）にローカルで実施した[Issue #219](https://github.com/honda-dev-jp/review-app-laravel/issues/219)の結果を記録する。第1〜10節の2026-10-16〜18の実績と分離し、PR未作成・CI未実施・main未反映の状態を完了扱いしない。
+
+### 11.1 対象と一次情報
+
+| 項目 | 内容 |
+| --- | --- |
+| 対象 | Dependabot Alert #65・#66（いずれもHigh） |
+| パッケージ | `follow-redirects`（npm、transitive / development） |
+| 依存経路 | rootの`axios@1.20.0`（devDependencies）→ `follow-redirects@^1.16.0` |
+| 更新前・更新後 | `1.16.0` → `1.16.1` |
+| 影響範囲・修正版 | 両Advisoryとも `>=1.16.0, <1.16.1` / `1.16.1` |
+| 作業ブランチ | `security/219-fix-follow-redirects` |
+| 作業worktree | `review-app-laravel-security-219`（元のTMDB worktreeとは別） |
+| 作業開始HEAD | `6404d3a`（`origin/develop`から作成） |
+
+- **Alert #65**：[GHSA-8r9p-f939-6h3c](https://github.com/advisories/GHSA-8r9p-f939-6h3c) / CVE-2026-111755。`sensitiveHeaders`の正規表現エスケープに起因する認証情報ヘッダー漏洩のおそれ。
+- **Alert #66**：[GHSA-q3jh-wrc6-jgq8](https://github.com/advisories/GHSA-q3jh-wrc6-jgq8) / CVE-2026-111756。配列形式のヘッダーで、オリジンをまたぐリダイレクト時の認証情報除去を回避できる問題。
+
+上記はGitHub Advisory Databaseの影響範囲・修正版の記載に基づく。アプリ内での悪用経路の成立は検証していない。
+
+### 11.2 変更範囲と差分精査
+
+- 既存制約`^1.16.0`の範囲内で、`npm update follow-redirects --package-lock-only --ignore-scripts`を実行した。
+- npm 11.19.1での更新直後、lockfileにroot `name`とTailwind Oxide WASM関連の追加エントリが生じたが、今回の対象更新には含めず差分単位で取り消した。
+- 確定した差分は`package-lock.json`のみ（**3行追加・3行削除**）。変更したのは`node_modules/follow-redirects`の`version`、`resolved`、`integrity`の3値のみ。
+- `package.json`、`axios@1.20.0`の解決バージョン、rootの直接依存関係は変更していない。`git diff --check`はPASS。
+
+### 11.3 ローカル検証結果
+
+| 確認 | 実施結果 |
+| --- | --- |
+| `npm ci` | PASS（75 packages added、76 packages audited） |
+| `npm ls follow-redirects` | `axios@1.20.0 → follow-redirects@1.16.1` |
+| `npm run build` | PASS（Vite 6.4.3、59 modules transformed） |
+| `npm run typecheck:e2e` | PASS |
+| `git diff --check` | PASS |
+| `npm audit` | `follow-redirects`対象Advisoryは報告なし。**Vite 6.4.3由来のHigh 1件が残存** |
+| `npm audit --omit=dev` | 0 vulnerabilities。開発用依存を含む安全性の保証ではない |
+| ローカルPlaywright E2E / PHPUnit | **未実施**。PR作成後のGitHub Actionsで結果を確認する方針 |
+
+Viteについては`vite@6.4.5`の公開をnpmレジストリで確認したが、Issue #219には含めず、別Issue・別作業ブランチで扱う方針とした。`npm audit fix`や`npm audit fix --force`は実行していない。
+
+### 11.4 worktree分離とCI確認方針
+
+TMDB Issue #212の元worktreeには未コミットの5ファイルがあり、`git stash`・ブランチ切替・リセットを行わず、セキュリティ専用worktreeを別途作成した。確認時点でTMDBの未コミット5ファイルは維持され、Issue #219の差分は別worktreeの`package-lock.json`のみに限定された。
+
+ローカルE2Eは`http://localhost:83`の`laravel.e2e` serviceを前提とし、`compose.yaml`で実行元のディレクトリをbind mountする。さらに`global.setup.ts`が`e2e:reset`を呼び、専用DB `e2e_testing`を初期化する。別worktree用の`.env`・`vendor/`およびDocker Compose・ポート・DBの分離を未整備のまま既存環境を流用すると、Issue #219のコードでの実行保証がなく、環境競合を招き得る。そのためこのworktreeからローカルE2Eを実行していない。
+
+既存の[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)に従い、PR作成後、独立したGitHub Actions runner上の`Playwright E2E`と`quality-checks`、`python-quality-checks`の結果を確認する。CI成功は現時点では未確認である。
+
+### 11.5 未完了事項
+
+1. 本追補とlockfileの差分をレビューし、必要なローカル確認を完了させる。
+2. Issue #219の作業ブランチから`develop`へ通常PRを作成し、CI全ジョブの成功とレビューを確認する。
+3. GitHub開発運用ガイドに従いMerge commit方式で`develop`へ統合し、適切な単位で`main`へ同期する。
+4. `main`のlockfileに`follow-redirects@1.16.1`が反映された後、Dependabot Alert #65・#66の状態を再確認する。**未確認のAlert Closeや未実行のテストを完了済みと記録しない。**
+5. Viteの残存HighについてはIssue #219の更新に混ぜず、別Issueとして影響範囲・修正版と検証方針を整理する。
+
+参照資料：[Issue #219](https://github.com/honda-dev-jp/review-app-laravel/issues/219)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)。
