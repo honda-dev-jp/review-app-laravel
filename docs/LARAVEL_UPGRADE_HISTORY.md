@@ -1745,7 +1745,7 @@ Chromeから `http://localhost:82` と `http://localhost:82/items/2` を開き�
 
 ページネーション操作そのものはPlaywright E2EでPASSしている。認証済み画面の上記4項目は手動確認済みである。一方、メール送信・パスワード再設定・退会フロー等の個別の手動実行結果は今回の申告から確定できないため、既存のPHPUnit等による自動テストの結果と区別する。
 
-記録時点での未確認事項:
+PR作成前時点での未確認事項（後続の確定結果は10.9を参照）:
 
 - PR・GitHub Actions CI・`develop`へのマージ、およびマージ後baselineの確認
 - `main`への反映およびIssueのClose判定
@@ -1779,4 +1779,81 @@ Issue #213では、`docs/LARAVEL_UPGRADE_GUIDE.md`の31.8節に、Sail 8.4系の
 
 変更対象は`.github/workflows/ci.yml`、`docs/LARAVEL_UPGRADE_GUIDE.md`および本履歴である。`composer.json`・`composer.lock`・`compose.yaml`・`vendor/`には本Issueのための変更を加えていない。**CIの実行成功と`develop`/`main`への反映はPR作成以降に確認する未実施項目**として扱う。
 
-本章は作業途中の実測履歴である。追加確認およびPR結果が確定した際にのみ、未確認項目へ実際の結果を追記する。
+10.1〜10.8はPR作成前に確定した実測記録として保持する。PR・GitHub Actions・`develop`マージ後の結果は10.9へ分離して記録する。
+
+### 10.9 PR #214マージ後の確認とTMDBブランチへの取り込み
+
+本節は、10.1〜10.8に記録した**PR作成前のローカル実測**に対する後続結果である。GitHub Actionsの実行結果、`develop`のGit状態、TMDB作業ブランチへの取り込みを、それぞれ区別して記録する。
+
+#### 10.9.1 PR #214・GitHub Actions
+
+2026-10-22、Issue #213の修正をPR #214で`develop`へ反映した。GitHubのPR情報とCIジョブ結果を確認した。
+
+| 項目 | 確定結果 |
+|---|---|
+| PR | [#214](https://github.com/honda-dev-jp/review-app-laravel/pull/214) |
+| タイトル | `security: PHP Critical脆弱性（CVE-2026-109618 / CVE-2026-109619）に対応する` |
+| 関連Issue | `Refs #213` |
+| Base | `develop` |
+| Head | `security/213-php-critical-20261021` |
+| 実装・文書コミット | `29306f13d1e3189ff26e5dbfe1ba8ed1fb4fe8fa` |
+| Merge commit | `988524ff5df59ac41fd441b059591dcddc3fe99f` |
+| マージ日時 | 2026-10-22 01:24:36 UTC / 2026-10-22 10:24:36 JST |
+| マージ方式 | Merge commit |
+| PR差分 | 3ファイル、272行追加・削除0行 |
+| PR状態 | Merged |
+
+PR #214のpull requestイベントで実行されたGitHub Actions **CI run #201**（run ID `39705012559`）は`completed / success`だった。
+
+| GitHub Actionsジョブ | 結果 |
+|---|---|
+| `python-quality-checks` | PASS |
+| `quality-checks` | PASS |
+| `Playwright E2E`（`e2e-tests`） | PASS |
+
+`quality-checks`と`Playwright E2E`の両ジョブでは、追加した`Verify PHP security baseline`ステップ自体も`completed / success`だった。これは**GitHub ActionsでのPHPバージョン判定の成功**であり、10.8のローカルSailによる正常系・異常系テストとは異なる確認である。
+
+[GitHub Actions CI run #201](https://github.com/honda-dev-jp/review-app-laravel/actions/runs/39705012559)
+
+PR本文のマージ前確認7項目とIssue #213の受け入れ条件12項目は、GitHub上ですべてチェック済みである。PR差分はCI設定・PHP更新ガイド・実施履歴の3ファイルに限定されている。
+
+#### 10.9.2 `develop`マージ後のGit状態
+
+PR #214のマージ後、セキュリティ用worktree `~/projects/review-app-laravel-security` で以下を実施した。
+
+- `git switch develop`の後、`git pull --ff-only origin develop`を実行し、`b05fac3..988524f`のFast-forwardに成功した
+- ローカル作業ブランチ`security/213-php-critical-20261021`を`git branch -d`で正常削除した
+- GitHub上のリモート作業ブランチを削除し、`git fetch --prune origin`で削除済みremote-tracking branchを整理した
+- 最終状態は`## develop...origin/develop`で、未コミット変更はなかった
+
+以上により、**Git上の`develop`と`origin/develop`がMerge commit `988524f`で一致**したことを確認した。マージ後に同worktreeでPHPUnit・PHPStan・Pint・Vite・Playwright一式を再実行した結果ではない。これらのローカル実測は10.5、PR CIの実行結果は10.9.1を参照する。
+
+#### 10.9.3 TMDB Issue #212へのFast-forward取り込み
+
+元のworktree `~/projects/review-app-laravel` は`feat/212-tmdb-search-poster-display`のまま保持した。
+
+取り込み前に`git rev-list --left-right --count HEAD...develop`が`0 2`であることを確認した。`develop`側の変更ファイルは次の3件だけだった。
+
+- `.github/workflows/ci.yml`
+- `docs/LARAVEL_UPGRADE_GUIDE.md`
+- `docs/LARAVEL_UPGRADE_HISTORY.md`
+
+これらは、TMDB側の未コミット変更4件および未追跡1件とは重複しなかったため、元のworktreeで次を実行した。
+
+```bash
+git merge --ff-only --no-autostash develop
+```
+
+結果は`b05fac3..988524f`のFast-forward成功であり、コンフリクト、stash、reset、一時コミットは発生していない。確認時点の`HEAD`、ローカル`develop`、`origin/develop`はいずれも`988524f`を指し、`git rev-list --left-right --count HEAD...develop`は`0 0`となった。
+
+未コミットの`docs/FEATURES.md`、`docs/ROUTES.md`、`docs/SCREEN_TRANSITIONS.md`、`docs/SECURITY.md`および未追跡の`docs/TMDB_SEARCH_DESIGN.md`は、取り込み後も維持されていた。
+
+#### 10.9.4 確認時点の区別と未完了事項
+
+- **実行時PHP 8.4.27**：10.3〜10.6に記録したローカルSail更新後の実測値。`develop`へのマージ後、独立した新規Docker環境で再ビルド・全テストを行ったことは意味しない
+- **GitHub Actions**：PR #214のpull requestイベントで3ジョブがPASS。マージ後のローカル`develop`で全品質ゲートを再実行した結果ではない
+- **Gitのbaseline**：`develop`・`origin/develop`が`988524f`で一致し、同コミットをTMDBブランチへFast-forward済み
+- **未完了**：`main`への同期PRと反映、Issue #213のClose。MVP2公開前の`develop`→`main`同期単位は`docs/GITHUB_WORKFLOW.md`の規則に従って別途判断する
+- **本番環境**：XServerのWeb/CLI PHP更新および本番デプロイは本Issueでは実施していない
+
+本節はPR #214のマージ後に確定した事実を記録したものであり、PR #214のMerge commit `988524f`自体には含まれない。この追記は文書更新専用のIssue・PRで管理し、TMDB Issue #212の未コミット変更とは混在させない。
