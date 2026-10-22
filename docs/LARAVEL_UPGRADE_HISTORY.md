@@ -11,6 +11,7 @@
 - [7. PHP 8.4のdevelop baseline確定](#7-php-84のdevelop-baseline確定)
 - [8. Laravel 12.66.0 → 13.26.1](#8-laravel-12660--13261)
 - [9. Laravel 13のdevelop baseline確定](#9-laravel-13のdevelop-baseline確定)
+- [10. PHP 8.4.25 → 8.4.27（Critical脆弱性対応）](#10-php-8425--8427critical脆弱性対応)
 
 ---
 
@@ -1603,3 +1604,179 @@ PR #135のMerge commitを反映した`develop`上で、本Issueの文書編集�
 - session失効は認証状態への影響であり、DBに保存された永続データを削除するものではない
 
 Laravel 13.26.1確定後に実施した13.30.0へのセキュリティ更新と、その後の依存関係更新実績は[依存関係更新履歴](DEPENDENCY_UPDATE_HISTORY.md)を参照する。
+
+---
+
+## 10. PHP 8.4.25 → 8.4.27（Critical脆弱性対応）
+
+### 10.1 記録範囲と作業時点
+
+2026-10-22（JST）のIssue #213における、ローカルLaravel SailおよびphpMyAdminのPHP Critical脆弱性対応実施履歴を記録する。Laravel本体のメジャー更新ではなく、PHP 8.4系のパッチ更新である。
+
+```text
+Issue: #213
+関連Issue: #212（TMDB検索機能開発中・作業内容を保護）
+作業ブランチ: security/213-php-critical-20261021
+作業worktree: ~/projects/review-app-laravel-security
+更新・検証の実行ディレクトリ: ~/projects/review-app-laravel
+元の作業ブランチ: feat/212-tmdb-search-poster-display
+記録時点: 作業中（PR・CI・develop/mainマージ前）
+```
+
+元のTMDBブランチには、`docs/FEATURES.md`、`docs/ROUTES.md`、`docs/SCREEN_TRANSITIONS.md`、`docs/SECURITY.md` の変更4件と、未追跡の `docs/TMDB_SEARCH_DESIGN.md` が残っていた。Git statusで維持を確認し、stash、reset、コミット、対象ファイルの編集は実施していない。セキュリティworktreeは作業開始時点でクリーンだった。
+
+この章の実測は、元の作業ディレクトリにある依存関係・稼働中Compose環境を使用した結果であり、`security/213-php-critical-20261021` で構築した独立したComposer/Sail環境の実行結果ではない。Git worktreeによってDockerのイメージ・コンテナ・ボリュームは分離されない。
+
+### 10.2 対象脆弱性・公式一次情報
+
+- CVE-2026-109618: [PHP security advisory](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w)
+- CVE-2026-109619: [PHP security advisory](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp)
+- 修正先: [PHP 8.4.27](https://www.php.net/releases/8_4_27.php)
+- phpMyAdminイメージ内の実行PHP: [PHP 8.3.36](https://www.php.net/releases/8_3_36.php)
+
+Sailのruntimeは`vendor/laravel/sail/runtimes/8.4/Dockerfile`で、ベースイメージは`ubuntu:24.04`、PHPパッケージの提供元はOndřej SurýのUbuntu noble向けPPAである。公式PHP Dockerイメージ`php:8.4`をSailで使用しているわけではない。
+
+更新前の稼働中 `laravel.test` の `php -v` はPHP 8.4.25だった。旧Sailイメージ内の`php8.4-cli`と`php8.4-common`はともに`8.4.25-1+ubuntu24.04.1+deb.sury.org+1`だった。旧イメージ内で`apt-get update`を行って候補を再調査した結果、両パッケージのCandidateは`8.4.27-1+ubuntu24.04.1+deb.sury.org+1`であることを確認した。
+
+### 10.3 イメージの保全・再ビルド・更新
+
+まず旧Sailイメージを`pre-issue-213`タグに保全した。続けて、元のリポジトリにあるSail 8.4 runtimeを使用して、新タグで単独ビルドした。
+
+```bash
+# 旧イメージの保全は実施済み
+# 検証用イメージのビルド実績
+docker build --pull --no-cache \
+  --build-arg WWWGROUP="$(id -g)" \
+  -t sail-8.4/app:issue-213 \
+  vendor/laravel/sail/runtimes/8.4
+```
+
+| 項目 | 実測結果 |
+|---|---|
+| ビルド結果 | 19/19 FINISHED |
+| 所要時間 | 1277.9秒（約21分18秒） |
+| 旧イメージの退避タグ | `sail-8.4/app:pre-issue-213` |
+| 旧Image ID | `sha256:51ae9e1bc1a203bf956adbf60c7a626ec44ed39bb6618f1cda58a624e854fcc6` |
+| 新イメージの検証タグ | `sail-8.4/app:issue-213` |
+| 新Image ID | `sha256:e67dc25e151a21871c2dfb939a084f0b332d8493ed90bd2905a6c61cd8db0ba2` |
+| 新イメージ作成日時 | 2026-10-22 07:50:11 JST |
+| `php8.4-cli` | `8.4.27-1+ubuntu24.04.1+deb.sury.org+1` |
+| `php8.4-common` | `8.4.27-1+ubuntu24.04.1+deb.sury.org+1` |
+
+旧・新イメージの`php -m`を`diff -u`で比較した結果、出力差分はなかった。この確認は**読み込まれるモジュール一覧の一致**であり、全拡張の動作互換性を単独で保証するものではない。
+
+新イメージから、読み取り専用bind mountで`php artisan --version`を実行し、`Laravel Framework 13.30.0`の起動を確認した。
+
+新イメージを`docker image tag sail-8.4/app:issue-213 sail-8.4/app:latest`で標準タグへ割り当て、次のコマンドでPHP用の2サービスのみ再作成した。
+
+```bash
+docker compose up -d \
+  --no-deps \
+  --no-build \
+  --pull never \
+  --force-recreate \
+  laravel.test laravel.e2e
+```
+
+`docker compose config --quiet`は成功。`laravel.test`、`laravel.e2e`ともに起動した。MySQL、Mailpit、phpMyAdminの再作成、`docker compose down -v`、MySQL永続ボリューム削除は行っていない。
+
+| 稼働対象 | 更新・確認結果 |
+|---|---|
+| `laravel.test` | PHP 8.4.27（CLI / Zend Engine 4.4.27） |
+| `laravel.e2e` | PHP 8.4.27（CLI / Zend Engine 4.4.27） |
+| `phpmyadmin` | PHP 8.3.36（CLI / Zend Engine 4.3.36） |
+
+phpMyAdminのPHPは独立したイメージで更新済みの値を実測した。今回のSailイメージのビルドによってphpMyAdminのPHPが更新されたわけではない。
+
+### 10.4 Composerの整合性・監査
+
+現在のPHP 8.4系を引き続き使用するため、`composer.json`の`^8.4`要件や`composer.lock`のplatform情報を変更する必要は確認されていない。**`composer update --lock`は実行していない**。Composerパッケージの更新も今回の作業では行っていない。
+
+| 確認 | 実測結果 |
+|---|---|
+| `composer check-platform-reqs --lock` | 全項目`success`、実行PHP 8.4.27 |
+| `composer audit --locked` | `No security vulnerability advisories found.` |
+| `composer validate --strict` | `./composer.json is valid` |
+
+`ext-ctype`と`ext-mbstring`はComposerの出力上、Symfony polyfillで提供される要件として`success`だった。ネイティブ拡張の存在確認と混同しない。
+
+なお`composer audit --locked`はComposerパッケージの既知advisoryの検査であり、PHP本体のCVE修正有無の直接証明ではない。PHP本体については実行バージョン・APTパッケージバージョンを別途検証している。
+
+### 10.5 自動品質ゲートの実測結果
+
+下記はPHP 8.4.27適用後、元の `review-app-laravel` ディレクトリで実行した結果である。
+
+| 品質ゲート | 実測結果 |
+|---|---|
+| PHPUnit 12.5.33 | 162 tests / 1567 assertions / PASS |
+| PHPUnit実行PHP | 8.4.27 |
+| PHPUnit deprecation | `--display-deprecations`および`--display-phpunit-deprecations`を指定、警告出力なし |
+| PHPStan / Larastan | 70/70、`No errors`、`--memory-limit=1G` |
+| Laravel Pint | 114 files、`--test`でPASS（自動修正なし） |
+| Vite build | Vite 6.4.3、59 modules transformed / 2.55秒 / PASS |
+| Playwright TypeScript | `npm run typecheck:e2e` / PASS |
+| Playwright E2E | 12 passed / 58.4秒、1 worker |
+
+Playwrightの12件には、`setup` projectのE2E DB reset 1件と、Chromiumのブラウザテスト11件を含む。Playwright実行前に`laravel.e2e`のPHP 8.4.27を確認し、プロジェクトのE2E専用DBガード実装を確認した。
+
+E2Eのセットアップでは`e2e:reset`により`e2e_testing`を`db:wipe → migrate → seed`で初期化した。これはE2E専用DBの意図的な初期化であり、通常開発用DBの初期化とは区別する。`ResetE2eDatabase`は実行環境`e2e`、固定connection`e2e_mysql`、設定・実接続先DB名`e2e_testing`の照合を行う。
+
+### 10.6 手動回帰・未確認事項
+
+Chromeから `http://localhost:82` と `http://localhost:82/items/2` を開き、提示されたスクリーンショットで以下を確認した。
+
+- 作品一覧カード、ポスター画像、CSS、ページネーションの表示
+- 作品詳細のあらすじ、平均評価3.4・評価件数12件の表示
+- レビュー本文・星評価、返信コメント・匿名投稿者の表示
+- 未ログイン時の投稿・返信に対するログイン案内
+- 画面上に重大なレイアウト崩れが見られないこと
+
+2026-10-22（JST）、PHP 8.4.27適用後の認証済み画面についても、利用者がChromeで次の手動回帰を実施し、正常動作を確認した（利用者申告）。
+
+- ログイン成功と認証済みナビゲーションの表示
+- プロフィール画面の表示
+- 本人レビュー一覧の表示
+- ログアウト後、ゲスト状態へ戻ること
+
+2026-10-22（JST）、Chromeから `http://localhost:8083` にアクセスし、phpMyAdminでMySQL `mysql:3306` への接続と、通常開発用 `laravel` データベースの構造画面を確認した。
+一覧には `categories`、`failed_jobs`、`items`、`migrations`、`password_reset_tokens`、`personal_access_tokens`、`reviews`、`review_comments`、`users` の計9テーブルが表示された。
+画面上の表示行数は合計60行で、主要テーブルは `users` 13行、`categories` 1行、`items` 11行、`reviews` 22行、`review_comments` 4行だった。
+今回の確認はDB接続・テーブル一覧の閲覧のみで、テーブルやデータの変更・削除操作は行っていない。これらの件数は確認時点の画面表示であり、更新前後のデータ完全一致を検証した結果ではない。
+
+ページネーション操作そのものはPlaywright E2EでPASSしている。認証済み画面の上記4項目は手動確認済みである。一方、メール送信・パスワード再設定・退会フロー等の個別の手動実行結果は今回の申告から確定できないため、既存のPHPUnit等による自動テストの結果と区別する。
+
+記録時点での未確認事項:
+
+- PR・GitHub Actions CI・`develop`へのマージ、およびマージ後baselineの確認
+- `main`への反映およびIssueのClose判定
+
+### 10.7 再ビルド時の注意・ロールバック
+
+Sail Dockerfileは`apt-get update`とOndřej PPAからのPHPインストールを含む。Dockerの`RUN`レイヤーのキャッシュはパッケージ公開だけでは自動無効化されないため、セキュリティ更新時にはキャッシュの扱いを明示する。[Docker公式: Build cache invalidation](https://docs.docker.com/build/cache/invalidation/)を参照。
+
+今回の修正を別環境で再現する場合、`vendor/`を含むComposer依存関係の復元が必要である。検証済みの`issue-213`タグはローカルDocker上の成果物であり、Gitに含まれない。既存のSail runtimeを再ビルドする際は`--pull --no-cache`で更新されたAPT packageを取得し、その後**実際に稼働する**PHPが8.4.27以上であることを確認する。PHP 8.5への移行は今回の対象外とする。
+
+旧イメージは`pre-issue-213`タグで保持しているが、単なるタグ操作だけでは稼働中コンテナを切り替えられない。切り戻し時は、変更対象サービスとイメージを再確認し、DBボリュームに触れずPHPサービスだけを再作成する。旧PHP 8.4.25には対象脆弱性が残るため、安易に戻さない。
+
+本IssueはローカルDockerの対応であり、XServer本番のWeb PHP・CLI PHPを更新した結果ではない。本番デプロイも行っていない。
+
+### 10.8 同一PHP系パッチ更新の再現手順とCIバージョンガード（PR前）
+
+Issue #213では、`docs/LARAVEL_UPGRADE_GUIDE.md`の31.8節に、Sail 8.4系のセキュリティパッチ更新手順を追記した。既存のruntime切替手順は変更していない。`docker compose build --pull --no-cache laravel.test`で同一イメージを再ビルドし、**新イメージ単体のPHPバージョン検証後**に`laravel.test`と`laravel.e2e`だけを再作成し、稼働中の両サービスを再検証する手順である。
+
+この`docker compose build`経路は**今後の再実行用の手順**であり、Issue #213で実測済みのビルド方法は10.3の`docker build --pull --no-cache`である。今回の追加手順そのものを新環境で再実行した結果とは混同しない。APTリポジトリの可用性や将来の配布パッケージまでは固定しておらず、Gitだけで完全同一のDocker Image IDを再生成できるという意味ではない。
+
+`.github/workflows/ci.yml`には、`quality-checks`と`e2e-tests`の2ジョブで、各`Set up PHP`の直後かつ`Install Composer dependencies`の前に`Verify PHP security baseline`ステップを追加した。両ジョブは`version_compare()`によって、PHPが`8.4.27以上`かつ`8.5.0未満`である場合のみ続行し、それ以外は標準エラーに`FAIL`を出力して終了コード`1`で停止する。`python-quality-checks`には変更を加えていない。
+
+2026-10-22（JST）の判定ロジックに対するローカル検証実績は次のとおり。
+
+| 対象 | コマンドの実行対象 | 実測出力 | 結果 |
+|---|---|---|---|
+| 修正版Sail | 稼働中`laravel.test` / PHP 8.4.27 | `PASS: PHP 8.4.27` | 許可（正常系） |
+| 更新前Sail | 退避イメージ`sail-8.4/app:pre-issue-213` / PHP 8.4.25 | `FAIL: PHP 8.4.25` / `Exit code: 1` | 拒否（異常系） |
+
+更新前イメージは`docker run --rm --pull=never --network none --entrypoint php ... -r`で使い捨て実行した。ネットワークやアプリのマウント、既存稼働コンテナ・DBの変更は伴わない。この検証はバージョン判定の動作確認であり、GitHub Actionsの実行結果ではない。
+
+変更対象は`.github/workflows/ci.yml`、`docs/LARAVEL_UPGRADE_GUIDE.md`および本履歴である。`composer.json`・`composer.lock`・`compose.yaml`・`vendor/`には本Issueのための変更を加えていない。**CIの実行成功と`develop`/`main`への反映はPR作成以降に確認する未実施項目**として扱う。
+
+本章は作業途中の実測履歴である。追加確認およびPR結果が確定した際にのみ、未確認項目へ実際の結果を追記する。
