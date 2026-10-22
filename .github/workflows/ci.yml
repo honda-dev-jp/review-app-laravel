@@ -103,6 +103,19 @@ jobs:
           coverage: none
           tools: composer:2.10.2
 
+      - name: Verify PHP security baseline
+        run: |
+          php -r '
+          if (
+              !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+              !version_compare(PHP_VERSION, "8.5.0", "<")
+          ) {
+              fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+              exit(1);
+          }
+          echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+          '
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
@@ -180,6 +193,19 @@ jobs:
           extensions: mbstring, dom, fileinfo, pdo_mysql, xml, xmlwriter, bcmath, zip
           coverage: none
           tools: composer:2.10.2
+
+      - name: Verify PHP security baseline
+        run: |
+          php -r '
+          if (
+              !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+              !version_compare(PHP_VERSION, "8.5.0", "<")
+          ) {
+              fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+              exit(1);
+          }
+          echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+          '
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress

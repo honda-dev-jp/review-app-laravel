@@ -1560,6 +1560,75 @@ runtime変更の反映には上記の`down`、`build --no-cache`、`up -d`を使
 
 失敗原因を確認する場合も、`.env`の値や秘密情報をログへ残さない。
 
+#### 同じPHP 8.4系のセキュリティパッチ更新（runtime切替なし）
+
+上記の`down → build → up`はruntimeを変更する場合の手順である。`compose.yaml`がすでにSail 8.4を使用しており、PHP 8.4.25から8.4.27のように**8.4系内のパッチだけを更新する場合**は、データベースや他サービスを停止・削除せず、次の順に作業できる。
+
+- アプリの依存関係を復元済みで、`vendor/laravel/sail/runtimes/8.4/Dockerfile`が存在する作業ディレクトリから実行する。Git worktreeだけを新規作成した場合、そのworktreeに`vendor/`や実行環境の設定が存在するとは限らない。実行するComposeプロジェクトと対象DBを混同しない。
+- Sail 8.4 runtimeは`ubuntu:24.04`とAPTパッケージを利用する。パッケージリポジトリの更新だけではDockerの`RUN apt-get update`レイヤーのキャッシュは自動無効化されないため、`--pull --no-cache`を明示する。[Docker公式: Build cache invalidation](https://docs.docker.com/build/cache/invalidation/)を参照する。
+- `laravel.test`と`laravel.e2e`は同じ`image: sail-8.4/app`を利用する。`laravel.test`だけをビルドしても両サービスの稼働中コンテナが自動的に新イメージへ切り替わるわけではない。
+
+まず設定の構文を確認し、Sailイメージを再ビルドする。**このコマンドは将来の再実行用の標準手順であり、Issue #213で実際に使用した単独`docker build`コマンドとは区別する。**
+
+```bash
+docker compose config --quiet
+docker compose build --pull --no-cache laravel.test
+```
+
+再ビルドした**イメージ単体**について、稼働コンテナを変更する前にPHPのパッチ版を検証する。次はIssue #213で必要な`8.4.27以上・8.5.0未満`の判定例であり、将来の脆弱性修正では新しい修正下限へ更新してから使う。
+
+```bash
+docker run --rm --pull=never --network none \
+  --entrypoint php sail-8.4/app -r '
+if (
+    !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+    !version_compare(PHP_VERSION, "8.5.0", "<")
+) {
+    fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+    exit(1);
+}
+echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+'
+```
+
+上記が`FAIL`となった場合は**コンテナを再作成せず停止する**。再ビルド時のAPT候補・取得元・出力を調査し、修正下限以上であることを確認してから進む。`composer audit`はPHP本体のCVEを検証するものではない。
+
+イメージ検証が成功した場合に限り、PHPを利用する2サービスだけを再作成する。`--no-deps`によりMySQLなどの依存サービスを再作成しない。`down -v`は使用しない。
+
+```bash
+docker compose up -d \
+  --no-deps \
+  --no-build \
+  --pull never \
+  --force-recreate \
+  laravel.test laravel.e2e
+```
+
+再作成後は、**イメージの確認だけで終わらず、実際に稼働する両サービスのPHP**を検証する。次の小括弧内は、いずれかの検証が失敗した時点で非ゼロ終了する。
+
+```bash
+(
+  set -e
+  for service in laravel.test laravel.e2e; do
+    printf '%s: ' "$service"
+    docker compose exec -T "$service" php -r '
+if (
+    !version_compare(PHP_VERSION, "8.4.27", ">=") ||
+    !version_compare(PHP_VERSION, "8.5.0", "<")
+) {
+    fwrite(STDERR, "FAIL: PHP " . PHP_VERSION . PHP_EOL);
+    exit(1);
+}
+echo "PASS: PHP " . PHP_VERSION . PHP_EOL;
+'
+  done
+)
+```
+
+`docker compose ps`と`php artisan --version`による稼働確認を行い、既存の品質ゲートと必要な手動回帰を実施する。phpMyAdminはSailと**別イメージ**のため、必要に応じて`docker compose exec -T phpmyadmin php -v`およびphpMyAdmin画面からのDB接続・テーブル一覧を個別に確認する。
+
+GitHub Actionsは`.github/workflows/ci.yml`の`quality-checks`と`e2e-tests`で`Set up PHP`直後に修正下限を検証する。**CIのPHPバージョン検証はローカルDockerイメージを更新するものではない**。ローカル再ビルドとCIの両方を実行し、それぞれの結果を`LARAVEL_UPGRADE_HISTORY.md`へ実測として記録する。
+
 ### 31.9 composer.lockのplatform情報を整合させる
 
 更新先PHPでSailが正常起動した後、package versionを更新せずに、
