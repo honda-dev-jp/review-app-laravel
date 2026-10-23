@@ -315,3 +315,54 @@ TMDB Issue #212の元worktreeには未コミットの5ファイルがあるた�
 5. `main`反映後、default branchの再解析とVite関連Dependabot Alertの状態を確認する。**未確認のAlert Closeや未実施のテストを完了済みと記録しない。**
 
 参照資料：[Issue #221](https://github.com/honda-dev-jp/review-app-laravel/issues/221)、[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)、[Playwrightブラウザテスト運用ガイド](PLAYWRIGHT_TESTING.md)、[npm ci公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-ci/)、[npm audit公式仕様](https://docs.npmjs.com/cli/v11/commands/npm-audit/)。
+
+## 13. 2026-10-23追補：セキュリティ対応5件のmain同期・再解析確定記録
+
+### 13.1 記録時点と歴史的記述の扱い
+
+本節は2026-10-23（JST）の後続確認結果であり、第1〜12節に記録された各作業時点の実績・未完了事項を遡及して書き換えない。特に第11節（Issue #219）および第12節（Issue #221）の「PR未作成」「CI未確認」「main未反映」は**各節を執筆した時点の記録**である。その後の確定結果は本節を正として参照する。
+
+本節はGitHub上のPR・Issue、`main`のlockfileとCI設定、GitHub Actionsのチェック、利用者によるローカルGit実行ログおよびDependabot画面の確認に基づく。本番環境へのデプロイを意味しない。
+
+### 13.2 反映対象と通常PR
+
+| Issue | 通常PR | 対応内容 | developへのMerge commit |
+| --- | --- | --- | --- |
+| [#213](https://github.com/honda-dev-jp/review-app-laravel/issues/213) | [#214](https://github.com/honda-dev-jp/review-app-laravel/pull/214) | PHP Critical脆弱性への対応（8.4.25 → 8.4.27）とCIのPHPバージョンガード | `988524f` |
+| [#215](https://github.com/honda-dev-jp/review-app-laravel/issues/215) | [#216](https://github.com/honda-dev-jp/review-app-laravel/pull/216) | PHP対応後の実測・マージ実績の文書化 | `4409305` |
+| [#217](https://github.com/honda-dev-jp/review-app-laravel/issues/217) | [#218](https://github.com/honda-dev-jp/review-app-laravel/pull/218) | GitHub ActionsのNode.jsを24.22.1へ更新 | `6404d3a` |
+| [#219](https://github.com/honda-dev-jp/review-app-laravel/issues/219) | [#220](https://github.com/honda-dev-jp/review-app-laravel/pull/220) | `follow-redirects` 1.16.0 → 1.16.1 | `12e4455` |
+| [#221](https://github.com/honda-dev-jp/review-app-laravel/issues/221) | [#222](https://github.com/honda-dev-jp/review-app-laravel/pull/222) | `vite` 6.4.3 → 6.4.5 | `10fd246` |
+
+GitHubで5件の通常PRがいずれも`develop`にMergedであることを確認した。第11・12節で未実施としていたPR作成・マージ・CI確認は後続で実施済み。ただし、各セキュリティ用worktreeでローカルPHPUnit・Playwright E2Eを追加実行したものではなく、GitHub Actionsの回帰結果と区別する。
+
+### 13.3 同期PR #223とCI・CodeQL
+
+2026-10-23 01:28:48 JST（2026-10-22 16:28:48 UTC）、[同期PR #223](https://github.com/honda-dev-jp/review-app-laravel/pull/223)をBase `main`、Head `develop`、**Merge commit方式**でマージした。Merge commitは`f421e10f3d8416c1be428902c837afd5789f4985`。比較時点のBase `b05fac3`、Head `10fd246`から10コミット、6ファイル（`.github/workflows/ci.yml`、`docs/DEPENDENCY_UPDATE_HISTORY.md`、`docs/LARAVEL_UPGRADE_GUIDE.md`、`docs/LARAVEL_UPGRADE_HISTORY.md`、`docs/PLAYWRIGHT_TESTING.md`、`package-lock.json`）を反映した。TMDB Issue #212の未コミット文書・機能実装は含まない。
+
+PR #223のpull requestイベントによる[CI run 39812912669](https://github.com/honda-dev-jp/review-app-laravel/actions/runs/39812912669)で`quality-checks`、`Playwright E2E`、`python-quality-checks`の3ジョブがいずれも`completed / success`。PR #223のhead（`refs/pull/223/head`）を対象としたCodeQLの[run 39812905645](https://github.com/honda-dev-jp/review-app-laravel/actions/runs/39812905645)でもJavaScript / TypeScript、Python、GitHub Actionsの3解析ジョブが成功し、当該PRのCode scanning resultsは新規アラートなしと表示された。**これは既知・未知の脆弱性がすべて不存在であるという証明ではない。**
+
+PR #223本文のマージ前・マージ後チェックリスト計16項目はGitHubで全件チェック済み。関連Issue5件はいずれも`main`反映によりClosedとなった。
+
+### 13.4 main・developの同期とローカル作業環境
+
+プロジェクトの[GitHub開発運用ガイド](GITHUB_WORKFLOW.md)第11節に従い、TMDB作業とは別の専用worktree `review-app-laravel-sync-223`で、`main`を`git pull --ff-only origin main`により更新した。その後、ローカル`develop`で`git pull --ff-only origin develop`、`git merge --ff-only main`、`git push origin develop`を実行。**force push、reset、rebase、非fast-forward mergeは使用していない。**
+
+最終確認の`git rev-list --left-right --count origin/develop...origin/main`は`0 0`。ローカル`main`・`develop`および`origin/main`・`origin/develop`の4参照が`f421e10`で一致した。同期用worktreeと個別セキュリティ用worktreeは削除済み。
+
+TMDB専用の元worktree `review-app-laravel`は`feat/212-tmdb-search-poster-display`、HEAD `6404d3a`のまま維持。`docs/FEATURES.md`、`docs/ROUTES.md`、`docs/SCREEN_TRANSITIONS.md`、`docs/SECURITY.md`の変更4件、および未追跡の`docs/TMDB_SEARCH_DESIGN.md` 1件の存在を確認した。**本同期ではTMDB側の未コミット変更を追加・破棄・マージしていない。**
+
+### 13.5 default branchの依存関係・Dependabot再解析
+
+同期後の`main`をGitHubから読み取り確認した結果、`package-lock.json`の解決バージョンは`follow-redirects@1.16.1`と`vite@6.4.5`。`.github/workflows/ci.yml`ではNode.js `24.22.1`を指定し、PHP 8.4.27以上・8.5.0未満のバージョン判定ステップを2ジョブに設けている。これらはリポジトリに反映された依存関係・CIの設定値であり、XServer本番環境のPHPやNode.jsの稼働バージョンを意味しない。
+
+2026-10-23（JST）に利用者がGitHub Dependabot alerts画面を確認したところ、**Open 0件／Closed 65件**、依存ファイルは再チェック済みと表示された。さらに、利用者がGitHub CLIを使用した最終確認ログでは、**Alert #65・#66はいずれも`fixed`、packageは`follow-redirects`**と確認された。Vite関連Alertの個別Closed理由までは本節で確認していない。`Closed 65件`をすべて修正済みと解釈しない。
+
+Issue #221の専用worktreeでの`npm audit`は更新当時0 vulnerabilitiesだったが、GitHubのOpen 0件は**`main`反映後の別の確認結果**である。Dependabotはdefault branchの依存関係を解析するため、開発ブランチ上の`npm audit`やPRのCodeQL結果とは区別して記録する（[GitHub公式 Dependabot alerts](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-alerts)）。
+
+### 13.6 この追補に含まれない作業
+
+- 本番XServerのPHP更新・デプロイ・本番手動回帰は本同期PRの対象外。
+- この追補作成時点で、同期後の専用クリーンローカル環境におけるPHPUnit・Playwright E2E全件の**再実行**は行っていない。PR #223のCI成功は、独立したGitHub Actions環境での回帰確認結果として別に記録する。
+- 第8〜9節に記載した2026-10-18当時の未完了項目やAlert #63・#64、`braces`の個別履歴は当時の記録として保持し、本節だけで個別のClose理由・経路検証が済んだとは主張しない。
+- 最新のGitHub画面でOpen 0件を確認したことは、将来の脆弱性が発生しないことを保証しない。
