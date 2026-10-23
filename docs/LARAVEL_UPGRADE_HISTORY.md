@@ -1857,3 +1857,31 @@ git merge --ff-only --no-autostash develop
 - **本番環境**：XServerのWeb/CLI PHP更新および本番デプロイは本Issueでは実施していない
 
 本節はPR #214のマージ後に確定した事実を記録したものであり、PR #214のMerge commit `988524f`自体には含まれない。この追記は文書更新専用のIssue・PRで管理し、TMDB Issue #212の未コミット変更とは混在させない。
+
+### 10.10 2026-10-23追補：PHP Critical対応のmain同期確定記録
+
+本節は10.1〜10.9の**当時の実測・未完了記述を遡及して変更せず**、10.9.4で未完了としていた「`main`への同期とIssue #213のClose」が後続で完了した事実を記録する。従前のローカルSail実測、CIのPHPバージョンガード、GitHub上の統合、XServer本番の状態を混同しない。
+
+#### 10.10.1 関連PRと同期結果
+
+- [Issue #213](https://github.com/honda-dev-jp/review-app-laravel/issues/213)のPHP Critical対策は[PR #214](https://github.com/honda-dev-jp/review-app-laravel/pull/214)で`develop`にMerge commit方式で統合済み（Merge commit `988524f`）。当時のローカルSail実測とGitHub Actions実績は10.3〜10.9に記録済み。
+- [Issue #215](https://github.com/honda-dev-jp/review-app-laravel/issues/215)による当該実績文書化は[PR #216](https://github.com/honda-dev-jp/review-app-laravel/pull/216)で`develop`に統合済み（Merge commit `4409305`）。
+- [同期PR #223](https://github.com/honda-dev-jp/review-app-laravel/pull/223)はBase `main`、Head `develop`、Merge commit方式で**2026-10-23 01:28:48 JST**にマージされ、Merge commit `f421e10f3d8416c1be428902c837afd5789f4985`で両変更を含むセキュリティ対応5件が`main`へ反映された。
+- `Closes #213`・`Closes #215`を含む対象Issue5件は、PR #223の`main`マージ後に全件Closed。PR #223本文の反映前・マージ後チェックリスト16項目は全件チェック済み。
+
+#### 10.10.2 CI・PHP実行環境の確認範囲
+
+- PR #223の[GitHub Actions CI run 39812912669](https://github.com/honda-dev-jp/review-app-laravel/actions/runs/39812912669)で`quality-checks`、`Playwright E2E`、`python-quality-checks`の3ジョブはすべて成功した。
+- `main`の`.github/workflows/ci.yml`において、`quality-checks`と`e2e-tests`の`Verify PHP security baseline`はPHP **8.4.27以上・8.5.0未満**のみを許可する。これはCI設定上の最低要件であり、10.3〜10.6に記録したローカルSailのPHP **8.4.27実測**とは区別する。
+- PR #214のCIで上記バージョンガードの実行成功も確認済み（10.9.1）。今回の同期後、ローカルDockerイメージを改めて再ビルドした事実や本番XServerのWeb PHP・CLI PHPを更新した事実はない。
+- `composer.json`・`composer.lock`やSail runtimeのDockerfileは、今回のPR #223で新規変更していない。リポジトリのドキュメントとCIガードを`main`へ反映したことと、ローカルDockerの実体更新・XServer本番の更新は別の工程である。
+
+#### 10.10.3 developのfast-forward再同期と後続状態
+
+利用者はTMDB Issue #212の未コミット5ファイルを守るため、一時worktree `review-app-laravel-sync-223`で`main`を`git pull --ff-only origin main`により最新化し、`develop`を`git merge --ff-only main`した後、GitHub運用ガイド第11.2節の限定例外として`git push origin develop`を実行した。**force pushは使用していない。**
+
+`git rev-list --left-right --count origin/develop...origin/main`は`0 0`で、ローカル`main`・`develop`・`origin/main`・`origin/develop`の4参照はすべて`f421e10`で一致。同期worktreeは削除済み。元のTMDB作業worktreeはHEAD `6404d3a`と未コミット文書4件・未追跡文書1件を保った。
+
+この結果により、**10.9.4における「`main`同期およびIssue #213のCloseは未完了」という記録は、10.9.4執筆時点では正しく、本節の時点では完了済み**である。一方、XServer本番反映と本番環境での稼働PHP確認は依然として今回の作業範囲外であり、完了とは扱わない。
+
+セキュリティ対応5件の統合状態、`follow-redirects`・Viteの最終lock version、Dependabot Open 0件・Alert #65／#66の`fixed`確認については[依存関係更新履歴の第13節](DEPENDENCY_UPDATE_HISTORY.md)に集約する。
