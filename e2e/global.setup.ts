@@ -7,7 +7,7 @@ test('E2E専用データベースをresetする', () => {
     const command = isCI ? 'php' : 'docker';
     const args = isCI
         ? ['artisan', 'e2e:reset']
-        : ['compose', 'exec', '-T', 'laravel.e2e', 'php', 'artisan', 'e2e:reset'];
+        : ['compose', 'exec', '-T', '--user', 'sail', 'laravel.e2e', 'php', 'artisan', 'e2e:reset'];
     const result = spawnSync(command, args, {
         stdio: isCI ? 'inherit' : 'ignore',
     });
