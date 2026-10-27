@@ -654,15 +654,27 @@ git diff
 
 ## 20. 外部API利用方針
 
-TMDB API連携はMVP2で対応する。利用条件・クレジット要件とAPI技術仕様を分離して調査し、認証方式、endpoint、取得・保存項目、timeout、retry等は後続の技術調査で決定する。
+TMDB API連携はMVP2で段階的に対応する。Issue 212の検索・表示機能は作業ブランチ上に実装済み（最終品質ゲート確認中）であり、作品登録などの後続機能は未実装とする。利用条件・クレジット要件と技術仕様は分けて扱う。
 
 外部APIを利用する場合は、以下を守る。
 
-- APIキーは `.env` で管理する
-- APIキーをソースコード、README、docs、スクリーンショットに含めない
-- APIレスポンスの値も信用せず、画面表示時はエスケープする
-- 保存前に必要な項目だけを取り込む
-- API通信失敗時に詳細なエラー情報を画面へ表示しない
+- APIキーやアクセストークンはサーバー側の環境変数・設定ファイル経由で管理する
+- 認証情報をソースコード、README、docs、Issue、PR、スクリーンショットに含めない
+- 認証情報をJavaScript、HTML、JSONレスポンス、ログへ露出させない
+- APIレスポンスを非信頼入力として扱い、画面ではエスケープし、raw HTMLとして挿入しない
+- 外部API通信の失敗時に、認証情報、生のエラーレスポンス、例外詳細や内部情報を利用者へ公開しない
+- データを保存する場合は、利用条件と保存範囲を確認し、必要な項目だけを取り込む
+
+### TMDB映画検索（Issue 212・検索／表示を実装済み、最終品質ゲート確認中）
+
+- 検索画面と検索結果取得用JSON endpointを `auth` と `can:access-admin-panel` で保護する。既存管理者機能と同様、`verified` は要求しない
+- TMDB APIへの通信とBearer認証はLaravelサーバー側だけで行う。API Read Access Tokenをブラウザへ渡さない
+- TMDB検索語をLaravel側で検証し、外部APIレスポンスの値を安全なDOM操作で描画する
+- 自動テスト・CIから外部TMDB APIへ実通信しない
+
+**TMDBとの通信パラメータ、Configuration、ポスターURL、JSONスキーマ、HTTPステータス、timeout・retry、テストケースは [TMDB映画検索 技術設計](TMDB_SEARCH_DESIGN.md) を正本とする。**
+
+TMDBの利用条件、attribution、notice、branding、長期保存条件はIssue 98で別途扱う。
 
 ---
 

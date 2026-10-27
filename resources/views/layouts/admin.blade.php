@@ -15,7 +15,8 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">
-        <div class="min-h-screen bg-gray-100">
+        {{-- 固定ヘッダー（h-14 = 56px）の分だけ上部に余白を確保する。 --}}
+        <div class="min-h-screen bg-gray-100 pt-14">
             @include('layouts.admin-navigation')
 
             <main class="min-h-[calc(100vh-3.5rem)] md:pl-48">

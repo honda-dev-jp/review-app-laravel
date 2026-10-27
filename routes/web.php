@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\TmdbSearchController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReviewCommentController;
@@ -47,6 +48,10 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:access-admin-panel')->group(function () {
         Route::view('/admin', 'admin.dashboard')
             ->name('admin.dashboard');
+        Route::view('/admin/tmdb/search', 'admin.tmdb.search')
+            ->name('admin.tmdb.search');
+        Route::get('/admin/tmdb/search/results', [TmdbSearchController::class, 'search'])
+            ->name('admin.tmdb.search.results');
     });
 });
 

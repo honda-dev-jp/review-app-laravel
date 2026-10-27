@@ -58,14 +58,17 @@ e2e/
 ├── account-deletion-modal.spec.ts
 ├── review-deletion-modal.spec.ts
 ├── pagination.spec.ts
+├── tmdb-search.spec.ts
 └── support/
-    └── login.ts
+    ├── login.ts
+    └── tmdb-search.ts
 ```
 
 - Playwright TestをTypeScriptで使用する
 - PHPUnitの`tests/`とPlaywrightの`e2e/`を分離する
 - `e2e/tsconfig.json`はPlaywright関連のTypeScriptだけを`strict`かつ`noEmit`で型検査する
 - `setup` projectがE2E DBをresetし、その成功後に`chromium` projectを実行する
+- `tmdb-search.spec.ts`はIssue 212の管理者検索画面を対象とし、正常検索、0件・部分成功、HTTPエラー、疑似XSS、通信失敗・タイムアウト、モバイル導線・画像フォールバックの6シナリオを検証する。検索JSON・ポスターCDN・既知のフォントCSSは合成応答を用い、未許可の外部通信を遮断する（Laravel→TMDB通信の検証はFeature / Serviceテストの責務）
 - 対象browserはChromiumのみとする
 - 認証が必要なtestはログイン画面を操作する共通helperを使用する
 - `storageState`は使用せず、各testの独立したBrowserContextでUIログインする
@@ -203,8 +206,10 @@ npx playwright test
 `npx playwright test`は最初に`setup` projectを実行し、ローカルでは内部で次のresetを呼び出します。
 
 ```bash
-docker compose exec -T laravel.e2e php artisan e2e:reset
+docker compose exec -T --user sail laravel.e2e php artisan e2e:reset
 ```
+
+ローカルのresetは、コンテナ内の`sail`ユーザーで実行し、root所有ファイルの生成を避けます。`sail`ユーザーの実効UIDは環境の`WWWUSER`設定に従うため、数値のUIDを固定しません。CIではDocker Composeを介さずArtisanを直接実行します。
 
 通常手順で手動resetを先に重ねて実行する必要はありません。Playwrightを実行すると`e2e_testing`がwipe、migrate、seedされ、既存のE2E DB内容は失われます。
 
@@ -215,6 +220,7 @@ npx playwright test --project=chromium
 npx playwright test e2e/account-deletion-modal.spec.ts
 npx playwright test e2e/account-deletion-modal.spec.ts --headed
 npx playwright test e2e/account-deletion-modal.spec.ts --debug
+npx playwright test e2e/tmdb-search.spec.ts --project=chromium
 ```
 
 対象spec、`--headed`、`--debug`を指定した場合も、project dependencyである`setup`が先に動作し、E2E DBをresetします。

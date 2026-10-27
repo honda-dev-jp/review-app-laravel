@@ -31,4 +31,8 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'tmdb' => [
+        'read_access_token' => env('TMDB_READ_ACCESS_TOKEN'),
+    ],
+
 ];
