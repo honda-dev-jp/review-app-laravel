@@ -12,8 +12,8 @@
         ],
         [
             'label' => 'TMDB検索',
-            'href' => null,
-            'active' => false,
+            'href' => route('admin.tmdb.search'),
+            'active' => request()->routeIs('admin.tmdb.search'),
         ],
     ];
 @endphp
@@ -22,7 +22,7 @@
     x-data="{ mobileMenuOpen: false }"
     @keydown.escape.window="mobileMenuOpen = false"
 >
-    <header class="sticky top-0 z-40 flex h-14 items-center justify-between bg-gray-900 px-4 text-white shadow-xs sm:px-6">
+    <header class="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between bg-gray-900 px-4 text-white shadow-xs sm:px-6">
         <a
             href="{{ route('admin.dashboard') }}"
             class="rounded-sm text-lg font-semibold focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
