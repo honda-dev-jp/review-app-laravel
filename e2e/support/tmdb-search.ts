@@ -7,10 +7,11 @@ export interface Movie {
     release_date: string | null;
     overview: string | null;
     poster_url: string | null;
+    genres: Array<{ id: number; name: string }>;
 }
 
 export function movie(id: number, title: string, poster: string | null = null): Movie {
-    return { id, title, original_title: 'Synthetic Movie', release_date: '2026-01-01', overview: '合成データの概要です。', poster_url: poster };
+    return { id, title, original_title: 'Synthetic Movie', release_date: '2026-01-01', overview: '合成データの概要です。', poster_url: poster, genres: [] };
 }
 
 export function results(movies: Movie[], checked = movies.length) {
