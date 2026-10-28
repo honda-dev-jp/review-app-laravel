@@ -21,6 +21,8 @@ class TmdbMovieServiceTest extends TestCase
 {
     private const TMDB_SEARCH_URL = 'https://api.themoviedb.org/3/search/movie';
 
+    private const TMDB_GENRE_URL = 'https://api.themoviedb.org/3/genre/movie/list';
+
     private const TMDB_CONFIGURATION_URL = 'https://api.themoviedb.org/3/configuration';
 
     /** 実環境の.envを読まず、空の環境ファイルでアプリを起動する。 */
@@ -575,6 +577,7 @@ class TmdbMovieServiceTest extends TestCase
                 'release_date' => '2024-02-29',
                 'overview' => "映画の概要。\n内部の改行は維持する。",
                 'poster_url' => null,
+                'genres' => [],
             ]],
             'summary' => ['checked' => 1, 'displayed' => 1],
         ], $result);
@@ -629,6 +632,270 @@ class TmdbMovieServiceTest extends TestCase
         $this->assertSame($original, $translator->get($key, [], $locale));
     }
 
+    /** 複数作品のジャンルを作品側の順序で返し、公開キーと一括取得の通信契約を保証する。 */
+    public function test_search_maps_multiple_genres_with_one_request(): void
+    {
+        // Arrange：ID順と一覧順を意図的に変え、不正値・重複・未知ID・余剰キーを混ぜる。
+        $this->fakeSearch('{"results":[{"id":1,"genre_ids":[878,28,878,0,-1,1.0,"28",true,null,[],{},999],"private":"PRIVATE_DETAIL"},{"id":2,"genre_ids":[28]},{"id":3}]}');
+        $attempts = 0;
+        Http::fake([self::TMDB_GENRE_URL.'?*' => function (Request $request, array $options) use (&$attempts) {
+            $attempts++;
+            $this->assertSame(5, $options['timeout']);
+            // Assert：Fakeの応答判定だけでは見逃すリダイレクト無効化設定の欠落を検出する。
+            $this->assertFalse($options['allow_redirects'] ?? null);
+            $this->assertSame(self::TMDB_GENRE_URL.'?language=ja-JP', $request->url());
+            $this->assertSame('GET', $request->method());
+            $this->assertTrue($request->hasHeader('Authorization', 'Bearer dummy-test-token'));
+
+            return Http::response('{"genres":[{"id":28,"name":"　アクション　","extra":"PRIVATE_DETAIL"},{"id":878,"name":"SF"}],"private":"dummy-test-token"}');
+        }]);
+
+        // Act：公開メソッドを通して検証・通信・変換を実行する。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：空ジャンルの作品も必須キーを持ち、型・順序・公開フィールドだけが完全一致する。
+        $one = self::movie(1);
+        $one['genres'] = [['id' => 878, 'name' => 'SF'], ['id' => 28, 'name' => 'アクション']];
+        $two = self::movie(2);
+        $two['genres'] = [['id' => 28, 'name' => 'アクション']];
+        $this->assertSame(['results' => [$one, $two, self::movie(3)], 'summary' => ['checked' => 3, 'displayed' => 3]], $result);
+        $this->assertSame(1, $attempts);
+        Http::assertSentCount(2);
+    }
+
+    /** @param list<int> $expectedIds */
+    #[DataProvider('genreIdCases')]
+    public function test_search_validates_genre_ids(string $field, array $expectedIds): void
+    {
+        // Arrange：生JSONで配列・オブジェクト・整数と小数の違いを保持する。
+        $this->fakeSearch('{"results":[{"id":1'.$field.'}]}');
+        if ($expectedIds !== []) {
+            $this->fakeGenres('{"genres":[{"id":1,"name":"最小ID"},{"id":28,"name":"アクション"}]}');
+        }
+
+        // Act：ジャンル型が不正でも映画の検証結果を維持する。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：固定の期待値と通信回数で、不要な一覧取得や型変換を検出する。
+        $movie = self::movie(1);
+        $movie['genres'] = $expectedIds === [] ? [] : [['id' => 28, 'name' => 'アクション'], ['id' => 1, 'name' => '最小ID']];
+        $this->assertSame(['results' => [$movie], 'summary' => ['checked' => 1, 'displayed' => 1]], $result);
+        Http::assertSentCount($expectedIds === [] ? 1 : 2);
+    }
+
+    /** @return iterable<string, array{string, list<int>}> */
+    public static function genreIdCases(): iterable
+    {
+        yield '欠落' => ['', []];
+        foreach (['null', '[]', '{}', '{"0":28}', '"28"', '28', 'true', 'false', '[0,-1,1.0,1.5,"28",true,false,null,[],{}]'] as $value) {
+            yield $value => [',"genre_ids":'.$value, []];
+        }
+        yield '順序・重複・不正値混在' => [',"genre_ids":[28,1,28,0,1.0,"1",false,[],{}]', [28, 1]];
+    }
+
+    #[DataProvider('genreDefinitionCases')]
+    public function test_search_ignores_only_invalid_genre_definitions(string $definition): void
+    {
+        // Arrange：不正定義の後に同じIDの正常定義を置き、使用済み扱いの誤りも検出する。
+        $this->fakeSearch('{"results":[{"id":1,"genre_ids":[28,878]}]}');
+        $this->fakeGenres('{"genres":['.$definition.',{"id":28,"name":"　アクション　"},{"id":878,"name":"SF"},{"id":28,"name":"後続名"}]}');
+
+        // Act：一覧内の不正要素だけを除外する。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：先行不正要素に妨げられず、最初の有効定義だけを採用する。
+        $movie = self::movie(1);
+        $movie['genres'] = [['id' => 28, 'name' => 'アクション'], ['id' => 878, 'name' => 'SF']];
+        $this->assertSame(['results' => [$movie], 'summary' => ['checked' => 1, 'displayed' => 1]], $result);
+        Http::assertSentCount(2);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function genreDefinitionCases(): iterable
+    {
+        foreach (['[]', 'null', 'true', '1', '"genre"', '{}', '{"name":"不正"}', '{"id":28}'] as $value) {
+            yield '要素 '.$value => [$value];
+        }
+        foreach (['0', '-1', '28.0', '1.5', '"28"', 'true', 'false', 'null', '[]', '{}'] as $id) {
+            yield 'ID '.$id => ['{"id":'.$id.',"name":"不正"}'];
+        }
+        foreach (['null', '123', 'true', 'false', '[]', '{}', '""', '" \t\n\r　\u00a0"'] as $name) {
+            yield '名前 '.$name => ['{"id":28,"name":'.$name.'}'];
+        }
+    }
+
+    public function test_search_normalizes_genre_names_without_changing_internal_whitespace(): void
+    {
+        // Arrange：前後の除去対象、内部空白、既定では除去しない文字を区別する。
+        $this->fakeSearch('{"results":[{"id":1,"genre_ids":[1,2,3,4]}]}');
+        $this->fakeGenres('{"genres":[{"id":1,"name":"　\tA　B\nC\u00a0"},{"id":2,"name":"\u200b"},{"id":3,"name":"\ufeff"},{"id":4,"name":"\u180e"}]}');
+
+        // Act：ジャンル名を応答値の規則で正規化する。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：PHP既定のmb_trimの契約を固定値で比較する。
+        $movie = self::movie(1);
+        $movie['genres'] = [['id' => 1, 'name' => "A　B\nC"], ['id' => 2, 'name' => "\u{200B}"], ['id' => 3, 'name' => "\u{FEFF}"]];
+        $this->assertSame(['results' => [$movie], 'summary' => ['checked' => 1, 'displayed' => 1]], $result);
+    }
+
+    #[DataProvider('unusedGenreCases')]
+    public function test_search_does_not_fetch_genres_for_excluded_movies(string $body, bool $invalid): void
+    {
+        // Arrange：一覧Fakeは登録せず、対象外作品を理由に取得すると失敗させる。
+        $this->fakeSearch($body);
+        $caught = null;
+        $result = null;
+
+        // Act：例外を捕捉し、全件不正では期待した種類かを後続のAssertで確認する。
+        try {
+            $result = (new TmdbMovieService)->search('テスト映画');
+        } catch (\Throwable $error) {
+            $caught = $error;
+        }
+
+        // Assert：全件不正と正常0件を区別し、検索以外の通信を行わない。
+        if ($invalid) {
+            $this->assertInstanceOf(\UnexpectedValueException::class, $caught);
+            $this->assertNull($result);
+        } else {
+            $this->assertNull($caught);
+            $this->assertNotNull($result);
+            if ($body === '{"results":[]}') {
+                $this->assertSame(['results' => [], 'summary' => ['checked' => 0, 'displayed' => 0]], $result);
+            } elseif (str_contains($body, '"id":6')) {
+                $this->assertSame(['results' => [self::movie(1), self::movie(2), self::movie(3), self::movie(4), self::movie(5)], 'summary' => ['checked' => 5, 'displayed' => 5]], $result);
+            } else {
+                $this->assertSame(['results' => [self::movie(1)], 'summary' => ['checked' => 2, 'displayed' => 1]], $result);
+            }
+        }
+        Http::assertSentCount(1);
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function unusedGenreCases(): iterable
+    {
+        yield '0件' => ['{"results":[]}', false];
+        yield '不正ID作品のみ' => ['{"results":[{"id":0,"genre_ids":[28]}]}', true];
+        yield '任意項目で除外' => ['{"results":[{"id":1},{"id":2,"title":[],"genre_ids":[28]}]}', false];
+        yield '6件目のみ' => ['{"results":[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6,"genre_ids":[28]}]}', false];
+        yield '先頭5件全件不正で6件目正常' => ['{"results":[{"id":0,"genre_ids":[28]},{"id":0},{"id":0},{"id":0},{"id":0},{"id":6,"genre_ids":[28]}]}', true];
+    }
+
+    #[DataProvider('genrePayloadCases')]
+    public function test_genre_payload_failure_preserves_movies_and_posters(string $body): void
+    {
+        // Arrange：全項目・ポスター・部分成功を含む検索に一覧の境界応答を組み合わせる。
+        $this->fakeSearch('{"results":[{"id":1,"title":"　映画　","original_title":" Original ","release_date":"2024-02-29","overview":" 説明 ","poster_path":"/one.jpg","genre_ids":[28]},{"id":0},{"id":3,"genre_ids":[28]}]}');
+        $this->fakeConfiguration(self::configuration(['w342']));
+        $this->fakeGenres($body);
+
+        // Act：一覧の解析失敗も検索全体へ伝播させない。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：公開結果全体で、画像・映画・型・件数が維持されることを保証する。
+        $this->assertSame(['results' => [
+            ['id' => 1, 'title' => '映画', 'original_title' => 'Original', 'release_date' => '2024-02-29', 'overview' => '説明', 'poster_url' => 'https://image.tmdb.org/t/p/w342/one.jpg', 'genres' => []],
+            self::movie(3),
+        ], 'summary' => ['checked' => 3, 'displayed' => 2]], $result);
+        Http::assertSentCount(3);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function genrePayloadCases(): iterable
+    {
+        foreach (['{"genres":[]}', '[]', 'null', 'true', '1', '"genres"', '{}', '{"genres":null}', '{"genres":{}}', '{"genres":{"0":{"id":28,"name":"不可"}}}', '{"genres":"invalid"}', '{"genres":1}', '{"genres":true}', '{'] as $body) {
+            yield $body => [$body];
+        }
+        yield '深さ超過' => [str_repeat('[', 513).str_repeat(']', 513)];
+        yield '不正UTF8' => ["{\"genres\":[{\"id\":28,\"name\":\"\xFF\"}]}"];
+    }
+
+    #[DataProvider('genreFailureCases')]
+    public function test_genre_failures_are_independent_of_configuration(string $failure, string $configurationFailure): void
+    {
+        // Arrange：非2xxにも成功時と同じ有効JSONを返し、HTTP判定と両補助APIの独立性を検証する。
+        $this->fakeSearch('{"results":[{"id":1,"poster_path":"/one.jpg","genre_ids":[28]},{"id":3,"genre_ids":[28]}]}');
+        $configurationAttempts = 0;
+        $genreAttempts = 0;
+        Http::fake([
+            self::TMDB_CONFIGURATION_URL => function () use ($configurationFailure, &$configurationAttempts) {
+                $configurationAttempts++;
+
+                return match ($configurationFailure) {
+                    'connection' => Http::failedConnection('PRIVATE_CONFIGURATION_DETAIL'),
+                    'json' => Http::response('{'),
+                    'http' => Http::response('PRIVATE_CONFIGURATION_DETAIL', 500),
+                    default => Http::response(self::configuration(['w342'])),
+                };
+            },
+            self::TMDB_GENRE_URL.'?*' => function (Request $request, array $options) use ($failure, &$genreAttempts) {
+                $genreAttempts++;
+                $this->assertSame(5, $options['timeout']);
+                $body = '{"genres":[{"id":28,"name":"アクション"}],"private":"PRIVATE_UPSTREAM_DETAIL dummy-test-token"}';
+
+                return match ($failure) {
+                    'success' => Http::response($body),
+                    'connection', 'timeout' => Http::failedConnection('cURL error '.($failure === 'timeout' ? '28' : '7').': PRIVATE_GENRE_DETAIL dummy-test-token'),
+                    default => Http::response($body, (int) $failure, $failure === '302' ? ['Location' => 'https://api.themoviedb.org/3/genre/movie/redirected'] : []),
+                };
+            },
+        ]);
+
+        // Act：一方が失敗しても必要な他方の処理を継続する。
+        $result = (new TmdbMovieService)->search('テスト映画');
+
+        // Assert：失敗した補助情報だけが縮退し、失敗リクエストも再試行しない。
+        $one = self::movie(1);
+        $three = self::movie(3);
+        $one['poster_url'] = $configurationFailure !== 'success' ? null : 'https://image.tmdb.org/t/p/w342/one.jpg';
+        if ($failure === 'success') {
+            $one['genres'] = [['id' => 28, 'name' => 'アクション']];
+            $three['genres'] = [['id' => 28, 'name' => 'アクション']];
+        }
+        $this->assertSame(['results' => [$one, $three], 'summary' => ['checked' => 2, 'displayed' => 2]], $result);
+        $this->assertSame(1, $configurationAttempts);
+        $this->assertSame(1, $genreAttempts);
+        $this->assertCount(1, Http::recorded(fn (Request $request): bool => str_starts_with($request->url(), self::TMDB_SEARCH_URL.'?')));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function genreFailureCases(): iterable
+    {
+        foreach (['success', '301', '302', '304', '401', '403', '404', '429', '500', '502', '503', 'connection', 'timeout'] as $failure) {
+            foreach (['success', 'http', 'json', 'connection'] as $configurationFailure) {
+                yield $failure.'画像'.$configurationFailure => [$failure, $configurationFailure];
+            }
+        }
+    }
+
+    public function test_genres_are_fetched_again_on_each_search(): void
+    {
+        // Arrange：同じServiceで一覧を変更し、インスタンス内キャッシュも検出する。
+        $this->fakeSearch('{"results":[{"id":1,"genre_ids":[28]}]}');
+        Http::fake([self::TMDB_GENRE_URL.'?*' => Http::sequence()
+            ->push('{"genres":[{"id":28,"name":"初回"}]}')
+            ->push('{"genres":[{"id":28,"name":"次回"}]}')]);
+        $service = new TmdbMovieService;
+
+        // Act：同一インスタンスで2回検索する。
+        $first = $service->search('映画');
+        $second = $service->search('映画');
+
+        // Assert：その回の一覧名を返し、検索と一覧をそれぞれ2回取得する。
+        $movie = self::movie(1);
+        $movie['genres'] = [['id' => 28, 'name' => '初回']];
+        $this->assertSame(['results' => [$movie], 'summary' => ['checked' => 1, 'displayed' => 1]], $first);
+        $movie['genres'] = [['id' => 28, 'name' => '次回']];
+        $this->assertSame(['results' => [$movie], 'summary' => ['checked' => 1, 'displayed' => 1]], $second);
+        Http::assertSentCount(4);
+    }
+
+    private function fakeGenres(string $body): void
+    {
+        Http::fake([self::TMDB_GENRE_URL.'?*' => Http::response($body, 200, ['Content-Type' => 'application/json'])]);
+    }
+
     /** 検索先だけをFakeに登録し、未登録のConfiguration等への意図しない通信を検出する。 */
     private function fakeSearch(string $body, int $status = 200): void
     {
@@ -644,11 +911,11 @@ class TmdbMovieServiceTest extends TestCase
     /**
      * 設計書の公開キーだけを持つ期待値。Serviceの正規化処理を複製せず固定値で比較する。
      *
-     * @return array{id: int, title: string, original_title: null, release_date: null, overview: null, poster_url: ?string}
+     * @return array{id: int, title: string, original_title: null, release_date: null, overview: null, poster_url: ?string, genres: list<array{id: int, name: string}>}
      */
     private static function movie(int $id, string $title = 'タイトル不明'): array
     {
-        return ['id' => $id, 'title' => $title, 'original_title' => null, 'release_date' => null, 'overview' => null, 'poster_url' => null];
+        return ['id' => $id, 'title' => $title, 'original_title' => null, 'release_date' => null, 'overview' => null, 'poster_url' => null, 'genres' => []];
     }
 
     /** @param list<mixed> $sizes */

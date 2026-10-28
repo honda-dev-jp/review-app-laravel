@@ -356,8 +356,8 @@ class TmdbSearchTest extends TestCase
         $response->assertOk();
         $this->assertSame([
             'results' => [
-                ['id' => 12, 'title' => '映画 A', 'original_title' => 'Original A', 'release_date' => '2024-02-29', 'overview' => '説明文', 'poster_url' => $posterUrl],
-                ['id' => 34, 'title' => 'Original B', 'original_title' => 'Original B', 'release_date' => null, 'overview' => null, 'poster_url' => null],
+                ['id' => 12, 'title' => '映画 A', 'original_title' => 'Original A', 'release_date' => '2024-02-29', 'overview' => '説明文', 'poster_url' => $posterUrl, 'genres' => []],
+                ['id' => 34, 'title' => 'Original B', 'original_title' => 'Original B', 'release_date' => null, 'overview' => null, 'poster_url' => null, 'genres' => []],
             ],
             'summary' => ['checked' => 2, 'displayed' => 2],
         ], $response->json());
@@ -568,6 +568,54 @@ class TmdbSearchTest extends TestCase
     }
 
     /** DB保存が不要な検索なので、RefreshDatabaseによるDB再作成を避けて実GuardへUserを渡す。 */
+    #[DataProvider('genreResponseCases')]
+    public function test_search_returns_genres_or_preserves_movies_on_genre_failure(string $failure, bool $configurationFails): void
+    {
+        // Arrange：実ルート・Serviceを使い、上流情報の公開漏れと補助APIの独立性を検証する。
+        $this->actingAsAdmin();
+        $this->fakeSearch('{"results":[{"id":1,"title":"テスト映画","original_title":" Original ","release_date":"2024-02-29","overview":" 説明 ","poster_path":"/one.jpg","genre_ids":[878,28,878,999],"private":"PRIVATE_DETAIL"},{"id":0},{"id":3,"title":"テスト映画"}]}');
+        $attempts = 0;
+        Http::fake([
+            self::CONFIGURATION_URL => Http::response(['images' => ['secure_base_url' => 'https://image.tmdb.org/t/p/', 'poster_sizes' => ['w342']]], $configurationFails ? 500 : 200),
+            'https://api.themoviedb.org/3/genre/movie/list?*' => function () use ($failure, &$attempts) {
+                $attempts++;
+                // Arrange：成功・非2xxで本文を共通化し、異常JSONによる偶然の縮退を避ける。
+                $body = '{"genres":[{"id":28,"name":"　アクション　","private":"PRIVATE_DETAIL"},{"id":878,"name":"SF"}],"private":"'.self::TEST_TOKEN.'"}';
+
+                return match ($failure) {
+                    'success' => Http::response($body),
+                    'connection', 'timeout' => Http::failedConnection('cURL error '.($failure === 'timeout' ? '28' : '7').': PRIVATE_DETAIL '.self::TEST_TOKEN),
+                    'json' => Http::response('{'),
+                    'structure' => Http::response('{"genres":{}}'),
+                    default => Http::response($body, (int) $failure, $failure === '302' ? ['Location' => 'https://api.themoviedb.org/3/genre/movie/redirected'] : []),
+                };
+            },
+        ]);
+
+        // Act：管理者の検索結果GETを実行する。
+        $response = $this->getJson(route('admin.tmdb.search.results', ['query' => '映画']));
+
+        // Assert：障害時も200・部分成功件数・全映画キーを維持し、上流本文や認証情報を返さない。
+        $genres = $failure === 'success' ? [['id' => 878, 'name' => 'SF'], ['id' => 28, 'name' => 'アクション']] : [];
+        $response->assertOk()->assertExactJson(['results' => [
+            ['id' => 1, 'title' => 'テスト映画', 'original_title' => 'Original', 'release_date' => '2024-02-29', 'overview' => '説明', 'poster_url' => $configurationFails ? null : 'https://image.tmdb.org/t/p/w342/one.jpg', 'genres' => $genres],
+            self::movie(3),
+        ], 'summary' => ['checked' => 3, 'displayed' => 2]]);
+        $this->assertSame(1, $attempts);
+        $this->assertSearchRequest('映画');
+        $response->assertDontSee(self::TEST_TOKEN, false)->assertDontSee('PRIVATE_DETAIL', false);
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function genreResponseCases(): iterable
+    {
+        foreach (['success', '302', '401', '429', '500', 'connection', 'timeout', 'json', 'structure'] as $failure) {
+            foreach ([false, true] as $configurationFails) {
+                yield $failure.($configurationFails ? '画像障害' : '画像正常') => [$failure, $configurationFails];
+            }
+        }
+    }
+
     private function actingAsAdmin(): void
     {
         $this->actingAs(User::factory()->make(['role' => 'admin']));
@@ -624,10 +672,10 @@ class TmdbSearchTest extends TestCase
     /**
      * 正常作品の期待値は設計書の公開キーと固定値で構成し、Serviceの変換処理から生成しない。
      *
-     * @return array{id: int, title: string, original_title: null, release_date: null, overview: null, poster_url: null}
+     * @return array{id: int, title: string, original_title: null, release_date: null, overview: null, poster_url: null, genres: list<array{id: int, name: string}>}
      */
     private static function movie(int $id): array
     {
-        return ['id' => $id, 'title' => 'テスト映画', 'original_title' => null, 'release_date' => null, 'overview' => null, 'poster_url' => null];
+        return ['id' => $id, 'title' => 'テスト映画', 'original_title' => null, 'release_date' => null, 'overview' => null, 'poster_url' => null, 'genres' => []];
     }
 }
