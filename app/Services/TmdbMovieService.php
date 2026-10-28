@@ -18,6 +18,8 @@ class TmdbMovieService
 
     private const TMDB_CONFIGURATION_URL = 'https://api.themoviedb.org/3/configuration';
 
+    private const TMDB_GENRE_MOVIE_LIST_URL = 'https://api.themoviedb.org/3/genre/movie/list';
+
     /**
      * 検証済みの映画検索キーワードを使用してTMDBから映画情報を取得する。
      *
@@ -31,7 +33,8 @@ class TmdbMovieService
      *         original_title: string|null,
      *         release_date: string|null,
      *         overview: string|null,
-     *         poster_url: string|null
+     *         poster_url: string|null,
+     *         genres: list<array{id: int, name: string}>
      *     }>,
      *     summary: array{
      *         checked: int,
@@ -229,6 +232,7 @@ class TmdbMovieService
                 'overview' => $overview,
                 'poster_path' => $posterPath,
                 'poster_url' => null,
+                'genre_ids' => $this->normalizeGenreIds($candidate->genre_ids ?? null),
             ];
         }
 
@@ -354,6 +358,25 @@ class TmdbMovieService
             }
         }
 
+        // 有効なジャンルIDを持つ映画が存在するか確認する。
+        $hasGenreIds = false;
+
+        foreach ($validMovies as $movie) {
+            // genre_idsが空配列でなければtrueにしてループを終了する。
+            if ($movie['genre_ids'] !== []) {
+                $hasGenreIds = true;
+                break;
+            }
+        }
+
+        // ジャンルIDと名称の対応表を初期化する。
+        $genreMap = [];
+
+        // 有効なジャンルIDがある場合だけ、Genre Movie Listを取得する。
+        if ($hasGenreIds) {
+            $genreMap = $this->fetchGenreNameMap($token);
+        }
+
         // 最終的にControllerへ返す映画情報を格納する。
         $results = [];
 
@@ -370,8 +393,14 @@ class TmdbMovieService
                     .$movie['poster_path'];
             }
 
-            // poster_pathはService内部専用なので公開結果から削除する。
-            unset($movie['poster_path']);
+            // ジャンルIDを日本語名付きの公開用配列へ変換する。
+            $movie['genres'] = $this->buildMovieGenres(
+                $movie['genre_ids'],
+                $genreMap
+            );
+
+            // 内部処理専用の項目は公開JSONに含めない。
+            unset($movie['poster_path'], $movie['genre_ids']);
 
             // 公開用の映画情報だけを結果配列に追加する。
             $results[] = $movie;
@@ -385,5 +414,143 @@ class TmdbMovieService
                 'displayed' => count($results),
             ],
         ];
+    }
+
+    /**
+     * TMDBのジャンルIDを検証し、重複のない正の整数配列へ正規化する。
+     *
+     * @return list<int>
+     */
+    private function normalizeGenreIds(mixed $genreIds): array
+    {
+        // JSON配列以外の値は受け付けない。
+        if (! is_array($genreIds) || ! array_is_list($genreIds)) {
+            return [];
+        }
+
+        $results = [];
+
+        foreach ($genreIds as $id) {
+            // 正の整数でないID、または既に追加済みの重複IDは除外する。
+            if (! is_int($id) || $id < 1 || in_array($id, $results, true)) {
+                continue;
+            }
+
+            $results[] = $id;
+        }
+
+        return $results;
+    }
+
+    /**
+     * TMDBから映画ジャンル一覧を取得し、IDと名称の対応表を生成する。
+     *
+     * @param  string  $token  設定から取得したTMDB API Read Access Token
+     * @return array<int, string>
+     */
+    private function fetchGenreNameMap(string $token): array
+    {
+        try {
+            // Bearer認証を設定し、最大5秒でGenre Movie List APIへGETする。
+            // 検索1回につきGenre Movie Listへの通信は最大1回。
+            $response = Http::withToken($token)
+                ->timeout(5)
+                ->withoutRedirecting()
+                ->get(self::TMDB_GENRE_MOVIE_LIST_URL, [
+                    'language' => 'ja-JP',
+                ]);
+
+            // HTTP応答が2xx以外なら、ジャンル情報なしとして扱う。
+            if (! $response->successful()) {
+                return [];
+            }
+
+            // JSONオブジェクトと配列の区別を保持してデコードする。
+            $payload = json_decode(
+                $response->body(),
+                false,
+                512,
+                JSON_THROW_ON_ERROR
+            );
+
+            // JSONの最上位がオブジェクトであることを確認する。
+            if (! ($payload instanceof \stdClass)) {
+                return [];
+            }
+
+            // ジャンル一覧を取得する。存在しない場合はnullとする。
+            $genres = $payload->genres ?? null;
+
+            // genresがJSON配列でない場合は、ジャンル情報なしとして扱う。
+            if (! is_array($genres) || ! array_is_list($genres)) {
+                return [];
+            }
+
+            // ジャンルIDと名称の対応表を格納する。
+            $genreMap = [];
+
+            foreach ($genres as $genre) {
+                // JSONオブジェクト以外の要素は除外する。
+                if (! ($genre instanceof \stdClass)) {
+                    continue;
+                }
+
+                $id = $genre->id ?? null;
+                $name = $genre->name ?? null;
+
+                // IDが正の整数でない、または名称が文字列でない定義は除外する。
+                if (! is_int($id) || $id < 1 || ! is_string($name)) {
+                    continue;
+                }
+
+                // ジャンル名の前後のUnicode空白を除去する。
+                $name = mb_trim($name, null, 'UTF-8');
+
+                // 正規化後のジャンル名が空なら、その定義を除外する。
+                if ($name === '') {
+                    continue;
+                }
+
+                // 既に登録済みのジャンルIDは除外する。
+                if (array_key_exists($id, $genreMap)) {
+                    continue;
+                }
+
+                // 連想配列に格納する。
+                $genreMap[$id] = $name;
+            }
+
+            return $genreMap;
+        } catch (ConnectionException|\JsonException) {
+            // 通信失敗・タイムアウト・JSON解析失敗はジャンル情報なしとして扱う。
+            return [];
+        }
+    }
+
+    /**
+     * 映画のジャンルIDを日本語名付きの公開用配列へ変換する。
+     *
+     * @param  list<int>  $genreIds  正規化済みのジャンルID一覧
+     * @param  array<int, string>  $genreMap  ジャンルIDと名称の対応表
+     * @return list<array{id: int, name: string}>
+     */
+    private function buildMovieGenres(array $genreIds, array $genreMap): array
+    {
+        $genres = [];
+
+        foreach ($genreIds as $id) {
+            // 対応するジャンル名が存在しないIDは除外する。
+            if (! array_key_exists($id, $genreMap)) {
+                continue;
+            }
+
+            // IDとジャンル名を公開用配列に追加する。
+            $genres[] = [
+                'id' => $id,
+                'name' => $genreMap[$id],
+            ];
+        }
+
+        return $genres;
     }
 }
