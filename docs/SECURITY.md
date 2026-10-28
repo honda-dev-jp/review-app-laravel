@@ -654,7 +654,7 @@ git diff
 
 ## 20. 外部API利用方針
 
-TMDB API連携はMVP2で段階的に対応する。Issue 212の検索・表示機能は作業ブランチ上に実装済み（最終品質ゲート確認中）であり、作品登録などの後続機能は未実装とする。利用条件・クレジット要件と技術仕様は分けて扱う。
+TMDB API連携はMVP2で段階的に対応する。Issue 212の検索・表示機能は実装済みで、PR 229で`develop`へマージ済みであり、作品登録などの後続機能は未実装とする。利用条件・クレジット要件と技術仕様は分けて扱う。
 
 外部APIを利用する場合は、以下を守る。
 
@@ -665,12 +665,14 @@ TMDB API連携はMVP2で段階的に対応する。Issue 212の検索・表示�
 - 外部API通信の失敗時に、認証情報、生のエラーレスポンス、例外詳細や内部情報を利用者へ公開しない
 - データを保存する場合は、利用条件と保存範囲を確認し、必要な項目だけを取り込む
 
-### TMDB映画検索（Issue 212・検索／表示を実装済み、最終品質ゲート確認中）
+### TMDB映画検索（Issue 212・PR 229でdevelopへマージ済み）
 
 - 検索画面と検索結果取得用JSON endpointを `auth` と `can:access-admin-panel` で保護する。既存管理者機能と同様、`verified` は要求しない
 - TMDB APIへの通信とBearer認証はLaravelサーバー側だけで行う。API Read Access Tokenをブラウザへ渡さない
 - TMDB検索語をLaravel側で検証し、外部APIレスポンスの値を安全なDOM操作で描画する
 - 自動テスト・CIから外部TMDB APIへ実通信しない
+- Issue 231のジャンル一覧API通信もLaravelサーバー側のみで実行し、Bearer Tokenをブラウザへ公開しない
+- ジャンル一覧APIの生レスポンス・障害詳細は公開せず、検証済みのID・名称だけを検索結果JSONへ含める。TMDBジャンル情報はDBへ保存しない
 
 **TMDBとの通信パラメータ、Configuration、ポスターURL、JSONスキーマ、HTTPステータス、timeout・retry、テストケースは [TMDB映画検索 技術設計](TMDB_SEARCH_DESIGN.md) を正本とする。**
 

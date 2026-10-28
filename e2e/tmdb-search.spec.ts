@@ -35,7 +35,10 @@ test('正常検索は遷移せずカードを表示し、処理中の連打を�
         form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    await pending.release({ json: results([movie(1, '正常作品', poster)]) });
+    // Arrange：複数ジャンルを含む新しいJSON契約でも既存カードを描画できる応答を用意する。
+    const normalMovie = { ...movie(1, '正常作品', poster), genres: [{ id: 28, name: 'アクション' }, { id: 878, name: 'SF' }] };
+    // Act：ジャンル付き検索結果を実Axiosへ返す。
+    await pending.release({ json: results([normalMovie]) });
 
     // Assert：1回だけ通信し、同じ文書にカード・画像・状態を描画して操作を戻す。
     await expect(view.cards).toHaveCount(1);
