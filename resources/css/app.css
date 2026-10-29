@@ -3,6 +3,7 @@
 @plugin "@tailwindcss/forms";
 
 @source "../views";
+@source "../js/tmdb-search.js";
 @source "../../storage/framework/views";
 @source "../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views";
 

@@ -1,4 +1,4 @@
-# TMDB映画検索 技術設計（Issue 212・231）
+# TMDB映画検索 技術設計（Issue 212・231・232）
 
 ## 目次
 
@@ -16,14 +16,15 @@
 - [12. 実装前の未決事項と合意履歴](#12-実装前の未決事項と合意履歴)
 - [13. 公式一次資料](#13-公式一次資料)
 - [14. Genre Movie List取得・ジャンル変換（Issue 231）](#14-genre-movie-list取得ジャンル変換issue-231)
+- [15. 検索結果カードの表示改善（Issue 232）](#15-検索結果カードの表示改善issue-232)
 
 ## 1. 目的・位置づけ
 
-映画レビューアプリ Laravel移植版のMVP2において、管理者が映画タイトルを検索し、TMDBの映画情報とポスターを同一画面に非同期表示するための技術設計を定める。Issue 231では既存の検索結果JSONへ複数ジャンルのID・日本語名称を追加する設計を扱う。
+映画レビューアプリ Laravel移植版のMVP2において、管理者が映画タイトルを検索し、TMDBの映画情報とポスターを同一画面に非同期表示するための技術設計を定める。Issue 231では既存の検索結果JSONへ複数ジャンルのID・日本語名称を追加し、Issue 232では検索結果カードへのジャンル参考表示・概要の100文字省略・ポスター表示寸法の検証を扱う。
 
-- 対象Issue: [Issue 212「TMDB映画検索結果をポスター付きで非同期表示する」](https://github.com/honda-dev-jp/review-app-laravel/issues/212)、[Issue 231「TMDB映画検索結果に複数ジャンル情報を追加する」](https://github.com/honda-dev-jp/review-app-laravel/issues/231)
-- 状態（2026-10-29確認）: **Issue 212の検索・ポスター表示機能はPR 229で`develop`へマージ済み**。**Issue 231は作業ブランチ`feat/231-tmdb-movie-genres`で実装・ローカル品質確認済み**（PHPUnit 527件、Playwright 18件、PHPStan Level 10、Pint、Vite build、TypeScript型チェック、`git diff --check`が成功）。レビュー指摘を踏まえたドキュメント整合とPR作成は未完了であり、`develop`・`main`への反映完了を意味しない。
-- 第12章のIssue 212の確定事項表は当時の合意履歴として保持し、Issue 231の追加設計は第14章にまとめる。作品登録・重複登録防止・ページネーションはIssue 231の対象外であり、Issue 230・228・227などの後続対応とする。
+- 対象Issue: [Issue 212「TMDB映画検索結果をポスター付きで非同期表示する」](https://github.com/honda-dev-jp/review-app-laravel/issues/212)、[Issue 231「TMDB映画検索結果に複数ジャンル情報を追加する」](https://github.com/honda-dev-jp/review-app-laravel/issues/231)、[Issue 232「TMDB検索結果カードにジャンルを表示し概要を100文字に省略する」](https://github.com/honda-dev-jp/review-app-laravel/issues/232)
+- 状態（2026-10-30確認）: **Issue 212はPR 229、Issue 231はPR 233（マージコミット`519862f`）で、いずれも`develop`へマージ済み**。Issue 231はPHPUnit 527件、Playwright 18件、PHPStan Level 10、Pint、Vite build、TypeScript型チェック、`git diff --check`のローカル確認とPR 233のCI成功を経て統合した。**`main`には未同期であり、Issue 231はCloseしない**。Issue 232はClaude Code・Codexの独立した実装前検証を経て第15章の設計を確定し、作業ブランチで画面実装と対象Playwright 13シナリオのローカル検証を完了した。さらに、PHPUnit・Pint・PHPStan / Larastan Level 10・Vite build・TypeScript型検査・全Playwright・`git diff --check`のローカル品質確認と、PCブラウザ・iPhone Safariでの目視確認、Claude Code・Codexの独立した最終差分レビューを完了した。**Issue 232のPR作成・CI・`develop`統合は未実施**であり、統合済み機能とは区別する。
+- 第12章のIssue 212の確定事項表は当時の合意履歴として保持し、Issue 231の追加設計は第14章、Issue 232のカード表示設計は第15章にまとめる。作品登録・重複登録防止・ページネーションはそれぞれIssue 230・228・227などの後続対応とする。
 - 機能範囲の正本: [FEATURES.md](FEATURES.md)
 - URL・HTTPメソッド・ルート名の正本: [ROUTES.md](ROUTES.md)
 - 画面・画面遷移の正本: [SCREEN_TRANSITIONS.md](SCREEN_TRANSITIONS.md)
@@ -39,7 +40,8 @@
 - 管理者向けTMDB映画検索画面、検索フォーム、検索結果の同一画面内での非同期表示
 - Axios → Laravel → TMDB API v3 のサーバー経由通信
 - TMDB Movie Searchから検索結果を取得し、表示に必要な項目へ整形
-- Issue 231: Movie Searchの`genre_ids`をGenre Movie List（`language=ja-JP`）と対応付け、既存JSONに`genres`を追加する（作業ブランチで実装・ローカル検証済み）
+- Issue 231: Movie Searchの`genre_ids`をGenre Movie List（`language=ja-JP`）と対応付け、既存JSONに`genres`を追加する（PR 233で`develop`へマージ済み）
+- Issue 232: 検索結果カードに`genres`の名称を参考表示し、概要を最大100書記素クラスタ（grapheme）に省略し、ポスターの表示寸法を確認する（作業ブランチで実装・対象E2E検証済み、`develop`未統合）
 - Configurationに基づく公開ポスター画像URLの生成とNo Image表示
 - 最大5件表示、正常・0件・入力エラー・外部API失敗時の処理
 - 実APIへ接続しない自動テストと、ローカル手動動作確認
@@ -48,7 +50,7 @@
 
 - 作品・ジャンル・ポスター・ConfigurationのDB保存、migration、永続キャッシュ
 - `tmdb_id` のDB仕様、作品登録、重複登録防止、Movie Details取得、ページネーションUI
-- TMDBジャンルの**検索結果カードへの参考表示**と概要100文字省略・表示寸法調整（Issue 232）、**作品登録モーダルでのジャンル参考表示**とアプリ独自カテゴリーマスタ・セレクトボックスの整備（Issue 230）、TMDBジャンルとアプリ独自カテゴリーの自動対応付け。**ジャンルの取得・JSON変換はIssue 231の対象**
+- **作品登録モーダルでのジャンル参考表示**とアプリ独自カテゴリーマスタ・セレクトボックスの整備（Issue 230）、TMDBジャンルとアプリ独自カテゴリーの自動対応付け。**ジャンルの取得・JSON変換はIssue 231で対応済み**。Issue 232では新規TMDB API通信・JSON契約変更・DB保存を行わない
 - TMDBの利用条件、attribution、notice、brandingおよび長期保存条件の確定（別途Issue 98）
 - TMDB用の外部PHP wrapper、Sanctum、TMDBユーザー認証
 
@@ -76,7 +78,7 @@
               └─ Issue 231: 有効なジャンルIDがある場合のみ
                   GET https://api.themoviedb.org/3/genre/movie/list?language=ja-JP
                   └─ genre_ids + ジャンル一覧 → genres: [{id, name}, ...]
-      └─ JSON → Axios → 検索画面にDOMで安全に描画（カードのジャンル表示はIssue 232、登録モーダルでの参考表示はIssue 230）
+      └─ JSON → Axios → 検索画面にDOMで安全に描画（Issue 232の作業ブランチではカードのジャンル参考表示・概要省略を追加済み。登録モーダルはIssue 230）
                          └─ 画像はブラウザからTMDB画像CDNへ取得
 ```
 
@@ -85,7 +87,7 @@
 | Route | `Route::view` とControllerへのルーティング、既存管理者middleware適用 |
 | `App\Http\Controllers\Admin\TmdbSearchController` | `Request`の検証、Serviceの呼び出し、JSON/HTTPレスポンスへの変換 |
 | `App\Services\TmdbMovieService` | Bearer認証付きTMDB通信、HTTP応答確認、最大5件への絞り込み、必要フィールドの抽出、Configuration取得・URL生成。Issue 231ではジャンルID検証・Genre Movie List取得・`genres`変換と、障害時の独立フォールバックを追加 |
-| Blade / JavaScript | 画面・検索フォーム、Axios送信、ロード／結果／エラー表示、安全なDOM更新、No Image表示 |
+| Blade / JavaScript | 画面・検索フォーム、Axios送信、ロード／結果／エラー表示、安全なDOM更新、No Image表示。Issue 232の作業ブランチでは既存の検索カード描画にジャンル参考表示・概要省略を追加済み |
 
 - 現時点で新たなForm Requestクラスは導入せず、ControllerでLaravel標準の `$request->validate()` を使用する。
 - 既存Axios（`resources/js/bootstrap.js` の `window.axios`）を使用し、専用HTTP wrapperは導入しない。
@@ -143,7 +145,7 @@ JavaScriptの `trim()`、Laravelの `Str::trim()`、PHPの `mb_trim()` は、**�
 - `summary.checked` はTMDB検索結果の**先頭最大5要素の検証対象数**（0〜5の整数）。TMDB全体の検索ヒット数ではない。
 - `summary.displayed` は検証後の正常な表示件数（0〜`checked`の整数）で、返す `results` 配列の要素数と一致する。
 - エラーJSONに `summary` は追加しない（第9章参照）。
-- 作品ごとの既存フィールドは維持し、Issue 231の作業ブランチ実装ではすべての表示作品に以下のキーを持たせる。`genre_ids`は内部処理専用であり、公開しない。TMDBの他のフィールドも公開しない。
+- 作品ごとの既存フィールドは維持し、Issue 231（PR 233で`develop`へマージ済み）ではすべての表示作品に以下のキーを持たせる。`genre_ids`は内部処理専用であり、公開しない。TMDBの他のフィールドも公開しない。Issue 232ではこのJSON契約および`overview`全文を変更しない。
 
 | キー | 内容 | 出力型 |
 |---|---|---|
@@ -253,7 +255,7 @@ Configurationの検証・フォールバック条件は上記のとおり確定�
 
 ### 確定事項：HTTPステータスとエラーJSON
 
-Issue 212のMovie Searchを中心とする既存応答契約を維持し、Issue 231ではGenre Movie List固有の補助情報フォールバックを追加する。下表のGenre Movie List行は**作業ブランチで実装・ローカルテスト済みの応答契約**であり、`develop`・`main`へ反映済みであることを意味しない。
+Issue 212のMovie Searchを中心とする既存応答契約を維持し、Issue 231ではGenre Movie List固有の補助情報フォールバックを追加した。下表のGenre Movie List行を含むIssue 231の応答契約は**PR 233で`develop`へマージ済み**であり、`main`への同期は未実施。Issue 232ではHTTPステータス・JSON構造・フォールバック契約を変更しない。
 
 | 状況 | HTTPステータス | JSON応答 |
 |---|---|---|
@@ -335,6 +337,7 @@ return [
 - 全件正常時の `role="status"` では `ui.results_count` に `summary.displayed` を埋め込み、部分成功は `ui.partial_success`、正常な0件は `ui.no_results` を通知する。画面表示に使用する翻訳値をJavaScript側に日本語で再定義しない。
 - `partial_success` の件数は `summary.checked`・`summary.displayed` から算出する。JavaScript側ではBladeから受け取った翻訳済みテンプレートの`:checked`・`:displayed`・`:excluded` を、表示直前に安全に置換する。`poster_alt` の`:title` も安全な文字列操作で置換し、DOMへ `alt` 属性として設定する。件数や除外判定に影響を与えない。
 - 画像の代替URL `/images/no-image.png`、ルート名、HTTPステータスなどの**仕様上の固定値**は翻訳対象としない。メッセージ文言と技術的な定数を混同しない。
+- 上記のPHP配列はIssue 212時点の言語キーの記録である。Issue 232ではこれを維持したうえで`ui.genres = 'TMDBジャンル（参考）'`を追加し、Bladeから翻訳済みの`messages.genres`としてJavaScriptへ渡す（第15.2節）。
 
 ## 10. フロントエンド（確定事項と確認事項）
 
@@ -346,7 +349,7 @@ return [
 - 422は検証対象の `errors.query` の最初のメッセージ（ない場合は `invalid_query`）を使用する。401・403はBladeから渡した `unauthenticated`・`forbidden`、502・503は第9章の許可された固定メッセージ、HTTP応答を受信できないネットワークエラーは `network_failed` を表示する。**Axios検索GETの20秒timeout**（Axiosの `ECONNABORTED` や `ETIMEDOUT` 等、HTTP応答なしのタイムアウトとして識別できるもの）では `request_timeout` を使用する。安全な文言に該当しない場合は `fetch_failed` へフォールバックする。
 - 全件正常時は通常の検索結果を表示し、正常な0件は「該当作品なし」とする。全件不正の502を0件表示にしない。
 - 部分成功時は `summary.checked` と `summary.displayed` から件数と注意文を表示する。例: 「5件中4件を表示しました。1件はデータ形式が不正だったため除外しました。」（文言は `admin.tmdb.search.ui.partial_success` で一元管理）除外件数は `checked - displayed` とし、TMDB全体の検索ヒット数として表示しない。
-- Configuration失敗やポスター欠損は作品の除外に数えず、No Imageで表示する。Issue 231のジャンル欠損・Genre Movie List障害も作品除外に数えず、既存の件数表示・画面表示を維持する。検索結果カードへのジャンル参考表示はIssue 232、作品登録モーダルでのジャンル参考表示はIssue 230で扱う。
+- Configuration失敗やポスター欠損は作品の除外に数えず、No Imageで表示する。Issue 231のジャンル欠損・Genre Movie List障害も作品除外に数えず、既存の件数表示・画面表示を維持する。検索結果カードへのジャンル参考表示・概要100文字省略はIssue 232の第15章、作品登録モーダルでのジャンル参考表示はIssue 230で扱う。
 - TMDB由来の文字列を `textContent` 等で描画し、信頼できない値を `innerHTML` に渡さない。
 - `poster_url` が `null` の場合および画像読み込み失敗時は `/images/no-image.png` を表示し、結果全体を壊さない。ポスターには作品名を含む `ui.poster_alt`、No Imageには `ui.no_poster_alt` の翻訳済み文言をaltへ設定する。
 - 検索フォームの `submit` イベントを一元的に処理し、検索開始時にJavaScriptの処理中フラグを即時に立てる。フォーム送信によるページ遷移は抑止し、検索中は検索ボタンと入力欄を無効化して `admin.tmdb.search.ui.searching` の翻訳済み文言を表示する。
@@ -406,7 +409,8 @@ return [
 - 管理者ナビゲーションのPC・モバイル導線と、検索画面ルート `admin.tmdb.search` に対する `active` 判定を確認する。検索結果ルート `admin.tmdb.search.results` はJSON応答のため、ナビゲーションを描画しない。
 - **Playwrightの画面表示テストでは、ブラウザの検索結果GET `/admin/tmdb/search/results` を `page.route()` 等で捕捉し、合成JSONの `route.fulfill()` または失敗シナリオ用の `route.abort()` で処理する。**リクエスト件数・URL・メソッドを検証し、想定外の検索経路はテスト失敗にする。ポスターCDN `https://image.tmdb.org/**` へのブラウザリクエストも `route.fulfill()` で代替画像を返すか `route.abort()` で遮断し、ブラウザから `api.themoviedb.org` へ直接通信しないことも確認する。
 - PHPUnit側の `Http::fake()` / `Http::preventStrayRequests()` は**別プロセスのPlaywright用Laravelサーバーへ自動適用されない**。Playwrightでは上記のブラウザ通信のスタブでUIだけを検証し、Laravel→TMDBのHTTP通信とJSON変換はFeature / Serviceテストで担当する。検索リクエストがスタブを通らず実Laravelへ到達する状態ではブラウザテストを進めず、漏れを検知して失敗させる。CIから実TMDB APIを呼ばない。
-- **Issue 231のE2E**: `e2e/support/tmdb-search.ts`の`Movie`型に`genres: Array<{id: number; name: string}>`を必須追加し、`movie()`fixtureの既定値を`genres: []`にする。既存6シナリオの合成応答は原則`movie()`fixtureの既定値`genres: []`を利用して回帰実行し、正常検索の合成応答では複数ジャンル付きJSONでも従来のカード描画が崩れないことを確認する。検索結果カードへのジャンル表示とそのXSS・表示確認はIssue 232、作品登録モーダルのジャンル参考表示・ARIA・フォーカス検証はIssue 230で扱い、Issue 231で新規E2E specを作成しない。
+- **Issue 231のE2E（実装時の契約）**: `e2e/support/tmdb-search.ts`の`Movie`型に`genres: Array<{id: number; name: string}>`を必須追加し、`movie()`fixtureの既定値を`genres: []`にする。既存6シナリオの合成応答は原則`movie()`fixtureの既定値`genres: []`を利用して回帰実行し、正常検索の合成応答では複数ジャンル付きJSONでも従来のカード描画が崩れないことを確認する。検索結果カードへのジャンル表示・XSS・表示確認はIssue 232、作品登録モーダルのジャンル参考表示・ARIA・フォーカス検証はIssue 230で扱う。
+- **Issue 232のE2E（実装前の検証計画）**: 既存6シナリオを維持し、複数ジャンルの順序・区切り、ジャンル欠損と不正要素、概要の99・100・101 grapheme境界と日本語・結合文字・複合絵文字、原文不変、XSS、PC・モバイルの実寸112×176pxおよびNo Imageの回帰を合成JSONで検証する。非対応時の概要全文表示も再現する。詳細は第15章。
 
 ### 既存品質ゲート
 
@@ -478,6 +482,9 @@ return [
 - [Axios Request Config（timeout）](https://axios-http.com/docs/req_config)
 - [Playwright Network（route / fulfill / abort）](https://playwright.dev/docs/network)
 - [MDN HTML disabled属性](https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/disabled)
+- [Tailwind CSS v4 Detecting classes in source files（`source(none)`・`@source`）](https://tailwindcss.com/docs/detecting-classes-in-source-files)
+- [MDN Intl.Segmenter（grapheme単位の分割）](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)
+- [MDN CSS align-items（Flexboxの交差軸配置）](https://developer.mozilla.org/en-US/docs/Web/CSS/align-items)
 
 2026-10-20にIssue 212、TMDB Movie Search・Search & Query For Details・Image Basics、Laravel 13 HTTP Client・Validation・Requests、PHP 8.4 `mb_trim()` を再確認した。先頭5件の検証・部分成功・`summary` は本アプリで合意した応答契約であり、TMDB公式の仕様とは区別する。Laravel HTTP ClientのJSON取得やHTTP成功判定だけに依存せず、第7章の形状・作品検証を行う。
 
@@ -485,11 +492,13 @@ Codex・Claude Codeの実装前再レビュー指摘を受け、PHP公式の `js
 
 2026-10-28にIssue 231の設計確定にあたり、TMDB Movie Search／Genre Movie List／Rate Limiting、Laravel 13 HTTP Client、PHP `mb_trim()`／`json_decode()`、Playwright Network、Axios timeoutの公式一次情報を再確認した。`genres`の出力形式、型の厳格判定、429時の障害分離、各5秒・Axios20秒は**本アプリ側の設計判断**であり、TMDBが保証した応答・推奨値とは区別する。
 
+2026-10-29にIssue 232の設計確定にあたり、Tailwind CSS v4のソース検出、MDNの`Intl.Segmenter`とCSS `align-items`の一次資料を確認した。100 grapheme・非対応時の全文表示・単一JSファイルの`@source`指定・ポスター寸法112×176pxは**本アプリの設計判断**であり、公式側が推奨するアプリ固有の表示値ではない。
+
 各APIレスポンスの実データや実トークンは本書に保存しない。テストには合成データだけを使用する。
 
 ## 14. Genre Movie List取得・ジャンル変換（Issue 231）
 
-本章は2026-10-28に**実装前に確定した設計仕様**を記録する。Issue 231は2026-10-29時点で作業ブランチ`feat/231-tmdb-movie-genres`に実装され、ローカル品質確認を完了しているが、`develop`・`main`へは未反映である。Issue 212の検索・ポスター表示・認証／認可・エラー契約を基礎として、既存`TmdbMovieService::search()`の戻り値だけを拡張する。アプリ独自の`category_id`とは対応付けず、作品／ジャンルのDB保存も行わない。
+本章は2026-10-28に**実装前に確定した設計仕様**を記録する。Issue 231はその後、PR 233（マージコミット`519862f`）により2026-10-29に`develop`へマージ済みである。`main`へは未同期であり、IssueのCloseは`main`反映時に行う。Issue 212の検索・ポスター表示・認証／認可・エラー契約を基礎として、既存`TmdbMovieService::search()`の戻り値だけを拡張した。アプリ独自の`category_id`とは対応付けず、作品／ジャンルのDB保存も行わない。
 
 ### 14.1 取得元・タイミング・通信回数
 
@@ -533,4 +542,67 @@ Codex・Claude Codeの実装前再レビュー指摘を受け、PHP公式の `js
 - `docs/PLAYWRIGHT_TESTING.md`: テスト運用上必要なら`Movie`型・fixtureの追加を説明する。ブラウザ表示とLaravel→TMDB通信のテスト責務境界は変更しない。
 - `README.md`など他の関連文書は、実際に記述の不一致が判明した場合のみ必要最小限で更新する。
 
-関連docsへの更新は**Issue 231の作業ブランチでの実装・ローカルテスト結果**に合わせ、`develop`・`main`への統合前に統合済みと誤記しない。
+上記はIssue 231の実装・PR準備時に定めた文書更新対象の履歴である。**Issue 231はPR 233で`develop`へ統合済み**（`main`未同期）。Issue 232の表示仕様と、その後の実装・ローカル検証結果は第15章に別記し、Issue 231の当時の設計経緯と混同しない。
+
+## 15. 検索結果カードの表示改善（Issue 232）
+
+本章は2026-10-29のClaude Code・Codexによる**独立した実装前検証**を経て確定した設計と、その後の**作業ブランチでの実装・ローカル検証結果**を記録する。Issue 231の`genres`付きJSONはPR 233で`develop`に統合済み。Issue 232は画面修正・E2Eテスト追加・対象および全Playwright・PHPUnit・Pint・PHPStan / Larastan Level 10・Vite build・E2E型検査のローカル品質確認、PC・iPhone Safariの目視確認、およびClaude Code・Codexによる独立した最終差分レビューを実施済み。**PR作成・CI・`develop`への統合は未実施**であり、マージ済み機能とは区別する。
+
+### 15.1 変更範囲と責務
+
+- 既存の`resources/js/tmdb-search.js`にある`createMovieCard(movie, messages)`を拡張し、既存の映画カードへ**TMDBジャンルの参考表示**と**概要の表示用省略**を追加する。別のLaravel APIや画面コンポーネントは設けない。
+- `GET /admin/tmdb/search/results`が返す`results`・`summary`および各映画の`overview`全文・`genres`配列は変更しない。`movie.overview`や`movie.genres`へ書き戻さず、描画直前に表示用の値を別に組み立てる。将来の作品登録処理で元の概要全文を利用できるようにする。
+- ルート・Controller・`TmdbMovieService`・TMDB API通信・Bearer Token・DB・migration・アプリ独自カテゴリーとの対応付け・作品登録モーダル（Issue 230）・ページネーション（Issue 227）は変更しない。
+- 既存の最大5件・検索中・成功／部分成功・0件・エラー・再検索・認証／認可・No Image・アクセシビリティの契約（第7〜11章）を維持する。
+
+### 15.2 TMDBジャンルの参考表示
+
+- 各カードへ`TMDBジャンル（参考）：名称1・名称2`という表示行を追加する。ラベルは`lang/ja/admin.php`の`admin.tmdb.search.ui.genres`を新設し、値を**「TMDBジャンル（参考）」**とする。Bladeの`$tmdbSearchConfig['messages']['genres']`から`Js::from()`を経てJavaScriptへ渡す。アプリ独自のカテゴリーとの違いを明示する。
+- `movie.genres`が配列であれば、その**配列の出現順**を保ち、有効な`name`を`・`で結合する。区切り文字はIssue仕様上の固定値であり、今回の表示処理で`join('・')`を使用する。名称順・ID順への並べ替え、表示側での重複除去、JSONへの書き戻しはしない。
+- `genres`の欠損・`null`・非配列・空配列は有効ジャンルなしとする。配列内でも`null`、配列、オブジェクト以外の要素、`name`欠損、非文字列、JavaScriptの`trim()`で空白だけとなる名称を**表示対象から除外**する。正常な名称の元文字列は変更せず、IDの厳格な再検証などServiceの処理を重複実装しない。
+- 有効名称が0件になった場合は既存`messages.notAvailable`の**「情報なし」**を表示する。配列をそのまま`appendField()`へ渡して空文字にならないよう、表示用の文字列または`null`を渡す。
+- ジャンル名称はTMDB由来の**非信頼文字列**として扱う。既存の`createElement()`・`textContent`で安全に描画し、`innerHTML`、HTML文字列の組み立て、属性イベントの挿入には使用しない。ジャンル欠損や補助API障害により、映画・ポスター・`summary`・検索処理全体を失敗させない。
+
+### 15.3 概要の100文字省略とUnicode
+
+- 検索結果カードに表示する`overview`のみ、**Unicodeの書記素クラスタ（grapheme）単位で最大100個**とする。JavaScriptのUTF-16コード単位の`.length`や`slice(0, 100)`、コードポイント単位の`Array.from()`で切らない。
+- 対応環境では`Intl.Segmenter('ja-JP', { granularity: 'grapheme' })`で分割する。**100個以下は原文をそのまま表示**し、**101個以上の場合だけ先頭100個を連結し、末尾にASCIIの半角ピリオド3個`...`を付加**する。`...`は100個の文字数制限とは別の省略記号で、U+2026の三点リーダーへ置き換えない。結合文字・肌色修飾・ZWJを含む複合絵文字・国旗などの書記素クラスタを途中で分断しない。
+- `overview`欠損・`null`は既存の**「情報なし」**を表示する。正規化前のTMDB概要に対する検証は引き続きServiceの責務とし、表示側で`overview`全文を書き換えたり、JSONの値を切り詰めたりしない。
+- `Intl.Segmenter`が存在しないブラウザでは**概要全文を`textContent`で表示**し、検索処理を異常終了させない。追加の互換ライブラリやコードポイント単位の擬似フォールバックは導入しない。**非対応環境では100文字の上限を保証しない**ことを明示する。現行PlaywrightはChromiumを検証対象とし、その他のブラウザの包括的な互換性保証は本Issueの対象外とする。
+- 本仕様は**表示文字数の制限**であり、改行や詳細情報によるカード全体の高さを一定に固定する仕様ではない。CSSの`line-clamp`による追加の行数制限は設けない。
+
+### 15.4 ポスター寸法とTailwind CSS v4の検出設定
+
+- ポスター`<img>`の既存`width="112"`・`height="176"`属性と、`h-44 w-28 shrink-0 rounded-md bg-gray-100 object-cover`を維持する。PC・モバイルでCSS適用後の**描画矩形が幅112px・高さ176px**であり、概要やジャンル行の長さで引き伸ばされないことを確認する。
+- 既存のカード`flex flex-col ... sm:flex-row`とポスターの明示的な高さを優先し、**設計時点では`items-start`・`self-start`・専用CSSを追加しない**。Flexboxの交差軸`stretch`は、サイズが明示されたポスターを拡大する根拠にはならない。実ブラウザで寸法が崩れた場合に限り、原因を検証して最小限のクラス変更を判断する。
+- `resources/css/app.css`は`@import "tailwindcss" source(none);`によって自動ソース検出を停止している。**`@source "../js/tmdb-search.js";`を1行追加**し、対象JSに記述されたTailwindクラスを明示的な検出対象にする。既存3件の`@source`は維持し、`../js`全体への拡大や依存追加は行わない。クラス名はJavaScriptに完全な静的文字列として記述する。
+- `npm run build`を新規実行後、生成CSSに**既存クラスも含めて**`h-44`・`w-28`・`shrink-0`・`object-cover`・レスポンシブ関連クラス等が出力されることを確認する。Playwrightでは`getComputedStyle()`と`getBoundingClientRect()`でCSS適用と実寸を検証する。`width`・`height`属性や画像の自然寸法だけで偶然112×176pxになっても合格としない。
+- PC・モバイルで横はみ出し・画像の欠け・文字列のオーバーフロー等を確認し、従来の`/images/no-image.png`・alt・`error`イベント1回のフォールバック動作を維持する。
+
+### 15.5 テスト実装・ローカル品質確認（2026-10-29）
+
+- `e2e/tmdb-search.spec.ts`の**既存6シナリオの本文・アサーションを維持**し、Issue 232の表示テストを**7シナリオ追加**して計13シナリオとした。`e2e/support/tmdb-search.ts`の既存`Movie`型・`genres: []`既定fixture、検索JSONのモックと通信ガードは維持し、異なる縦横比の合成画像を指定できるよう拡張した。
+- **ジャンル**: 元順序、`・`区切り、ラベル、単一ジャンル、`[]`、欠損、`null`、非配列、不正要素との混在・全件不正と「情報なし」を合成JSONで検証した。
+- **概要**: 99・100・101 graphemeの境界、日本語、結合文字、複合絵文字、`null`・欠損、`Intl.Segmenter`非対応時の全文表示と再検索を検証した。期待値は本番の省略処理から独立して定義した。
+- **全文不変**: テストからブラウザ内Axios応答インターセプターで応答オブジェクトを保持し、**描画前後の`overview`全文と`genres`配列の不変性**を検証した。fixtureの送信前後を比べるだけのテストとは区別し、本番コードにテスト専用の公開APIやDOM属性は追加していない。
+- **XSS**: `genres[].name`と`overview`の疑似攻撃文字列をテキスト表示し、危険なDOM要素・イベント属性の非生成とJavaScript非実行を確認した。
+- **表示寸法**: PC・モバイルで通常ポスターとNo Imageについて、描画矩形112×176px、計算済みCSSの`object-fit: cover`・`flex-shrink: 0`、配置と横はみ出しを確認した。自然寸法への偶然の一致を避けるため、縦横比の異なる合成画像も使用した。
+- **テスト通信**: 既存の`page.route()`等によるモックと通信ガードを維持し、実TMDB APIへ接続せずに実行した。Laravel→TMDBの通信・JSON契約は引き続きPHPUnit Feature / Serviceテストの責務とし、画面変更を理由とするServiceテストの重複追加は行わない。
+- **ローカル実行結果（Codex報告）**: `npm run build`、`npm run typecheck:e2e`、`git diff --check`は成功。`npx playwright test e2e/tmdb-search.spec.ts --project=chromium`は**対象13シナリオ＋`setup` 1件＝`14 passed`（1.7分、終了コード0）**。`setup`実行前に`APP_ENV=e2e`、`e2e_mysql`、設定・実接続先の`e2e_testing`を確認した。対象E2Eの既存6シナリオにも回帰は検出されなかった。
+- **ローカル品質ゲートの最終結果（プロマネ実行ログ）**: `sail php ./vendor/bin/pint --test`は**120ファイルPASS**、`sail php ./vendor/bin/phpstan analyse`は**75/75・エラー0件（Level 10）**、`sail test`は**PHPUnit 527件PASS・2,672 assertions**。`sail npm run build`、`npm run typecheck:e2e`、`git diff --check`も成功した。`npx playwright test`は**全25件PASS（`setup` 1件＋ブラウザテスト24件、2.1分）**で、Issue 232の13シナリオと他の既存E2Eを含む。PCブラウザおよびiPhone Safariの画面を手動で目視確認した。Claude Code・Codexの独立した最終差分レビューはいずれも**Ready with conditions**で、両者の共通指摘は本書の品質確認進捗の更新であり、アプリ本体・E2Eコードに修正必須の問題は確認されなかった。**未完了はPR作成・GitHub Actions CI・`develop`への統合**であり、tablet幅・支援技術・包括的なアクセシビリティ監査を完了したとは扱わない。
+
+### 15.6 変更ファイルと非対象の境界
+
+| ファイル | Issue 232の作業ブランチでの変更 |
+|---|---|
+| `resources/js/tmdb-search.js` | ジャンル名表示用の整形、概要100 grapheme省略、既存カードへの描画追加 |
+| `resources/views/admin/tmdb/search.blade.php` | 翻訳済み`messages.genres`を`Js::from()`の設定へ追加 |
+| `lang/ja/admin.php` | `ui.genres`の「TMDBジャンル（参考）」を追加 |
+| `resources/css/app.css` | `@source "../js/tmdb-search.js";`を追加 |
+| `e2e/tmdb-search.spec.ts` | 既存6シナリオを保持し、ジャンル・概要・XSS・ブラウザ側全文不変・PC／モバイル寸法の7シナリオを追加 |
+| `e2e/support/tmdb-search.ts` | 画像モックを拡張し、異なる縦横比の合成画像の返却に対応（既定fixtureと通信ガードを維持） |
+| `docs/TMDB_SEARCH_DESIGN.md`（本書） | Issue 232の確定設計、ローカル検証結果、Issue 231の現行進捗を反映 |
+| `docs/FEATURES.md` | 検索・ジャンル取得の統合済み機能と、検索カード表示改善の作業ブランチ上の実装を区別 |
+| `docs/PLAYWRIGHT_TESTING.md` | 対象13シナリオ（既存6＋追加7）、モックと専用DBの安全な実行結果を反映 |
+
+`README.md`・`SECURITY.md`などは既存記述と矛盾が判明した場合のみ必要最小限で更新する。`package.json`・依存関係・Service・Controller・ルート・DB・登録モーダルは変更しない。Issue 232の範囲外の改善や大規模なリファクタリングは混在させない。

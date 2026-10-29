@@ -22,6 +22,7 @@
             'tmdbId' => __('admin.tmdb.search.ui.tmdb_id'),
             'originalTitle' => __('admin.tmdb.search.ui.original_title'),
             'releaseDate' => __('admin.tmdb.search.ui.release_date'),
+            'genres' => __('admin.tmdb.search.ui.genres'),
             'overview' => __('admin.tmdb.search.ui.overview'),
             'posterAlt' => __('admin.tmdb.search.ui.poster_alt'),
             'noPosterAlt' => __('admin.tmdb.search.ui.no_poster_alt'),

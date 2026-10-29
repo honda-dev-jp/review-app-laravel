@@ -22,6 +22,58 @@
 const NO_IMAGE_URL = '/images/no-image.png';
 
 /**
+ * TMDB由来のジャンルから、画面に表示できる名称だけを元の順序で連結する。
+ * 不正値や空配列はnullを返し、既存の「情報なし」表示に任せる。
+ *
+ * @param {unknown} genres 映画のジャンル一覧
+ * @returns {string|null} 表示用のジャンル名
+ */
+function formatGenres(genres) {
+    if (!Array.isArray(genres)) {
+        return null;
+    }
+
+    // IDの厳密な検証はServiceの責務。ここでは描画可能な名称だけ確認する。
+    const names = genres
+        .filter((genre) =>
+            genre !== null &&
+            typeof genre === 'object' &&
+            !Array.isArray(genre) &&
+            typeof genre.name === 'string' &&
+            genre.name.trim() !== ''
+        )
+        .map((genre) => genre.name);
+
+    return names.length > 0 ? names.join('・') : null;
+}
+
+/**
+ * 一覧カードの概要だけを、Unicodeの書記素クラスタ単位で100文字に省略する。
+ * 元の映画データを書き換えず、Intl.Segmenter非対応時は全文を返す。
+ *
+ * @param {string|null|undefined} overview 概要の全文
+ * @returns {string|null|undefined} 表示用の概要
+ */
+function truncateOverview(overview) {
+    if (typeof overview !== 'string' || typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') {
+        return overview;
+    }
+
+    const segmenter = new Intl.Segmenter('ja-JP', { granularity: 'grapheme' });
+    const segments = [];
+
+    // 101文字目が見つかったときだけ省略する。100文字以内なら原文を返す。
+    for (const { segment } of segmenter.segment(overview)) {
+        if (segments.length === 100) {
+            return `${segments.join('')}...`;
+        }
+        segments.push(segment);
+    }
+
+    return overview;
+}
+
+/**
  * 1件の映画データから、画面に挿入する「映画カード」を組み立てる。
  *
  * この関数は通信しない。受け取ったデータでDOM要素を作って返すだけ。
@@ -117,7 +169,8 @@ function createMovieCard(movie, messages) {
     appendField(messages.tmdbId, movie.id);
     appendField(messages.originalTitle, movie.original_title);
     appendField(messages.releaseDate, movie.release_date);
-    appendField(messages.overview, movie.overview);
+    appendField(messages.genres, formatGenres(movie.genres));
+    appendField(messages.overview, truncateOverview(movie.overview));
 
     // カードに画像と文字情報を収めて返す。画面への配置は呼び出し元が行う。
     card.append(image, details);
