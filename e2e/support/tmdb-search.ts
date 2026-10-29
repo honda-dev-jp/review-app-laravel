@@ -41,7 +41,7 @@ const FONT_CSS = '@font-face { font-family: "Figtree"; font-style: normal; font-
 export class TmdbHarness {
     private readonly plans: SearchPlan[] = [];
     private readonly pending = new Set<Route>();
-    private readonly posters = new Map<string, 'image' | 'abort'>();
+    private readonly posters = new Map<string, { mode: 'image' | 'abort'; body: string }>();
     // URL・query・header・本文を記録せず、固定の分類名だけを失敗理由として残す。
     private readonly violations: string[] = [];
     private readonly posterCounts = new Map<string, number>();
@@ -86,8 +86,8 @@ export class TmdbHarness {
         };
     }
 
-    poster(url: string, mode: 'image' | 'abort' = 'image'): void {
-        this.posters.set(url, mode);
+    poster(url: string, mode: 'image' | 'abort' = 'image', body = POSTER): void {
+        this.posters.set(url, { mode, body });
     }
 
     posterRequests(url: string): number {
@@ -116,14 +116,14 @@ export class TmdbHarness {
             return;
         }
         if (url.origin === 'https://image.tmdb.org') {
-            const mode = this.posters.get(url.href);
-            if (!pageMock || mode === undefined || request.method() !== 'GET' || request.resourceType() !== 'image') {
+            const poster = this.posters.get(url.href);
+            if (!pageMock || poster === undefined || request.method() !== 'GET' || request.resourceType() !== 'image') {
                 await this.reject(route, '未登録の画像CDN通信');
                 return;
             }
             this.posterCounts.set(url.href, this.posterRequests(url.href) + 1);
-            if (mode === 'abort') await route.abort('failed');
-            else await route.fulfill({ contentType: 'image/svg+xml', headers: { 'Cache-Control': 'no-store' }, body: POSTER });
+            if (poster.mode === 'abort') await route.abort('failed');
+            else await route.fulfill({ contentType: 'image/svg+xml', headers: { 'Cache-Control': 'no-store' }, body: poster.body });
             return;
         }
         // HTTP版CDN、別ホスト、別ポート等も外部通信として送信前に遮断する。

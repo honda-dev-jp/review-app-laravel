@@ -68,7 +68,9 @@ e2e/
 - PHPUnitの`tests/`とPlaywrightの`e2e/`を分離する
 - `e2e/tsconfig.json`はPlaywright関連のTypeScriptだけを`strict`かつ`noEmit`で型検査する
 - `setup` projectがE2E DBをresetし、その成功後に`chromium` projectを実行する
-- `tmdb-search.spec.ts`はIssue 212の管理者検索画面を対象とし、正常検索、0件・部分成功、HTTPエラー、疑似XSS、通信失敗・タイムアウト、モバイル導線・画像フォールバックの6シナリオを検証する。検索JSON・ポスターCDN・既知のフォントCSSは合成応答を用い、未許可の外部通信を遮断する（Laravel→TMDB通信の検証はFeature / Serviceテストの責務）
+- `tmdb-search.spec.ts`はIssue 212の既存6シナリオ（正常検索・二重送信防止、0件・部分成功、HTTPエラー、疑似XSS、通信失敗・タイムアウト、モバイル導線・画像フォールバック）を維持し、Issue 232で7シナリオを追加した。**TMDB検索の対象テストは合計13シナリオ**であり、`setup` projectの1件は別に数える。
+- Issue 232の追加分は、ジャンル順序・区切り・欠損・不正値、概要99／100／101書記素クラスタと結合文字・絵文字、ブラウザ側Axios応答オブジェクトの不変性、`Intl.Segmenter`非対応時の全文表示と再検索、ジャンル・概要のXSS、PC・モバイルでの通常画像とNo Imageの実寸・計算済みCSS・横はみ出しを検証する。
+- `tmdb-search.spec.ts`は検索JSON・ポスターCDN・既知のフォントCSSを合成応答に置き換え、未許可の外部通信を遮断する。`e2e/support/tmdb-search.ts`では既定の合成画像に加え、異なる縦横比の画像を指定できる。Laravel→TMDB通信の検証は引き続きFeature / Serviceテストの責務とする。
 - 対象browserはChromiumのみとする
 - 認証が必要なtestはログイン画面を操作する共通helperを使用する
 - `storageState`は使用せず、各testの独立したBrowserContextでUIログインする
@@ -224,6 +226,8 @@ npx playwright test e2e/tmdb-search.spec.ts --project=chromium
 ```
 
 対象spec、`--headed`、`--debug`を指定した場合も、project dependencyである`setup`が先に動作し、E2E DBをresetします。
+
+**Issue 232のローカル確認記録（2026-10-29、Codex実行報告）:** `npm run build`、`npm run typecheck:e2e`、`git diff --check`が成功したうえで、`npx playwright test e2e/tmdb-search.spec.ts --project=chromium`は**対象13シナリオ＋setup 1件＝`14 passed`**（終了コード0）。実行前に`APP_ENV=e2e`、`e2e_mysql`、設定上と実接続先の双方が`e2e_testing`であることを確認し、setupで専用DBをresetした。これは対象specのローカル結果であり、全specやCIの成功を意味しません。
 
 ---
 
@@ -416,6 +420,8 @@ HTML reporterは現行設定に含まれませんが、`playwright-report/`が�
 - 自動化対象外のbrowser・OS・支援技術の組み合わせ
 - 必要に応じたDevTools Console等の目視確認
 
+Issue 232ではPC・モバイルのポスター寸法、計算済みスタイルと横はみ出しをE2Eで確認した。ただし、ページ全体の見た目やtablet幅、支援技術での評価まで自動検証が完了したわけではありません。
+
 PlaywrightによるARIA、keyboard、focus確認と、手動・支援技術による評価を組み合わせます。
 
 ---
@@ -457,12 +463,16 @@ Composeの`E2E_DB_*`は必須です。`.env.example`の項目を参考にロー�
 - [コマンド集](COMMANDS.md)
 - [セキュリティ方針](SECURITY.md)
 - [MVP1テスト対応状況](MVP1_TEST_COVERAGE.md)
+- [TMDB映画検索技術設計（Issue 232）](TMDB_SEARCH_DESIGN.md)
 - [要件定義](REQUIREMENTS.md)
 
 公式一次情報：
 
 - [Playwright Installation](https://playwright.dev/docs/intro)
 - [Playwright Configuration](https://playwright.dev/docs/test-configuration)
+- [Playwright Projects（依存プロジェクトの実行）](https://playwright.dev/docs/test-projects)
+- [Playwright Network（route / fulfill / abort）](https://playwright.dev/docs/network)
+- [Playwright Assertions](https://playwright.dev/docs/test-assertions)
 - [Playwright Locators](https://playwright.dev/docs/locators)
 - [Playwright Continuous Integration](https://playwright.dev/docs/ci)
 - [Playwright Web server](https://playwright.dev/docs/test-webserver)

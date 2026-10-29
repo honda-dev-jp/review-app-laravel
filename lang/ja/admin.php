@@ -26,6 +26,7 @@ return [
                 'tmdb_id' => 'TMDB ID',
                 'original_title' => '原題',
                 'release_date' => '公開日',
+                'genres' => 'TMDBジャンル（参考）',
                 'overview' => '概要',
                 'poster_alt' => '作品「:title」のポスター',
                 'no_poster_alt' => 'ポスター画像なし',

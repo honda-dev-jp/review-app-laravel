@@ -1,4 +1,6 @@
 import { loginAs } from './support/login.js';
+import type { Locator } from '@playwright/test';
+import type { AxiosStatic } from 'axios';
 import { test, expect, expectReady, movie, results, search, ui } from './support/tmdb-search.js';
 
 // Service Worker経由でrouteを迂回させない。このspec以外の既存設定には影響させない。
@@ -7,6 +9,239 @@ test.use({ serviceWorkers: 'block' });
 test.beforeEach(async ({ page }) => {
     await loginAs(page, 'e2e-admin@example.test', '/admin');
 });
+
+// ラベルのある行から値だけを選び、他の項目に同じ文章があっても誤検出しない。
+function cardField(card: Locator, label: string): Locator {
+    return card.locator('p').filter({ has: card.page().getByText(`${label}：`, { exact: true }) }).locator('span');
+}
+
+// 目的：ジャンル表示だけの防御的処理を検証し、ServiceのJSON正規化テストとは区別する。
+test('ジャンルは元の順序で参考表示し、欠損や不正値でも検索を維持する', async ({ page, tmdb }) => {
+    // Arrange：名称順・ID順と異なる順序、重複、元の空白を持つ正常値と不正値を用意する。
+    await page.goto('/admin/tmdb/search');
+    const cases = [
+        { name: '順序と区切り', data: { genres: [{ id: 878, name: 'SF' }, { id: 28, name: 'アクション' }, { id: 878, name: 'SF' }] }, expected: 'SF・アクション・SF' },
+        { name: '単一ジャンル', data: { genres: [{ id: 28, name: 'アクション' }] }, expected: 'アクション' },
+        { name: '空配列', data: { genres: [] }, expected: '情報なし' },
+        { name: '欠損', data: {}, expected: '情報なし' },
+        { name: 'null', data: { genres: null }, expected: '情報なし' },
+        { name: 'オブジェクト', data: { genres: { name: '表示しない' } }, expected: '情報なし' },
+        { name: '文字列', data: { genres: '表示しない' }, expected: '情報なし' },
+        { name: '数値', data: { genres: 28 }, expected: '情報なし' },
+        { name: '真偽値', data: { genres: true }, expected: '情報なし' },
+        { name: '不正要素のみ', data: { genres: [null, [], {}, '文字列', 28, true, { name: null }, { name: 1 }, { name: false }, { name: [] }, { name: {} }, { name: '' }, { name: ' \t\n　' }] }, expected: '情報なし' },
+        { name: '混在', data: { genres: [null, [], {}, { name: 1 }, { name: '　' }, { name: ' SF ' }, '文字列', { name: 'ドラマ' }] }, expected: ' SF ・ドラマ' },
+    ];
+    for (const [index, entry] of cases.entries()) {
+        await test.step(entry.name, async () => {
+            // Arrange：欠損ケースでfixtureのgenresが残らないよう、キーを分離する。
+            const { genres: _genres, ...base } = movie(index + 1, entry.name);
+            tmdb.reply(entry.name, { json: { results: [{ ...base, ...entry.data }], summary: { checked: 1, displayed: 1 } } });
+
+            // Act：実Axiosへ合成JSONを返し、カードを描画する。
+            await search(page, entry.name);
+
+            // Assert：ラベルと名称のtextContentを完全一致で比較し、空白も保持する。
+            const card = ui(page).cards;
+            await expect(card).toHaveCount(1);
+            await expect(card.getByRole('heading')).toHaveText(entry.name);
+            const value = cardField(card, 'TMDBジャンル（参考）');
+            await expect(value).toBeVisible();
+            await expect.poll(() => value.textContent()).toBe(entry.expected);
+            await expect(ui(page).status).toHaveText('1件の作品を表示しました。');
+            await expect(ui(page).error).toBeHidden();
+            await expectReady(page);
+        });
+    }
+    expect(tmdb.searches).toBe(cases.length);
+});
+
+// 目的：本番の分割アルゴリズムを期待値に使用せず、100 graphemeの境界を検証する。
+test('概要は99・100文字を保持し、101文字と結合文字・複合絵文字を安全に省略する', async ({ page, tmdb }) => {
+    // Arrange：各結合文字・絵文字を100文字目と101文字目の両側へ置く。
+    await page.goto('/admin/tmdb/search');
+    const cases = [
+        { name: '日本語99', input: 'あ'.repeat(99), expected: 'あ'.repeat(99) },
+        { name: '日本語100', input: 'あ'.repeat(100), expected: 'あ'.repeat(100) },
+        { name: '日本語101', input: `${'あ'.repeat(100)}終`, expected: `${'あ'.repeat(100)}...` },
+        ...['か\u3099', 'e\u0301', '👍🏽', '👩🏽‍💻', '👨‍👩‍👧‍👦', '🇯🇵'].flatMap((cluster, index) => [
+            { name: `結合境界100-${index}`, input: `${'あ'.repeat(99)}${cluster}`, expected: `${'あ'.repeat(99)}${cluster}` },
+            { name: `結合境界101-${index}`, input: `${'あ'.repeat(99)}${cluster}${cluster}`, expected: `${'あ'.repeat(99)}${cluster}...` },
+        ]),
+        { name: 'null概要', input: null, expected: '情報なし' },
+        { name: '欠損概要', input: undefined, expected: '情報なし' },
+    ];
+    for (const [index, entry] of cases.entries()) {
+        await test.step(entry.name, async () => {
+            // Arrange：undefinedはJSON化でキーを欠落させ、nullとは異なる応答にする。
+            tmdb.reply(entry.name, { json: {
+                results: [{ ...movie(index + 1, entry.name), overview: entry.input }],
+                summary: { checked: 1, displayed: 1 },
+            } });
+
+            // Act：モック済みの概要を検索結果カードへ描画する。
+            await search(page, entry.name);
+
+            // Assert：ASCIIの...を含め、期待文字列そのものと比較する。
+            await expect(ui(page).cards.getByRole('heading')).toHaveText(entry.name);
+            await expect.poll(() => cardField(ui(page).cards, '概要').textContent()).toBe(entry.expected);
+            await expectReady(page);
+        });
+    }
+    expect(tmdb.searches).toBe(cases.length);
+});
+
+// 目的：Node側fixtureではなく、描画処理へ渡るブラウザ側Axios応答の全文保持を保証する。
+test('概要を省略してもブラウザ側の元データは全文とジャンル配列を保持する', async ({ page, tmdb }) => {
+    // Arrange：実Axiosの応答を変更せず参照と直前のスナップショットを保持する。
+    await page.goto('/admin/tmdb/search');
+    const source = { ...movie(1, '全文保持'), overview: `${'あ'.repeat(99)}👩🏽‍💻続きの全文`, genres: [{ id: 878, name: 'SF' }, { id: 28, name: 'アクション' }] };
+    const observation = await page.evaluateHandle(() => {
+        const axios = (window as unknown as { axios: AxiosStatic }).axios;
+        const state: { data: unknown; before: string | null; count: number } = { data: null, before: null, count: 0 };
+        const interceptor = axios.interceptors.response.use((response) => {
+            if (response.config.url?.endsWith('/admin/tmdb/search/results')) {
+                state.data = response.data;
+                state.before = JSON.stringify(response.data);
+                state.count++;
+            }
+            return response;
+        });
+        return { state, stop: () => axios.interceptors.response.eject(interceptor) };
+    });
+    try {
+        tmdb.reply('全文保持', { json: results([source]) });
+
+        // Act：実通信のモック応答を通常の描画経路へ通す。
+        await search(page, '全文保持');
+
+        // Assert：省略表示の完了後も、同じ応答参照が全文を保持していることを比較する。
+        await expect(cardField(ui(page).cards, '概要')).toHaveText(`${'あ'.repeat(99)}👩🏽‍💻...`);
+        await expectReady(page);
+        const captured = await observation.evaluate(({ state }) => ({ count: state.count, before: state.before, after: JSON.stringify(state.data), data: state.data }));
+        expect(captured.count).toBe(1);
+        expect(captured.before).toBe(JSON.stringify(results([source])));
+        expect(captured.data).toEqual(results([source]));
+        expect(captured.after).toBe(captured.before);
+    } finally {
+        await observation.evaluate(({ stop }) => stop());
+        await observation.dispose();
+    }
+});
+
+// 目的：非対応環境の契約は全文表示であり、コードポイント分割への置換ではないことを保証する。
+test('Intl.Segmenterがない環境では概要全文を表示して再検索できる', async ({ page, tmdb }) => {
+    // Arrange：アプリJSの実行前にこの文書だけSegmenterを非対応にする。
+    await page.addInitScript(() => { Object.defineProperty(Intl, 'Segmenter', { configurable: true, value: undefined }); });
+    await page.goto('/admin/tmdb/search');
+    expect(await page.evaluate(() => typeof Intl.Segmenter)).toBe('undefined');
+    const full = `${'あ'.repeat(100)}か\u3099👩🏽‍💻続き`;
+    tmdb.reply('非対応', { json: results([{ ...movie(1, '非対応作品'), overview: full }]) });
+    tmdb.reply('非対応後の再検索', { json: results([]) });
+
+    // Act：100文字を超える概要を検索する。
+    await search(page, '非対応');
+
+    // Assert：全文と成功状態を保持し、次の検索も実行できる。
+    await expect(cardField(ui(page).cards, '概要')).toHaveText(full);
+    await expect(ui(page).status).toHaveText('1件の作品を表示しました。');
+    await expect(ui(page).error).toBeHidden();
+    await expectReady(page);
+    await search(page, '非対応後の再検索');
+    await expect(ui(page).status).toHaveText('該当作品なし');
+    await expectReady(page);
+    expect(tmdb.searches).toBe(2);
+});
+
+// 目的：ジャンル・概要のHTMLとイベント属性を実行せず、文字列として表示する。
+test('ジャンル名と概要のHTML・イベント属性を安全なテキストとして表示する', async ({ page, tmdb }) => {
+    // Arrange：100文字以内の攻撃文字列と、省略される同じ文字列を別々に用意する。
+    await page.goto('/admin/tmdb/search');
+    const payload = '<img src="/unexpected-xss" onerror="document.body.dataset.cardXss=1">';
+    const prefix = `${payload}${'あ'.repeat(31)}`; // payloadはASCII 69文字、合計100 grapheme。
+    tmdb.reply('カードXSS', { json: results([
+        { ...movie(1, '短いXSS'), genres: [{ id: 28, name: payload }], overview: payload },
+        { ...movie(2, '省略XSS'), genres: [{ id: 878, name: payload }, { id: 28, name: 'SF' }], overview: `${prefix}終` },
+    ]) });
+
+    // Act：実際のカード生成で攻撃文字列を扱う。
+    await search(page, 'カードXSS');
+
+    // Assert：HTMLとして生成された追加画像・イベント属性・実行結果が存在しない。
+    const cards = ui(page).cards;
+    await expect(cards).toHaveCount(2);
+    await expect(cardField(cards.nth(0), 'TMDBジャンル（参考）')).toHaveText(payload);
+    await expect(cardField(cards.nth(0), '概要')).toHaveText(payload);
+    await expect(cardField(cards.nth(1), 'TMDBジャンル（参考）')).toHaveText(`${payload}・SF`);
+    await expect(cardField(cards.nth(1), '概要')).toHaveText(`${prefix}...`);
+    await expect(cards.locator('img')).toHaveCount(2);
+    await expect(cards.locator('span > *, script, [onerror], [onload]')).toHaveCount(0);
+    await expect(page.locator('body')).not.toHaveAttribute('data-card-xss');
+    await expectReady(page);
+});
+
+for (const viewport of [{ name: 'PC', width: 1280, height: 900, direction: 'row' }, { name: 'モバイル', width: 390, height: 844, direction: 'column' }]) {
+    // 目的：自然寸法・比率が異なる画像でも実寸とflex配置を保ち、長文で横にはみ出さない。
+    test(`${viewport.name}でポスターとNo Imageの実寸112×176pxを維持する`, async ({ page, tmdb }) => {
+        // Arrange：正方形・横長画像とNo Image、長い非改行文字列・改行のある概要を用意する。
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await page.goto('/admin/tmdb/search');
+        const square = 'https://image.tmdb.org/t/p/w342/e2e-square.png';
+        const wide = 'https://image.tmdb.org/t/p/w342/e2e-wide.png';
+        tmdb.poster(square, 'image', '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#345678"/></svg>');
+        tmdb.poster(wide, 'image', '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120"><rect width="640" height="120" fill="#345678"/></svg>');
+        const sources = [square, wide, null];
+        tmdb.reply('寸法', { json: results(sources.map((poster, index) => ({
+            ...movie(index + 1, `作品${index}${'W'.repeat(100)}`, poster),
+            overview: index === 0 ? '短い概要' : `${'説明\n'.repeat(40)}末尾`,
+            genres: [{ id: 878, name: 'W'.repeat(160) }, { id: 28, name: '参考ジャンル' }],
+        }))) });
+
+        // Act：同じ検索で3種類の画像を描画し、lazy画像を順にロードする。
+        await search(page, '寸法');
+        await expect(ui(page).cards).toHaveCount(3);
+        for (const [index, source] of sources.entries()) {
+            const card = ui(page).cards.nth(index);
+            const image = card.getByRole('img');
+            await image.scrollIntoViewIfNeeded();
+            await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+
+            // Assert：属性やクラス名だけで合格にせず、CSS・実寸・各要素の収まりを検証する。
+            await expect(image).toHaveAttribute('src', source ?? '/images/no-image.png');
+            await expect(image).toHaveAttribute('alt', source === null ? 'ポスター画像なし' : `作品「作品${index}${'W'.repeat(100)}」のポスター`);
+            await expect(image).toHaveCSS('width', '112px');
+            await expect(image).toHaveCSS('height', '176px');
+            await expect(image).toHaveCSS('object-fit', 'cover');
+            await expect(image).toHaveCSS('flex-shrink', '0');
+            await expect(card).toHaveCSS('display', 'flex');
+            await expect(card).toHaveCSS('flex-direction', viewport.direction);
+            const geometry = await card.evaluate((element) => {
+                const image = element.querySelector('img')!;
+                const details = element.querySelector('div')!;
+                const rect = element.getBoundingClientRect();
+                const poster = image.getBoundingClientRect();
+                const text = details.getBoundingClientRect();
+                return {
+                    width: poster.width, height: poster.height,
+                    natural: [image.naturalWidth, image.naturalHeight],
+                    contained: poster.left >= rect.left && poster.right <= rect.right && poster.top >= rect.top && poster.bottom <= rect.bottom,
+                    noOverflow: element.scrollWidth <= element.clientWidth + 1 && details.scrollWidth <= details.clientWidth + 1,
+                    row: poster.right <= text.left && Math.abs(poster.top - text.top) <= 1,
+                    column: poster.bottom <= text.top,
+                };
+            });
+            expect(geometry.width).toBe(112);
+            expect(geometry.height).toBe(176);
+            expect(geometry.natural).toEqual(index === 0 ? [300, 300] : index === 1 ? [640, 120] : [112, 176]);
+            expect(geometry.contained).toBe(true);
+            expect(geometry.noOverflow).toBe(true);
+            expect(viewport.direction === 'row' ? geometry.row : geometry.column).toBe(true);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+        await expectReady(page);
+        expect(tmdb.searches).toBe(1);
+    });
+}
 
 // 目的：実Axiosの非同期検索、二重送信防止、入力境界での切り詰め防止とキーボード復帰を保証する。
 test('正常検索は遷移せずカードを表示し、処理中の連打を抑止する', async ({ page, tmdb }) => {
