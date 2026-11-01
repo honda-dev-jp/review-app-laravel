@@ -15,6 +15,63 @@ use Tests\TestCase;
 
 class TmdbSearchTest extends TestCase
 {
+    public function test_registration_modal_html_contract(): void
+    {
+        // Arrange：DBへ保存しない管理者で実際のBladeを描画する。
+        $admin = User::factory()->make(['role' => 'admin']);
+
+        // Act：検索画面を取得し、HTML構造を解析する。
+        $response = $this->actingAs($admin)->get(route('admin.tmdb.search'));
+        $response->assertOk();
+        $document = new \DOMDocument;
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
+        $xpath = new \DOMXPath($document);
+
+        // query()は不正な式などでfalseを返すため、0件と混同せずテストを失敗させる。
+        $countMatches = function (string $expression) use ($xpath): int {
+            $nodes = $xpath->query($expression);
+            if ($nodes === false) {
+                $this->fail('XPathの評価に失敗しました: '.$expression);
+            }
+
+            return $nodes->length;
+        };
+
+        // Assert：フォーム分離・ラベル関連付け・未実装の操作契約を確認する。
+        $this->assertSame(1, $countMatches('//dialog'));
+        $this->assertSame(0, $countMatches('//form//dialog'));
+        $this->assertSame(1, $countMatches('//dialog[@aria-labelledby="tmdb-registration-title"]//h2[@id="tmdb-registration-title"][@tabindex="-1"]'));
+        foreach (['editable-title', 'editable-overview', 'category'] as $suffix) {
+            $id = 'tmdb-registration-'.$suffix;
+            $this->assertSame(1, $countMatches('//dialog//label[@for="'.$id.'"]'));
+            $this->assertSame(1, $countMatches('//dialog//*[@id="'.$id.'"][not(@form)]'));
+        }
+        foreach (['close', 'cancel'] as $suffix) {
+            $this->assertSame(1, $countMatches('//dialog//button[@id="tmdb-registration-'.$suffix.'"][@type="button"]'));
+        }
+        $this->assertSame(1, $countMatches('//dialog//button[@id="tmdb-registration-submit"][@disabled]'));
+        $response->assertSee('登録機能は準備中です。');
+        Http::assertNothingSent();
+    }
+
+    public function test_registration_categories_are_ordered_names(): void
+    {
+        // Arrange：DB IDと独立したUIの確定候補を定義する。
+        $expected = ['アクション', 'アドベンチャー', 'アニメーション', 'コメディ', 'ヒューマンドラマ', 'SF', 'ファンタジー', 'ホラー', 'サスペンス・ミステリー', '恋愛', 'ドキュメンタリー', 'その他'];
+
+        // Act：Bladeが使用する翻訳候補を取得する。
+        $actual = __('admin.tmdb.search.categories');
+
+        // Assert：12件の名称・順序を固定し、未定義や仮IDへの置換を検出する。
+        $this->assertSame($expected, $actual);
+    }
+
     private const SEARCH_URL = 'https://api.themoviedb.org/3/search/movie';
 
     private const CONFIGURATION_URL = 'https://api.themoviedb.org/3/configuration';

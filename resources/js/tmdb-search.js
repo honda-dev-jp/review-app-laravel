@@ -76,18 +76,33 @@ function truncateOverview(overview) {
 /**
  * 1件の映画データから、画面に挿入する「映画カード」を組み立てる。
  *
- * この関数は通信しない。受け取ったデータでDOM要素を作って返すだけ。
+ * この関数は通信やモーダルの開閉を直接行わない。
+ * 映画カードのDOM要素を生成し、選択時にコールバックへ通知する。
  *
  * @param {object} movie Controllerが返した正規化済み映画データ
  * @param {object} messages Bladeから渡された翻訳済み文言
+ * @param {Function} onSelectMovie 映画選択時のコールバック（movieとcardButtonを渡す）
  * @returns {HTMLElement} 完成したarticle要素（映画カード）
  */
-function createMovieCard(movie, messages) {
+function createMovieCard(movie, messages, onSelectMovie) {
     // createElement() はHTMLの「要素」を新規作成する（まだ画面には表示されない）。
     // classNameは表示デザイン用のTailwind CSSクラス。
     const card = document.createElement('article');
     card.className =
-        'flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 sm:flex-row';
+        'flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 sm:flex-row relative hover:border-blue-400 hover:shadow-md';
+
+    // カード全面を操作する透明ボタンを作成し、作品名を含むアクセシブルな名前を設定する。
+    const cardButton = document.createElement('button');
+    cardButton.type = 'button';
+    cardButton.className =
+        'absolute inset-0 bg-transparent focus-visible:outline-2 focus-visible:outline-blue-600 focus-visible:outline-offset-2 cursor-pointer';
+    cardButton.setAttribute(
+        'aria-label',
+        messages.openRegistrationModalAccessible.replace(':title', () => movie.title)
+    );
+    cardButton.addEventListener('click', () => {
+        onSelectMovie(movie, cardButton);
+    });
 
     // 作品のポスター画像用に<img>要素を作る。
     const image = document.createElement('img');
@@ -172,8 +187,8 @@ function createMovieCard(movie, messages) {
     appendField(messages.genres, formatGenres(movie.genres));
     appendField(messages.overview, truncateOverview(movie.overview));
 
-    // カードに画像と文字情報を収めて返す。画面への配置は呼び出し元が行う。
-    card.append(image, details);
+    // カードに画像・作品情報・全面操作ボタンを配置して返す。画面への追加は呼び出し元が行う。
+    card.append(image, details, cardButton);
     return card;
 }
 
@@ -198,6 +213,22 @@ function initializeTmdbSearch() {
     const results = document.getElementById('tmdb-search-results');
     const queryError = document.getElementById('tmdb-query-error');
     const errorBox = document.getElementById('tmdb-search-error');
+    const selectMovieHint = document.getElementById('tmdb-select-movie-hint');
+    const categorySelect = document.getElementById('tmdb-registration-category');
+    const registrationPoster = document.getElementById('tmdb-registration-poster');
+    const registrationDialog = document.getElementById('tmdb-registration-dialog');
+    const registrationClose = document.getElementById('tmdb-registration-close');
+    const registrationCancel = document.getElementById('tmdb-registration-cancel');
+    const registrationTitle = document.getElementById('tmdb-registration-title');
+    const registrationMovieId = document.getElementById('tmdb-registration-movie-id');
+    const registrationOriginalTitle =
+        document.getElementById('tmdb-registration-original-title');
+    const registrationReleaseDate = document.getElementById('tmdb-registration-release-date');
+    const registrationGenres = document.getElementById('tmdb-registration-genres');
+    const registrationEditableTitle =
+        document.getElementById('tmdb-registration-editable-title');
+    const registrationEditableOverview =
+        document.getElementById('tmdb-registration-editable-overview');
 
     // BladeがJs::from()で出力したURLと翻訳済み文言を読む。
     // window.axiosは既存bootstrap.jsで初期化済みの共通Axios。
@@ -205,15 +236,182 @@ function initializeTmdbSearch() {
 
     // 画面の部品・設定が欠けていたら、null参照で処理が壊れる前に終了する。
     if (
-        !input || !button || !status || !results ||
-        !queryError || !errorBox || !config || !window.axios
+        !input || !button || !status || !results || !queryError || !errorBox ||
+        !config || !window.axios || !selectMovieHint || !categorySelect ||
+        !registrationPoster || !registrationDialog || !registrationClose ||
+        !registrationCancel || !registrationTitle || !registrationMovieId ||
+        !registrationOriginalTitle || !registrationReleaseDate || !registrationGenres ||
+        !registrationEditableTitle || !registrationEditableOverview
     ) {
         return;
     }
 
     const messages = config.messages;
+    const categories = config.categories;
+
+    // カテゴリー一覧が配列かどうかを検証する。
+    if (!Array.isArray(categories)) {
+        return;
+    }
+
+    // カテゴリーごとにoption要素を生成し、表示文字列を設定する。
+    for (const category of categories) {
+        const option = document.createElement('option');
+        option.textContent = category;
+        option.value = category;
+        categorySelect.append(option);
+    }
+
     // letは再代入できる。通信中だけtrue、通信終了でfalseへ戻す。
     let isSearching = false;
+
+    // モーダルを開いた映画カードのボタンを保持する（初期値はnull）。
+    let activeCardButton = null;
+
+    // モーダルのポスター画像が読み込めなかった場合は、代替画像に切り替える。
+    // 同じ画像要素を再利用するため、作品ごとの読み込み失敗に繰り返し対応する。
+    registrationPoster.addEventListener('error', function () {
+        if (registrationPoster.getAttribute('src') !== NO_IMAGE_URL) {
+            registrationPoster.src = NO_IMAGE_URL;
+            registrationPoster.alt = messages.noPosterAlt;
+        }
+    });
+
+    // ネイティブdialogでもTabがブラウザUIへ抜けるため、このモーダルの端点だけ循環させる。
+    registrationDialog.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey ||
+            !registrationDialog.matches(':modal')) {
+            return;
+        }
+
+        // 現在の表示状態で判定し、無効な登録ボタンや初期フォーカス用見出しはTab列に含めない。
+        const stops = [...registrationDialog.querySelectorAll(
+            'button, input, textarea, select, a[href], [tabindex]'
+        )].filter((element) =>
+            element.tabIndex >= 0 &&
+            !element.matches(':disabled, input[type="hidden"]') &&
+            !element.closest('[inert]') &&
+            element.getClientRects().length > 0 &&
+            getComputedStyle(element).visibility === 'visible'
+        );
+        if (stops.length === 0) {
+            // 操作要素がなくてもブラウザUIへ抜けず、見出しを退避先にする。
+            event.preventDefault();
+            registrationTitle.focus();
+            return;
+        }
+
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !stops.includes(active))) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+        // 端点以外は標準のTab順に任せ、見出しからの前進や入力操作を妨げない。
+    });
+
+    // ×ボタンをクリックしたら登録モーダルを閉じる。
+    registrationClose.addEventListener('click', () => {
+        registrationDialog.close();
+    });
+
+    // キャンセルボタンをクリックしたら登録モーダルを閉じる。
+    registrationCancel.addEventListener('click', () => {
+        registrationDialog.close();
+    });
+
+    // モーダル終了時に編集内容を破棄し、起動元または検索欄へフォーカスを戻す。
+    registrationDialog.addEventListener('close', () => {
+        categorySelect.value = '';
+        registrationEditableTitle.value = '';
+        registrationEditableOverview.value = '';
+
+        if (activeCardButton && activeCardButton.isConnected) {
+            activeCardButton.focus();
+        } else {
+            input.focus();
+        }
+
+        activeCardButton = null;
+    });
+
+    // 映画カード選択時に、モーダルを開いたボタンを記憶する。
+    // 閉じた際に元のボタンへフォーカスを戻すために使用する。
+    function handleSelectMovie(movie, cardButton) {
+        activeCardButton = cardButton;
+
+        // 選択した映画のTMDB IDを表示する。欠損時は「情報なし」にする。
+        if (movie.id == null) {
+            registrationMovieId.textContent = messages.notAvailable;
+        } else {
+            registrationMovieId.textContent = String(movie.id);
+        }
+
+        // 選択した映画の原題を表示する。欠損時は「情報なし」にする。
+        if (movie.original_title == null) {
+            registrationOriginalTitle.textContent = messages.notAvailable;
+        } else {
+            registrationOriginalTitle.textContent = String(movie.original_title);
+        }
+
+        // 選択した映画の公開日を表示する。欠損時は「情報なし」にする。
+        if (movie.release_date == null) {
+            registrationReleaseDate.textContent = messages.notAvailable;
+        } else {
+            registrationReleaseDate.textContent = String(movie.release_date);
+        }
+
+        // 選択した映画のTMDBジャンル名を表示する。取得できない場合は「情報なし」にする。
+        const formattedGenres = formatGenres(movie.genres);
+        if (formattedGenres == null) {
+            registrationGenres.textContent = messages.notAvailable;
+        } else {
+            registrationGenres.textContent = formattedGenres;
+        }
+
+        // 選択した映画のタイトルを編集欄に設定する。欠損時は空文字にする。
+        if (movie.title == null) {
+            registrationEditableTitle.value = '';
+        } else {
+            registrationEditableTitle.value = movie.title;
+        }
+
+        // 選択した映画の概要全文を編集欄に設定する。欠損時は空文字にする。
+        if (movie.overview == null) {
+            registrationEditableOverview.value = '';
+        } else {
+            registrationEditableOverview.value = movie.overview;
+        }
+
+        // 映画を選択するたびに、アプリ独自カテゴリーを未選択状態に戻す。
+        categorySelect.value = '';
+
+        // 選択した映画のポスター画像をモーダルに設定する。
+        // Serviceが生成したTMDB画像URLだけを使用し、不正値や欠損時は代替画像を表示する。
+        if (
+            typeof movie.poster_url === 'string' &&
+            movie.poster_url.startsWith('https://image.tmdb.org/t/p/')
+        ) {
+            // :title はLaravelの翻訳テンプレート内の差し込み場所。
+            // replace() は文字列だけを書き換えるため、HTMLとして解釈されない。
+            registrationPoster.src = movie.poster_url;
+            registrationPoster.alt = messages.posterAlt.replace(':title', () => movie.title);
+        } else {
+            // poster_urlが欠損または不正な場合は、代替画像と代替altを設定する。
+            registrationPoster.src = NO_IMAGE_URL;
+            registrationPoster.alt = messages.noPosterAlt;
+        }
+
+        // 作品登録モーダルを開く。
+        registrationDialog.showModal();
+
+        // モーダルを開いた直後に見出しへフォーカスを移し、内容の先頭から確認できるようにする。
+        registrationTitle.focus();
+    }
 
     // submitイベントは「検索ボタンのクリック」と「入力欄でEnter」の両方を受け取る。
     // async (event) => {...} は非同期処理を使える無名関数（アロー関数）。
@@ -247,6 +445,7 @@ function initializeTmdbSearch() {
         errorBox.replaceChildren();
         errorBox.hidden = true;
         input.removeAttribute('aria-invalid');
+        selectMovieHint.hidden = true;
 
         // 処理中の表示。disabled=trueで追加操作を受け付けない。
         // aria-busyは支援技術へ「現在、この領域を更新中」と伝える属性。
@@ -287,7 +486,7 @@ function initializeTmdbSearch() {
             // map()は配列の各要素を別の値へ変換した「新しい配列」を作る。
             // 映画データ配列 → createMovieCardで作成したarticle要素配列。
             const cards = movies.map((movie) =>
-                createMovieCard(movie, messages)
+                createMovieCard(movie, messages, handleSelectMovie)
             );
 
             // ...cardsの「...」は配列の中身を引数として展開する書き方。
@@ -314,10 +513,20 @@ function initializeTmdbSearch() {
                     String(summary.displayed)
                 );
             }
+
+            // 検索結果が1件以上ならカード選択のヒントを表示
+            if (summary.displayed > 0) {
+                selectMovieHint.textContent = messages.selectMovieHint;
+                selectMovieHint.hidden = false;
+            }
+
         } catch (error) {
             // AxiosがHTTPエラーを返した場合、あるいは描画中の例外もここへ来る。
             // error.message・レスポンス本文を無条件に画面表示しない（情報漏えい対策）。
             status.textContent = '';
+
+            // 検索途中の例外にも備え、エラー時はカード選択の案内を非表示に戻す。
+            selectMovieHint.hidden = true;
 
             // ?. は「左側がnull/undefinedなら、そこで取得をやめてundefinedを返す」。
             // HTTP応答そのものがない通信失敗でも例外を起こさず確認できる。

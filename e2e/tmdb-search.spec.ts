@@ -330,21 +330,33 @@ test('部分成功と0件を区別し、画像なしでも再検索できる', a
     const empty = tmdb.hold('0件');
     tmdb.reply('再検索', { json: results([movie(2, '再検索作品')]) });
     const view = ui(page);
+    const hint = page.locator('#tmdb-select-movie-hint');
+    // Arrange／Assert：検索前は非表示で、件数通知の直下に独立して配置する。
+    await expect(hint).toBeHidden();
+    await expect(hint).toHaveAttribute('hidden', '');
+    expect(await view.status.evaluate(el => el.nextElementSibling?.id)).toBe('tmdb-select-movie-hint');
 
     // Act：部分成功を表示してから、次の検索を応答前で止める。
     await search(page, '部分成功');
     await expect(view.status).toHaveText('2件中1件を表示しました。1件はデータ形式が不正だったため除外しました。');
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText('作品カードを選択すると、登録内容を確認・編集できます。');
+    await expect(view.status).not.toContainText('作品カードを選択');
     await expect(view.cards).toHaveCount(1);
     await expect(view.cards.getByRole('img', { name: 'ポスター画像なし', exact: true })).toHaveAttribute('src', '/images/no-image.png');
     await expectReady(page);
     await search(page, '0件');
     await expect.poll(empty.received).toBe(true);
+    // Assert：応答を保留したまま、前回の操作案内が即座に消える。
+    await expect(hint).toBeHidden();
+    await expect(hint).toHaveAttribute('hidden', '');
     await expect(view.cards).toHaveCount(0);
     // 別の操作対象へフォーカスを移した場合、検索完了がフォーカスを奪わないことも確認する。
     const dashboard = page.getByRole('navigation', { name: '管理画面ナビゲーション', exact: true }).getByRole('link', { name: 'ダッシュボード', exact: true });
     await dashboard.focus();
     await empty.release({ json: results([]) });
     await expect(view.status).toHaveText('該当作品なし');
+    await expect(hint).toBeHidden();
     await expectReady(page);
     await expect(dashboard).toBeFocused();
     await search(page, '再検索');
@@ -354,6 +366,7 @@ test('部分成功と0件を区別し、画像なしでも再検索できる', a
     await expect(view.cards.getByRole('heading', { name: '再検索作品', exact: true })).toBeVisible();
     await expect(view.status).toHaveText('1件の作品を表示しました。');
     await expectReady(page);
+    await expect(hint).toBeVisible();
     expect(tmdb.searches).toBe(3);
 });
 
@@ -371,9 +384,11 @@ test('HTTPエラーを画面内に表示し、入力を保持して再検索で�
         { status: 503, message: '映画情報を取得できませんでした。' },
     ];
     const view = ui(page);
+    const hint = page.locator('#tmdb-select-movie-hint');
     tmdb.reply('初回', { json: results([movie(1, '前回作品')]) });
     await search(page, '初回');
     await expect(view.cards).toHaveCount(1);
+    await expect(hint).toBeVisible();
 
     // Act：実Axiosへ各HTTPエラーを返し、続けて成功応答で再検索する。
     for (const [index, entry] of cases.entries()) {
@@ -403,6 +418,9 @@ test('HTTPエラーを画面内に表示し、入力を保持して再検索で�
                     await expect(view.error.getByRole('link')).toHaveCount(0);
                 }
             }
+            await expect(hint).toBeHidden();
+            await expect(view.error).not.toContainText('作品カードを選択');
+            await expect(view.queryError).not.toContainText('作品カードを選択');
             await expect(view.input).toHaveValue(query);
             await expectReady(page);
             const recovery = tmdb.hold(`復帰${index}`);
@@ -413,6 +431,8 @@ test('HTTPエラーを画面内に表示し、入力を保持して再検索で�
             await recovery.release({ json: results([movie(2, '復帰作品')]) });
             await expect(view.cards.getByRole('heading', { name: '復帰作品', exact: true })).toBeVisible();
             await expectReady(page);
+            await expect(hint).toBeVisible();
+            await expect(view.status).not.toContainText('作品カードを選択');
             await expect(view.input).not.toHaveAttribute('aria-invalid');
             await expect(page).toHaveURL('/admin/tmdb/search');
         });
@@ -501,8 +521,25 @@ test('通信失敗と20秒タイムアウト後に再検索できる', async ({ 
 });
 
 // 目的：モバイルの導線・active表示・キーボード操作と、画像障害が映画情報を消さないことを保証する。
-test('モバイルから検索でき、ポスターと代替画像の失敗を再試行し続けない', async ({ page, tmdb }) => {
+test('モバイルから検索でき、ポスターと代替画像の失敗を再試行し続けない', async ({ page, tmdb }, testInfo) => {
     // Arrange：既存の管理者ログインを維持し、モバイル幅でポスター失敗を準備する。
+    // 同一URLの通信はブラウザが共有し得るため、画像要素ごとのload/errorを別途観測する。
+    // URL・認証情報は保存せず、カード／モーダルと結果だけを各文書に記録する。
+    await page.addInitScript(() => {
+        const observations: Array<{ target: string; event: string; placeholder: boolean }> = [];
+        Object.assign(window, { tmdbImageObservations: observations });
+        for (const type of ['load', 'error']) {
+            document.addEventListener(type, event => {
+                const image = event.target;
+                if (!(image instanceof HTMLImageElement)) return;
+                const target = image.id === 'tmdb-registration-poster' ? 'modal'
+                    : image.closest('#tmdb-search-results') ? 'card' : null;
+                if (target) observations.push({ target, event: type, placeholder: new URL(image.src).pathname === '/images/no-image.png' });
+            }, true);
+        }
+    });
+    const observations = () => page.evaluate(() =>
+        (window as unknown as { tmdbImageObservations: Array<{ target: string; event: string; placeholder: boolean }> }).tmdbImageObservations);
     await page.setViewportSize({ width: 390, height: 844 });
     const menuButton = page.getByRole('button', { name: '管理メニューを開閉する', exact: true });
     await menuButton.click();
@@ -531,9 +568,14 @@ test('モバイルから検索でき、ポスターと代替画像の失敗を�
     await expect(image).toHaveAttribute('alt', 'ポスター画像なし');
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
 
-    // Assert：正常な代替画像への通信が1回あり、最初の独立した状態で読込に成功したことを確認する。
+    // Assert：カードのポスター失敗と代替画像成功を、モーダル初期画像の成功と区別する。
     expect(tmdb.posterRequests(poster)).toBe(1);
-    expect(tmdb.placeholderRequests).toBe(1);
+    expect(await observations()).toEqual(expect.arrayContaining([
+        { target: 'modal', event: 'load', placeholder: true },
+        { target: 'card', event: 'error', placeholder: false },
+        { target: 'card', event: 'load', placeholder: true },
+    ]));
+    await testInfo.attach('image-success-observations', { body: JSON.stringify(await observations()), contentType: 'application/json' });
     await expectReady(page);
 
     // Arrange：失敗モックを先に登録し、新しい文書で画像成功時のDOM・読込済み画像参照を破棄する。
@@ -546,12 +588,15 @@ test('モバイルから検索でき、ポスターと代替画像の失敗を�
     await page.reload();
     await expect(view.cards).toHaveCount(0);
     await expectReady(page);
+    // 検索前のモーダル初期画像失敗を待ち、カードが存在しない時点の通信を分離する。
+    await expect.poll(observations).toEqual([{ target: 'modal', event: 'error', placeholder: true }]);
+    const beforeCardFallback = tmdb.placeholderRequests;
 
     // Act：独立したページ状態でポスターと代替画像を両方失敗させる。
     await search(page, '代替画像も失敗');
     await expect(view.cards.getByRole('heading', { name: '文章は残る作品', exact: true })).toBeVisible();
     await view.cards.getByRole('img').scrollIntoViewIfNeeded();
-    await expect.poll(() => tmdb.placeholderRequests).toBe(2);
+    await expect.poll(() => tmdb.placeholderRequests).toBe(beforeCardFallback + 1);
 
     // Assert：代替画像も失敗してもカードと件数を保ち、error再発時にsrcを再設定しない。
     const broken = view.cards.getByRole('img', { name: 'ポスター画像なし', exact: true });
@@ -568,9 +613,20 @@ test('モバイルから検索でき、ポスターと代替画像の失敗を�
         return changes.length;
     });
     expect(mutations).toBe(0);
+    expect(await observations()).toEqual([
+        { target: 'modal', event: 'error', placeholder: true },
+        { target: 'card', event: 'error', placeholder: false },
+        { target: 'card', event: 'error', placeholder: true },
+        // 上記の再試行防止検証で明示的に発火した2イベント。
+        { target: 'card', event: 'error', placeholder: true },
+        { target: 'card', event: 'error', placeholder: true },
+    ]);
+    await testInfo.attach('image-failure-observations', { body: JSON.stringify({
+        beforeCardFallback, afterCardFallback: tmdb.placeholderRequests, events: await observations(),
+    }), contentType: 'application/json' });
     expect(tmdb.posterRequests(poster)).toBe(1);
     expect(tmdb.posterRequests(failedPoster)).toBe(1);
-    expect(tmdb.placeholderRequests).toBe(2);
+    expect(tmdb.placeholderRequests).toBe(beforeCardFallback + 1);
     await expect(view.status).toHaveText('1件の作品を表示しました。');
     await expectReady(page);
     expect(tmdb.searches).toBe(2);

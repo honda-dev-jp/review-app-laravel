@@ -1,4 +1,4 @@
-# TMDB映画検索 技術設計（Issue 212・231・232）
+# TMDB映画検索 技術設計（Issue 212・231・232・230）
 
 ## 目次
 
@@ -17,14 +17,15 @@
 - [13. 公式一次資料](#13-公式一次資料)
 - [14. Genre Movie List取得・ジャンル変換（Issue 231）](#14-genre-movie-list取得ジャンル変換issue-231)
 - [15. 検索結果カードの表示改善（Issue 232）](#15-検索結果カードの表示改善issue-232)
+- [16. 作品登録前モーダルの設計（Issue 230）](#16-作品登録前モーダルの設計issue-230)
 
 ## 1. 目的・位置づけ
 
-映画レビューアプリ Laravel移植版のMVP2において、管理者が映画タイトルを検索し、TMDBの映画情報とポスターを同一画面に非同期表示するための技術設計を定める。Issue 231では既存の検索結果JSONへ複数ジャンルのID・日本語名称を追加し、Issue 232では検索結果カードへのジャンル参考表示・概要の100文字省略・ポスター表示寸法の検証を扱う。
+映画レビューアプリ Laravel移植版のMVP2において、管理者が映画タイトルを検索し、TMDBの映画情報とポスターを同一画面に非同期表示するための技術設計を定める。Issue 231では既存の検索結果JSONへ複数ジャンルのID・日本語名称を追加し、Issue 232では検索結果カードへのジャンル参考表示・概要の100文字省略・ポスター表示寸法の検証を扱う。Issue 230ではその検索結果を使う登録前モーダルの確認・編集UIを扱い、DB登録は後続のIssue 228で実装する。
 
-- 対象Issue: [Issue 212「TMDB映画検索結果をポスター付きで非同期表示する」](https://github.com/honda-dev-jp/review-app-laravel/issues/212)、[Issue 231「TMDB映画検索結果に複数ジャンル情報を追加する」](https://github.com/honda-dev-jp/review-app-laravel/issues/231)、[Issue 232「TMDB検索結果カードにジャンルを表示し概要を100文字に省略する」](https://github.com/honda-dev-jp/review-app-laravel/issues/232)
-- 状態（2026-10-30確認）: **Issue 212はPR 229、Issue 231はPR 233（マージコミット`519862f`）で、いずれも`develop`へマージ済み**。Issue 231はPHPUnit 527件、Playwright 18件、PHPStan Level 10、Pint、Vite build、TypeScript型チェック、`git diff --check`のローカル確認とPR 233のCI成功を経て統合した。**`main`には未同期であり、Issue 231はCloseしない**。Issue 232はClaude Code・Codexの独立した実装前検証を経て第15章の設計を確定し、作業ブランチで画面実装と対象Playwright 13シナリオのローカル検証を完了した。さらに、PHPUnit・Pint・PHPStan / Larastan Level 10・Vite build・TypeScript型検査・全Playwright・`git diff --check`のローカル品質確認と、PCブラウザ・iPhone Safariでの目視確認、Claude Code・Codexの独立した最終差分レビューを完了した。**Issue 232のPR作成・CI・`develop`統合は未実施**であり、統合済み機能とは区別する。
-- 第12章のIssue 212の確定事項表は当時の合意履歴として保持し、Issue 231の追加設計は第14章、Issue 232のカード表示設計は第15章にまとめる。作品登録・重複登録防止・ページネーションはそれぞれIssue 230・228・227などの後続対応とする。
+- 対象Issue: [Issue 212「TMDB映画検索結果をポスター付きで非同期表示する」](https://github.com/honda-dev-jp/review-app-laravel/issues/212)、[Issue 231「TMDB映画検索結果に複数ジャンル情報を追加する」](https://github.com/honda-dev-jp/review-app-laravel/issues/231)、[Issue 232「TMDB検索結果カードにジャンルを表示し概要を100文字に省略する」](https://github.com/honda-dev-jp/review-app-laravel/issues/232)、[Issue 230「TMDB検索結果から作品登録モーダルを開きカテゴリーを選択できるようにする」](https://github.com/honda-dev-jp/review-app-laravel/issues/230)
+- 状態（2026-11-01更新）: **Issue 212はPR 229、Issue 231はPR 233、Issue 232はPR 234（マージコミット`42fc77e`）で、いずれも`develop`へ統合済み**。Issue 232のPR 234は2026-10-30 JSTにマージ済みである。第15章の実装・テスト記録はIssue 232作業時点の証跡として保持する。**Issue 230は`feat/230-tmdb-registration-modal`の未コミット作業ツリーで登録前モーダルUIを実装し、ローカルの検証結果が報告されているが、`develop`への統合・GitHub Actionsの成功は未確認**。Issue 230の設計履歴と実装・検証状況は第16章で区別して記録する。
+- 第12章のIssue 212の確定事項表は当時の合意履歴として保持し、Issue 231の追加設計は第14章、Issue 232のカード表示設計は第15章、Issue 230の登録前モーダル設計は第16章にまとめる。作品登録API・DB保存とページネーションはそれぞれIssue 228・227の後続対応とする。
 - 機能範囲の正本: [FEATURES.md](FEATURES.md)
 - URL・HTTPメソッド・ルート名の正本: [ROUTES.md](ROUTES.md)
 - 画面・画面遷移の正本: [SCREEN_TRANSITIONS.md](SCREEN_TRANSITIONS.md)
@@ -41,7 +42,8 @@
 - Axios → Laravel → TMDB API v3 のサーバー経由通信
 - TMDB Movie Searchから検索結果を取得し、表示に必要な項目へ整形
 - Issue 231: Movie Searchの`genre_ids`をGenre Movie List（`language=ja-JP`）と対応付け、既存JSONに`genres`を追加する（PR 233で`develop`へマージ済み）
-- Issue 232: 検索結果カードに`genres`の名称を参考表示し、概要を最大100書記素クラスタ（grapheme）に省略し、ポスターの表示寸法を確認する（作業ブランチで実装・対象E2E検証済み、`develop`未統合）
+- Issue 232: 検索結果カードに`genres`の名称を参考表示し、概要を最大100書記素クラスタ（grapheme）に省略し、ポスターの表示寸法を確認する（PR 234で`develop`統合済み）
+- Issue 230: 検索結果カードから登録前モーダルを開き、作品情報を確認・タイトルと概要全文を編集・アプリ独自カテゴリー12件から1件を選択する（作業ブランチでUI実装済み・PR前。第16章、特に第16.11節参照）
 - Configurationに基づく公開ポスター画像URLの生成とNo Image表示
 - 最大5件表示、正常・0件・入力エラー・外部API失敗時の処理
 - 実APIへ接続しない自動テストと、ローカル手動動作確認
@@ -50,7 +52,8 @@
 
 - 作品・ジャンル・ポスター・ConfigurationのDB保存、migration、永続キャッシュ
 - `tmdb_id` のDB仕様、作品登録、重複登録防止、Movie Details取得、ページネーションUI
-- **作品登録モーダルでのジャンル参考表示**とアプリ独自カテゴリーマスタ・セレクトボックスの整備（Issue 230）、TMDBジャンルとアプリ独自カテゴリーの自動対応付け。**ジャンルの取得・JSON変換はIssue 231で対応済み**。Issue 232では新規TMDB API通信・JSON契約変更・DB保存を行わない
+- 作品登録API、`items`への保存、`tmdb_id`のDB追加・重複登録防止、カテゴリーSeeder拡張・DB連携（Issue 228）。Issue 230は登録前モーダルのUIのみ実装する。
+- TMDBジャンルとアプリ独自カテゴリーの自動対応付け、1作品への複数カテゴリー登録。**ジャンルの取得・JSON変換はIssue 231で対応済み**。Issue 230で新規TMDB API通信や検索JSON契約変更は行わない。
 - TMDBの利用条件、attribution、notice、brandingおよび長期保存条件の確定（別途Issue 98）
 - TMDB用の外部PHP wrapper、Sanctum、TMDBユーザー認証
 
@@ -78,7 +81,7 @@
               └─ Issue 231: 有効なジャンルIDがある場合のみ
                   GET https://api.themoviedb.org/3/genre/movie/list?language=ja-JP
                   └─ genre_ids + ジャンル一覧 → genres: [{id, name}, ...]
-      └─ JSON → Axios → 検索画面にDOMで安全に描画（Issue 232の作業ブランチではカードのジャンル参考表示・概要省略を追加済み。登録モーダルはIssue 230）
+      └─ JSON → Axios → 検索画面にDOMで安全に描画（Issue 232のカードのジャンル参考表示・概要省略は`develop`統合済み。登録モーダルはIssue 230の作業ブランチでUI実装済み・未統合）
                          └─ 画像はブラウザからTMDB画像CDNへ取得
 ```
 
@@ -87,7 +90,7 @@
 | Route | `Route::view` とControllerへのルーティング、既存管理者middleware適用 |
 | `App\Http\Controllers\Admin\TmdbSearchController` | `Request`の検証、Serviceの呼び出し、JSON/HTTPレスポンスへの変換 |
 | `App\Services\TmdbMovieService` | Bearer認証付きTMDB通信、HTTP応答確認、最大5件への絞り込み、必要フィールドの抽出、Configuration取得・URL生成。Issue 231ではジャンルID検証・Genre Movie List取得・`genres`変換と、障害時の独立フォールバックを追加 |
-| Blade / JavaScript | 画面・検索フォーム、Axios送信、ロード／結果／エラー表示、安全なDOM更新、No Image表示。Issue 232の作業ブランチでは既存の検索カード描画にジャンル参考表示・概要省略を追加済み |
+| Blade / JavaScript | 画面・検索フォーム、Axios送信、ロード／結果／エラー表示、安全なDOM更新、No Image表示。Issue 232で既存の検索カード描画にジャンル参考表示・概要省略を追加済み（`develop`統合済み） |
 
 - 現時点で新たなForm Requestクラスは導入せず、ControllerでLaravel標準の `$request->validate()` を使用する。
 - 既存Axios（`resources/js/bootstrap.js` の `window.axios`）を使用し、専用HTTP wrapperは導入しない。
@@ -546,7 +549,7 @@ Codex・Claude Codeの実装前再レビュー指摘を受け、PHP公式の `js
 
 ## 15. 検索結果カードの表示改善（Issue 232）
 
-本章は2026-10-29のClaude Code・Codexによる**独立した実装前検証**を経て確定した設計と、その後の**作業ブランチでの実装・ローカル検証結果**を記録する。Issue 231の`genres`付きJSONはPR 233で`develop`に統合済み。Issue 232は画面修正・E2Eテスト追加・対象および全Playwright・PHPUnit・Pint・PHPStan / Larastan Level 10・Vite build・E2E型検査のローカル品質確認、PC・iPhone Safariの目視確認、およびClaude Code・Codexによる独立した最終差分レビューを実施済み。**PR作成・CI・`develop`への統合は未実施**であり、マージ済み機能とは区別する。
+本章は2026-10-29のClaude Code・Codexによる**独立した実装前検証**を経て確定した設計と、その後の**作業ブランチでの実装・ローカル検証結果**を記録する。Issue 231の`genres`付きJSONはPR 233で、Issue 232の検索カード改善はPR 234でそれぞれ`develop`へ統合済みである。実装・テストの詳細は当時の検証記録として残し、**Issue 230の新規実装結果と混同しない**。
 
 ### 15.1 変更範囲と責務
 
@@ -588,8 +591,8 @@ Codex・Claude Codeの実装前再レビュー指摘を受け、PHP公式の `js
 - **XSS**: `genres[].name`と`overview`の疑似攻撃文字列をテキスト表示し、危険なDOM要素・イベント属性の非生成とJavaScript非実行を確認した。
 - **表示寸法**: PC・モバイルで通常ポスターとNo Imageについて、描画矩形112×176px、計算済みCSSの`object-fit: cover`・`flex-shrink: 0`、配置と横はみ出しを確認した。自然寸法への偶然の一致を避けるため、縦横比の異なる合成画像も使用した。
 - **テスト通信**: 既存の`page.route()`等によるモックと通信ガードを維持し、実TMDB APIへ接続せずに実行した。Laravel→TMDBの通信・JSON契約は引き続きPHPUnit Feature / Serviceテストの責務とし、画面変更を理由とするServiceテストの重複追加は行わない。
-- **ローカル実行結果（Codex報告）**: `npm run build`、`npm run typecheck:e2e`、`git diff --check`は成功。`npx playwright test e2e/tmdb-search.spec.ts --project=chromium`は**対象13シナリオ＋`setup` 1件＝`14 passed`（1.7分、終了コード0）**。`setup`実行前に`APP_ENV=e2e`、`e2e_mysql`、設定・実接続先の`e2e_testing`を確認した。対象E2Eの既存6シナリオにも回帰は検出されなかった。
-- **ローカル品質ゲートの最終結果（プロマネ実行ログ）**: `sail php ./vendor/bin/pint --test`は**120ファイルPASS**、`sail php ./vendor/bin/phpstan analyse`は**75/75・エラー0件（Level 10）**、`sail test`は**PHPUnit 527件PASS・2,672 assertions**。`sail npm run build`、`npm run typecheck:e2e`、`git diff --check`も成功した。`npx playwright test`は**全25件PASS（`setup` 1件＋ブラウザテスト24件、2.1分）**で、Issue 232の13シナリオと他の既存E2Eを含む。PCブラウザおよびiPhone Safariの画面を手動で目視確認した。Claude Code・Codexの独立した最終差分レビューはいずれも**Ready with conditions**で、両者の共通指摘は本書の品質確認進捗の更新であり、アプリ本体・E2Eコードに修正必須の問題は確認されなかった。**未完了はPR作成・GitHub Actions CI・`develop`への統合**であり、tablet幅・支援技術・包括的なアクセシビリティ監査を完了したとは扱わない。
+- **対象E2Eのローカル検証結果**: `npm run build`、`npm run typecheck:e2e`、`git diff --check`は成功。`npx playwright test e2e/tmdb-search.spec.ts --project=chromium`は**対象13シナリオ＋`setup` 1件＝`14 passed`（1.7分、終了コード0）**。`setup`実行前に`APP_ENV=e2e`、`e2e_mysql`、設定・実接続先の`e2e_testing`を確認した。対象E2Eの既存6シナリオにも回帰は検出されなかった。
+- **ローカル品質ゲートの最終確認結果（Issue 232）**: `sail php ./vendor/bin/pint --test`は120ファイルPASS、`sail php ./vendor/bin/phpstan analyse`は75/75・エラー0件（Level 10）、`sail test`はPHPUnit 527件PASS・2,672 assertions。`sail npm run build`、`npm run typecheck:e2e`、`git diff --check`も成功した。`npx playwright test`は全25件PASS（`setup` 1件＋ブラウザテスト24件）。PCブラウザおよびiPhone Safariで目視確認し、Claude Code・Codexの独立した最終差分レビューも実施した。**PR 234は2026-10-30 JSTに`develop`へマージ済み**。tablet幅・支援技術・包括的なアクセシビリティ監査まで完了したとは扱わない。
 
 ### 15.6 変更ファイルと非対象の境界
 
@@ -606,3 +609,256 @@ Codex・Claude Codeの実装前再レビュー指摘を受け、PHP公式の `js
 | `docs/PLAYWRIGHT_TESTING.md` | 対象13シナリオ（既存6＋追加7）、モックと専用DBの安全な実行結果を反映 |
 
 `README.md`・`SECURITY.md`などは既存記述と矛盾が判明した場合のみ必要最小限で更新する。`package.json`・依存関係・Service・Controller・ルート・DB・登録モーダルは変更しない。Issue 232の範囲外の改善や大規模なリファクタリングは混在させない。
+
+## 16. 作品登録前モーダルの設計（Issue 230）
+
+本章は、[Issue 230](https://github.com/honda-dev-jp/review-app-laravel/issues/230)の**実装前に確定した設計仕様**と、2026-11-01時点の**作業ブランチ上の実装・ローカル検証結果**を区別して記録する。作品登録API・DB保存などの後続範囲は現行の[Issue 228](https://github.com/honda-dev-jp/review-app-laravel/issues/228)が扱う。DB詳細設計・マイグレーション／回帰テスト・フロント入力検証のIssue分割は検討中であり、本書の更新時点では新しいIssue番号・責務移管は未確定とする。第1〜15章の既存TMDB検索・Genre Movie List・カード表示の実装契約を変更しない。
+
+### 16.1 スコープと責務分担
+
+| 項目 | Issue 230（本章） | Issue 228（現行の後続計画） |
+|---|---|---|
+| 検索結果カード全体の起動操作とモーダル | 実装 | 既存UIを利用 |
+| TMDB複数ジャンルの参考表示 | 既存JSONを利用して実装 | 表示を再実装しない |
+| 作品タイトル・概要全文の編集UI | 実装 | 編集後の値を検証・保存 |
+| アプリ独自12カテゴリーの選択UI | 固定候補で実装 | DBのカテゴリーと対応付け |
+| `CategorySeeder`の追加12件・DBからの候補取得 | 対象外 | 実装 |
+| 「未定義」の新規登録拒否 | UIでは非表示 | サーバー側でも拒否 |
+| 登録ボタン | **表示するが無効** | 有効化・送信・二重送信防止 |
+| 登録API・DB保存・重複登録防止 | 対象外 | 実装 |
+| 登録成功・登録エラー応答の処理 | 対象外。入力欄・ラベルの関連付けを用意（専用エラー表示領域は未実装） | エラー表示要素・API応答との連携を後続で実装 |
+| 作品タイトル・概要・カテゴリーのフロント入力検証 | 未実装（登録ボタンは無効） | 別Issueへの分離を検討中。実装前に入力契約を確定 |
+| ARIA・フォーカス制御 | 実装 | 既存の挙動を維持 |
+
+- 上表は本書更新時点の責務境界を示す。後続機能を複数のIssueへ分割する案はあるが、Issueの新設・移管が正式に決まるまでは既存のIssue 228の記述を正本として扱う。
+- Issue 230は`items`・`categories`等のDBに書き込まない。新規Laravel登録ルート・TMDB API通信・検索JSONのフィールド追加は行わない。
+- 既存の`GET /admin/tmdb/search`と`GET /admin/tmdb/search/results`を利用し、管理者向けの`auth`・`can:access-admin-panel`を維持する。
+- 作品の登録成功を装うダミー処理は作らず、登録ボタンはIssue 228でAPI連携するまで無効とする。
+- 本章でカテゴリーのDB ID、登録APIのHTTPメソッド・URL、`tmdb_id`の保存形式、保存対象カラムを仮決定しない。
+- **モーダル実装方式（確定方針）**：本画面専用にHTML標準の`<dialog>`を1個配置し、`showModal()`／`close()`と既存の`resources/js/tmdb-search.js`のJavaScriptから制御する。既存`resources/views/components/modal.blade.php`は変更しない。新規画面と既存の退会・確認モーダルを混在させず、既存の共通モーダルへの回帰影響を限定する。
+- **フォームの分離**：登録前モーダルの`<dialog>`と編集用入力欄は既存のTMDB検索`<form id="tmdb-search-form">`の外に配置し、入力欄を検索フォームへ`form`属性で関連付けない。×・キャンセルなど送信不要のボタンは`type="button"`とし、タイトル欄でEnterを押しても検索フォーム送信・登録送信・意図しないモーダル終了が発生しないようにする。
+
+### 16.2 起動と検索データの引き継ぎ
+
+1. 管理者がTMDB検索を実行し、既存の検索結果カード（最大5件）を表示する。
+2. **各映画カード全体をクリック／タップしてモーダルを開く。** カード末尾に独立した可視の「登録内容を確認」ボタンは追加しない。既存の`<article>`とその子要素（`<img>`、`<h2>`、`<p>`等）の構造・見出しセマンティクスを維持する。
+   - **操作方式（確定）**：各`<article>`を相対配置の基準とし、**`<article>`直下で既存の`<img>`・情報用`<div>`と同階層に単一の`<button type="button">`**を追加する。情報用`<div>`内の`<h2>`・`<p>`はそのまま維持し、`<button>`の子要素として包まない。ボタンを絶対配置してカードの全面を覆う透明な操作領域とし、`<article>`自体に`role="button"`や`tabindex`を付けない。
+   - 透明ボタンは、見た目の透明性を保ちながらポインターイベントを受け付ける。ボタン全体を`opacity: 0`にしてフォーカス表示まで消さない。`:focus-visible`時はカード全体の輪郭が明確に分かるようにし、重なり順を調整してポスター・見出し・本文を視覚的に隠さない。ボタンを`aria-hidden`にしない。
+   - ボタンは標準のTab移動とEnter・Spaceによる起動に対応する。**ボタン1個につきTab停止は1回**とし、起動はネイティブの`click`イベントで一元化する。Enter・Space用の重複した起動ハンドラーは追加しない。翻訳済み文言を用いて「『:title』の登録内容を確認」のように**作品名と動作を含むアクセシブルな名前**を付ける。開閉後のフォーカス復帰先として、実際に操作されたボタンを記録する。
+   - **全面を覆うボタンのため、カード上の通常のドラッグ操作による文字選択・コピーはできない**ことを本画面のUX上の制約として受け入れる。本文の確認・概要全文の編集とテキスト選択はモーダル内で行えるようにする。モバイルの縦スクロール、画像・タイトル・概要・余白の操作範囲、フォーカス輪郭、見出しの読み上げを実ブラウザで確認し、カード全面の押下領域を維持する。
+   - **操作可能性の提示**：マウスホバー時にはカードの枠線や影を控えめに変化させ、カード全面が操作対象であることを伝える。キーボードでは前記の`:focus-visible`を優先し、モバイルではホバーだけを操作の手がかりにしない。
+3. **ページ遷移せず**に、選択した映画1件のモーダルを開く。
+4. モーダルは第7章の正規化済み`results`要素の`id`、`title`、`original_title`、`release_date`、`overview`、`poster_url`、`genres`を参照する。
+5. 一覧カード側の`overview`はIssue 232で100書記素クラスタに省略表示しているが、**モーダルには検索JSON内の省略前の全文**を初期表示する。カードの表示テキストや`...`付き文字列から復元しない。
+6. 別の作品を開く際は、その作品の元データで編集可能項目を初期化し、カテゴリーは未選択に戻す。過去に開いた作品の入力を混入させない。
+
+**画面内で再利用するモーダルは1個**とし、カードごとには生成しない。`tmdb-search.js`がモーダルの選択作品、編集状態、開閉を一元管理する。既存の検索結果カード描画と異なる状態管理を二重に持たせない。
+
+モーダルを開く直前に、選択した`movie`から必要な値を**元の検索データとは独立した編集用入力欄の`value`等へコピー**する。変更可能な`title`と`overview`は入力欄側で編集し、元の検索JSONやカード描画用`movie`には書き戻さない。`genres`等の参照情報も元データを変更せず表示する。閉じた際は編集値を破棄し、再表示時は選択した作品から初期化する。別の専用JavaScript状態オブジェクトを必須とはしない。
+
+カードの見出しなど静的な情報要素をTab順へ追加しない。**カードごとに1つの操作対象**をTab順に含め、明瞭なフォーカス表示を設ける。クリック・タップ・Enter・Spaceはすべて同じモーダル起動処理につなぐ。
+
+**検索結果の操作案内（Issue 230で確定）**
+
+- 検索結果が**1件以上**表示された場合、既存の検索結果件数表示（`tmdb-search-status`）の**すぐ下**に「**作品カードを選択すると、登録内容を確認・編集できます。**」を表示する。部分成功でも実際の表示件数が1件以上なら表示する。
+- **検索前・0件・検索エラー時・再検索中は非表示**とする。再検索の開始時には前回の操作案内を即座に消し、検索結果が確定した時点で表示件数に応じて切り替える。
+- 件数・状態通知と案内文は**別々のDOM要素**で管理する。案内要素の表示は検索結果の状態に合わせて制御し、既存の件数表示やエラー通知の`textContent`へ案内を混在させない。文言は`lang/ja/admin.php`の`admin.tmdb.search.ui.select_movie_hint`に集約する。
+
+### 16.3 表示・編集フィールド
+
+| フィールド | 既存検索JSONのキー | モーダルでの扱い | 備考 |
+|---|---|---|---|
+| TMDB映画ID | `id` | **参照のみ** | 識別情報。変更不可 |
+| ポスター | `poster_url` | **参照のみ** | 欠損・画像読み込み失敗時は既存No Image |
+| TMDBジャンル | `genres` | **参照のみ** | 複数の名称を参考表示。`[]`・欠損・無効値は既存の「情報なし」を使用 |
+| 作品タイトル | `title` | **編集可能** | 正規化済みタイトルを初期値とする |
+| 原題 | `original_title` | **参照のみ** | 欠損時は既存の情報なし表示方針 |
+| 公開日 | `release_date` | **参照のみ** | 欠損時もレイアウトを維持 |
+| 概要 | `overview` | **全文を編集可能** | 複数行入力。カードの100文字省略結果は使わない |
+| アプリ独自カテゴリー | 検索JSONには含まれない | **1件を選択** | 初期値は未選択。TMDBジャンルとは独立 |
+
+- 編集可否が伝わるラベルとUIとし、長文・改行・欠損値で表示が破綻しないようにする。
+- 作品タイトル・概要のサーバー側の必須・文字数制限等の正式な検証は後続の登録機能設計（現行Issue 228）で確定する。Issue 230のUIだけで保存可能なデータであると保証しない。
+- **フロント入力検証の現状**：Issue 230の作業ブランチでは編集用タイトル・概要に`required`・`maxlength`等の検証制約を付けておらず、カテゴリー未選択のエラー表示も実装していない。登録ボタンは無効のままである。既存[DB設計](DATABASE.md)の`items.title`（`varchar(255)`）、`items.description`（`text nullable`）、`items.category_id`（必須外部キー）を踏まえ、後続工程でブラウザとLaravelの入力契約・文字数の数え方・エラー表示とARIAの連携を確定する。フロント入力検証を独立Issueにする案は**未起票・番号未確定**であり、現時点の機能として扱わない。
+- `genres`は第7章のデータ構造に従い、TMDBジャンルから独自カテゴリーを自動選択・自動変換しない。情報なしの文言は既存の`admin.tmdb.search.ui.not_available`を再利用し、新しい同義キーを追加しない。
+- `overview`が`null`等で存在しない場合は、編集用の複数行入力を空文字で初期化する。**表示向け代替文言の「情報なし」を入力値として混入させない。**
+- TMDB由来文字列は非信頼として扱い、既存の`textContent`等の安全なDOM表示方式を維持する。利用者入力をHTMLとして解釈しない。
+
+### 16.4 アプリ独自カテゴリーの確定選択肢
+
+次の**12件を固定候補として、表の順番で**単一選択セレクトボックスに表示する。この順序と名称の正本は[DB設計](DATABASE.md)のMVP2カテゴリー仕様である。
+
+| 表示順 | カテゴリー |
+|---:|---|
+| 1 | アクション |
+| 2 | アドベンチャー |
+| 3 | アニメーション |
+| 4 | コメディ |
+| 5 | ヒューマンドラマ |
+| 6 | SF |
+| 7 | ファンタジー |
+| 8 | ホラー |
+| 9 | サスペンス・ミステリー |
+| 10 | 恋愛 |
+| 11 | ドキュメンタリー |
+| 12 | その他 |
+
+- 初期表示は**「カテゴリーを選択してください」**とし、いずれのカテゴリーも自動選択しない。
+- **「未定義」は新規作品登録候補に表示しない**。既存`CategorySeeder`・`ItemSeeder`が使用するDB上の「未定義」は削除しない。
+- カテゴリーは**1作品につき1件**。複数選択や、`genres`との自動対応付けは行わない。
+- Issue 230では固定の表示名称のみを管理し、DBの`categories.id`を推測した数値や仮IDとして割り振らない。
+- Issue 228でSeederに12件を追加し、既存「未定義」を含むDB側は13種類として整備する。固定UIの選択値と実DBの`category_id`を対応させる際はDBの存在確認に加え、**「未定義」および許可対象外の値をサーバー側で拒否**する。
+- DBには表示順カラムがないため、表示順の番号をDB IDと同一視しない。Issue 228のDB連携後も12件の表示順を維持する。
+- Issue 230では、12件の候補名と表示順を`lang/ja/admin.php`内の`admin.tmdb.search.categories`に**順序付きの文字列配列として集約**し、既存のBlade設定と`Js::from()`経由でJavaScriptに渡す。選択値にはカテゴリー名など**DB IDではない文字列**を使用し、実際の`categories.id`を仮装した数値を割り当てない。**この文字列はIssue 230ではサーバーへ送信しない。** Issue 228で正式なDB `category_id`への切り替え・検証を行う。
+
+### 16.5 ボタン、終了・状態管理
+
+- **×（閉じる）**：アクセシブルな名前を「閉じる」とし、編集中のタイトル・概要・カテゴリー選択状態を破棄して閉じる。
+- **キャンセル**：×と同じ終了処理を呼び出し、同じ初期化・フォーカス復帰を行う。
+- **登録**：表示するが、Issue 228で登録APIに接続するまではHTMLの`disabled`属性で**無効**とする。ボタンの近くに「登録機能は準備中です。」という**常時見える補足文**を配置し、必要に応じて`aria-describedby`で関連付ける。無効ボタンにフォーカスできることを前提に説明を提供しない。送信イベント・DB保存・偽の成功通知は発生させない。
+- **Escape**：`<dialog>`の標準のクローズ要求を受け入れ、編集中の値を破棄する。×・キャンセルと同じ後処理へ統一する。
+- モーダルを閉じて再び開くときは、選択作品の元データとカテゴリー未選択状態から開始する。
+- 登録APIの検証エラーを後で表示できるよう、フィールドごとのエラー表示位置・ラベル関連付けを考慮する。ただしレスポンスに応じたエラー表示実装はIssue 228の責務とする。
+- **モーダル外の背景クリックでは閉じない。** 編集中の誤タップによる内容破棄を避けるため、背景をクリックしてもクローズ処理を呼ばない。×・キャンセル・Escapeで終了できる。既存の共通モーダルの背景クリック挙動は変更しない。
+
+### 16.6 ARIA・キーボード・フォーカス制御
+
+既存の`resources/views/components/modal.blade.php`は、Tab/Shift+Tabのフォーカストラップと起動元への復帰処理を実装しているが、確認した実装では背景スクロール停止のみで背景要素を`inert`にはしていない。そのため、**Issue 230の新規モーダルは既存共通コンポーネントを変更せず、HTML標準の`<dialog>`を`showModal()`で表示する設計を採用する**。ネイティブモーダルは背景をブラウザの仕組みで操作不能にする。`open`属性の直接付与や`show()`による非モーダル表示は使用しない。
+
+`<dialog>`へは可視見出しを用いた`aria-labelledby`を設定し、ダイアログ本体に`tabindex`を付けない。`showModal()`でのモーダル表示によって適切なダイアログセマンティクスが提供されるため、カスタム`role="dialog"`や手作業の背景`inert`切り替えを重ねない。既存の共通モーダルの仕様を、このIssueで無関係に変更しない。
+
+[W3C WAI-ARIA APG Modal Dialog Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)を基準に、以下を満たす。
+
+- モーダルを開くときは内容を設定してから`showModal()`を実行し、`tabindex="-1"`を付けた**可視見出し**へ明示的に初期フォーカスを置く。長い概要などによって冒頭が画面外へスクロールしないようにする。
+- `showModal()`によるブラウザ標準のモーダル化で背景を操作不能にする。背景スクロール停止は補助的な見た目・操作性対策であり、背景操作抑止の代替にはしない。
+- `Tab`・`Shift+Tab`でモーダル内のフォーカスを保持・循環させる。
+- `Escape`、×、キャンセルで閉じられる。
+- ×・キャンセル・Escapeのいずれでも、ダイアログの`close`イベントを共通後処理として編集状態を破棄し、フォーカスを復帰する。原則として元の映画カード全体を操作する要素へフォーカスを戻し、起動元がDOMから消えた場合は検索入力欄等の論理的な代替復帰先を用意する。フォーカス可能な要素か確認して復帰し、別の場所へ不意に移動させない。
+- モーダルの可視見出しと`aria-labelledby`、タイトル・概要・カテゴリーと`label`、登録API接続後のエラー向け`aria-invalid`・`aria-describedby`を整合させる。
+- 無効な登録ボタンは操作できず、未実装の状態を誤認させない。
+- PC・モバイルでレイアウト・内部スクロール・キーボード操作が成立することを確認し、必要に応じて支援技術による確認を行う。モーダル背景に対するクリック・Tabでの到達・支援技術からのアクセスについて、ブラウザ実機で確認する。
+
+### 16.7 文言・カテゴリー固定候補の管理（確定方針）
+
+既存の`lang/ja/admin.php`を利用し、`admin.tmdb.search.ui.*`へ本モーダル用の文言を追加する。Bladeで翻訳を解決し、既存方式の`Js::from()`でブラウザへ渡す。以下のキーと文言は、**Issue 230の作業ブランチで実装済み**である。既存キーは重複追加しない。
+
+| Issue 230追加キー（`admin.tmdb.search.ui.*`） | 日本語表示 |
+|---|---|
+| `open_registration_modal_accessible` | 「:title」の登録内容を確認 |
+| `select_movie_hint` | 作品カードを選択すると、登録内容を確認・編集できます。 |
+| `registration_modal_title` | 作品登録前の確認 |
+| `close_modal` | 閉じる |
+| `cancel` | キャンセル |
+| `register` | 登録 |
+| `registration_unavailable` | 登録機能は準備中です。 |
+| `editable_title` | 作品タイトル |
+| `category_label` | アプリ独自カテゴリー |
+| `category_placeholder` | カテゴリーを選択してください |
+
+- **概要の入力ラベル**には既存の`admin.tmdb.search.ui.overview`（「概要」）を再利用し、`editable_overview`は新設しない。`editable_title`（「作品タイトル」）は既存の検索入力ラベル`query_label`（「映画タイトル」）と表示文言が異なるため、新設する。
+- 既存の`tmdb_id`、`original_title`、`release_date`、`genres`、`poster_alt`、`no_poster_alt`、`not_available`は新設せず再利用する。
+- `admin.tmdb.search.categories`は第16.4節の正式12件を確定順の**文字列配列**として保持し、必要な表示テキストだけをBlade経由で渡す。アプリのDB IDや登録権限の正本にしない。
+- `lang/ja/admin.php`へのキー追加、Bladeの`$tmdbSearchConfig`を介した翻訳済み文言・カテゴリー候補のJavaScriptへの受け渡しは**Issue 230の作業ブランチで実装済み**。未コミット差分のため、`develop`への統合済みとは記載しない。
+
+### 16.8 セキュリティと非対象
+
+- TMDB APIトークン、内部例外、TMDB raw responseをブラウザへ渡さない。ポスターURLの既存検証とNo Imageへのフォールバックを維持する。
+- モーダル表示のためにLaravelの認証・認可、検索JSON契約、検索件数上限、検索失敗・部分成功処理を変更しない。
+- 文字列を`innerHTML`等のHTMLパーサーに無検証で渡さず、表示と入力の双方でXSS対策を維持する。
+- CategorySeeder拡張、DBからのカテゴリー取得、`category_id`の確定と検証、`tmdb_id`のDB設計、DB登録・重複登録防止、CSRF、送信中・成功・失敗処理はIssue 228で実装する。
+- 登録済み作品の編集・削除、複数作品の一括登録、TMDBジャンル自動マッピング、検索ページネーション（Issue 227）は対象外。
+- TMDBの帰属表示・データ／画像の保存条件は別途Issue 98で公式条件を確認する。保存条件が未確定の段階で保存方針を断定しない。
+
+### 16.9 テスト計画・品質ゲート（実装前策定の計画）
+
+**PHPUnit / Feature（必要範囲）**
+
+- 既存管理者検索ルートの認証・認可、正規化済み検索JSONの契約が変更されていないことを回帰確認する。
+- Bladeからのモーダル用設定や翻訳文言に変更がある場合は、正常系と境界値を検証する。
+- Seeder再実行・DBカテゴリー取得・実作品登録APIのFeatureテストは**Issue 228**で実施する。
+
+**Playwright E2E（TMDB通信は既存モックを使用）**
+
+- **映画カード全体**（画像・タイトル・概要・余白を含む）のクリック／タップによるモーダル起動、カードごとのTabフォーカス・Enter・Spaceによる1回だけの起動、選択した作品の情報表示、ページ遷移なしの開閉。末尾に独立した可視の起動ボタンを追加していないこと。`<article>`と`<h2>`の構造を維持し、透明な`<button>`は`<article>`直下で`<img>`・情報用`<div>`と兄弟要素になり、情報用`<div>`内の見出しや説明を子要素に含まないこと。`article`の役割と見出しナビゲーション、カード全体の`:focus-visible`輪郭、Tab停止1回、画面スクロール、カード上の文字ドラッグ選択不可という制約を確認する。Playwrightの子要素に対する`.click()`がボタンに遮られる場合は、`force: true`で回避せず、ユーザーの実操作に対応するボタン・座標起点の確認を行う。
+- **操作案内の状態遷移**：検索前は非表示、1件以上の成功で件数表示直下に表示、成功→再検索中→0件では再検索開始とともに消えたまま、成功→エラーでは非表示、エラー→成功では再表示、部分成功で1件以上なら表示されること。件数表示とは別のDOM要素で、翻訳キー`select_movie_hint`を介して表示し、既存の検索結果件数・エラー通知の文面を変更しない。
+- **操作可能性**：PCでの控えめなホバー反応とキーボードの明瞭なフォーカス枠、モバイルでホバーに依存しない案内を確認する。
+- 参照専用のTMDB ID・原題・公開日・ポスター・複数ジャンルと、編集可能なタイトル・概要**全文**の区別。
+- 編集内容の保存前保持、×・キャンセル・Escape終了時の破棄、別作品のモーダルへの状態混入なし。
+- 確定順の12カテゴリー、初期未選択、「未定義」不在、TMDBジャンルによる自動選択なし。
+- ジャンル0件・欠損／不正値、概要欠損・長文、ポスター欠損・画像失敗の各表示。
+- 非信頼文字列・HTML特殊文字を安全なテキストとして扱い、危険な要素の生成とJavaScript実行が起きないこと。
+- フォーカストラップ、背景操作抑止、起動元へのフォーカス復帰、Escape操作、ラベル・ARIAの整合。ネイティブ`<dialog>`の`showModal()`によるモーダル化が成立し、外部の背景操作・Tabでの外部到達ができないこと。
+- モーダル外の背景クリックでは閉じず、×・キャンセル・Escapeでのみ閉じること。閉じた後、編集内容とカテゴリー選択が破棄され、適切な要素へフォーカスが戻ること。
+- カード全体の操作対象は映画ごとに適切なアクセシブルな名前を持ち、フォーカスが視覚的に分かり、キーボード操作・読み上げで対象作品を区別できること。
+- 既存の検索カード表示13シナリオを含む回帰確認（特にジャンル・概要100書記素省略・XSS・元Axios応答の不変性）。
+- 登録ボタンの`disabled`属性、近傍の未実装案内文、送信なし、DB書き込みやダミー成功処理なし。
+- **フォーム分離**：モーダルが検索フォーム外に配置されていること、入力欄の`form`関連付けがないこと、×・キャンセルが非送信ボタンであること、タイトル入力欄でEnterを押しても検索・登録の通信や意図しないクローズが発生しないこと。
+- カテゴリー選択肢の値はDB IDを仮装した数値ではなく、UI用文字列であること。後続Issue 228の正式ID連携と混同しないこと。
+- PC・モバイルのモーダル内スクロール、編集、横はみ出しを確認する。
+
+**品質ゲート**
+
+- 関連するPHPUnit・Playwright、Laravel Pint、PHPStan / Larastan Level 10、Vite build、TypeScript型チェック、Git差分形式チェック、必要なGitHub Actionsを確認する。実行していないものをPASSと記載しない。
+- E2Eは[Playwright運用ガイド](PLAYWRIGHT_TESTING.md)に従って専用DB接続先とリセット前ガードを確認し、実TMDB APIを使用しない。
+- 支援技術による評価・モバイル実機確認は自動テストと区別して実施・記録する。
+
+### 16.10 実装前レビューの論点・参照資料（設計時の記録）
+
+- **採用方針**：既存共通モーダルの改修を回避し、単一のネイティブ`<dialog>`＋`showModal()`を使用する。背景クリックでは閉じず、Escape・×・キャンセルでは閉じる。カードの起動は`<article>`の子に置いた**独立した全面透明`<button>`**で行い、`<h2>`等をボタンの内部に入れない。背景抑止・カードの操作性・既存画面への影響を実装テストで確認する。
+- 検索カードのDOM生成・翻訳文言・Tailwindの`@source`と既存E2E fixtureへの影響。
+- タイトル・概要全文の編集値はモーダル専用の状態へコピーして管理し、検索元データを書き換えない。固定カテゴリー名は既存翻訳ファイルに集約し、JSへは翻訳済み文字列を渡す。
+- Issue 228とのインターフェース：編集済みタイトル・概要、TMDB ID等の参照情報、カテゴリー**選択状態**の引き継ぎ方法。実際の`category_id`の採番や保存形式はIssue 228で決定する。
+- 12カテゴリーの固定表示順・「未定義」非表示と、後続のSeeder／DB連携との矛盾の有無。
+- `docs/FEATURES.md`、`docs/SCREEN_TRANSITIONS.md`、`docs/DATABASE.md`との整合確認。
+
+本節はIssue 230で採用した**実装前の設計・レビュー論点の履歴**である。これらの記述だけを根拠に実装済み・テスト済みと判断しない。実際の作業ブランチでの進捗・実行結果と未確認事項は第16.11節に記録する。独立レビューや画面テストで不適合が判明した場合は、影響範囲を限定して設計を改訂する。
+
+**関連一次資料**
+
+- [W3C WAI-ARIA APG: Dialog (Modal) Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
+- [WHATWG HTML Standard: dialog・showModal()](https://html.spec.whatwg.org/multipage/interactive-elements.html#dom-dialog-showmodal)
+- [MDN: `<dialog>` element](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/dialog)
+- [WHATWG HTML Standard: button](https://html.spec.whatwg.org/multipage/form-elements.html#the-button-element)
+- [W3C WAI-ARIA APG: Hiding Semantics with presentation](https://www.w3.org/WAI/ARIA/apg/practices/hiding-semantics/)
+- [WHATWG HTML Standard: select](https://html.spec.whatwg.org/multipage/form-elements.html#the-select-element)
+- [Laravel 13 Database Seeding](https://laravel.com/docs/13.x/seeding)
+- [Laravel 13 Validation](https://laravel.com/docs/13.x/validation)
+- [Issue 230](https://github.com/honda-dev-jp/review-app-laravel/issues/230)、[Issue 228](https://github.com/honda-dev-jp/review-app-laravel/issues/228)
+
+### 16.11 Issue 230の作業ブランチでの実装・ローカル検証結果（2026-11-01）
+
+本節は第16.1〜16.10節の**実装前に決めた仕様**とは別に、プロマネによる実行ログおよびClaude Code・Codexの作業報告で確認できた**ローカル作業ツリー上の状況**を記録する。GitHub上のPR・CIの成功や、`develop`への統合を意味しない。
+
+**実装・確認された範囲**
+
+- 作業ブランチは`feat/230-tmdb-registration-modal`（確認時のHEAD：`42fc77ebbb22dd4807c0a12f2f3cb3d61c20cd44`）。TMDB検索カード全体を操作する透明なネイティブボタンを既存の`<article>`直下へ追加し、単一の`<dialog>`を`showModal()`で開く。カードのEnter・Space・クリック、およびタッチ有効なChromiumでのタップをE2Eで確認した。
+- モーダルにはTMDB ID・ポスター・ジャンル・原題・公開日を参照情報として表示し、タイトルと概要全文を編集可能とした。アプリ独自カテゴリーの固定12候補は初期未選択とし、「未定義」を含めない。×・キャンセル・Escapeで終了して編集内容を破棄し、フォーカスを起動元へ戻す。背景クリックでは閉じない。
+- `resources/js/tmdb-search.js`にTab／Shift+Tabのフォーカス循環と閉鎖時の復帰処理を追加した。既存の共通モーダルコンポーネント、管理者ルート、検索JSON契約、TMDB通信処理は変更していないとレビューで報告された。
+- `lang/ja/admin.php`に第16.7節の文言・12カテゴリーを追加し、Bladeから`Js::from()`経由で渡す。登録ボタンは`disabled`、未実装の補足文を表示し、登録送信・DB保存処理は実装していない。
+- モーダルの参照情報4行に使うTailwind CSS v4クラスを`break-words`から`wrap-break-word`へ変更し、その後のViteビルドが成功した。
+- **初期ポスター画像の読み込みは現状維持**：閉じた`<dialog>`内の画像には初期`src`として`/images/no-image.png`を設定している。E2Eで初期画像の`load`／`error`イベントを観測している。この設計には不要な画像読み込みが生じ得るが、Issue 230では`loading="lazy"`の追加も初期`src`の削除も行わない。イベント観測と実際のサーバーへの毎回のHTTP転送は同一ではなく、キャッシュ状況で変わり得る。
+
+**ローカル品質ゲート（2026-11-01の報告結果）**
+
+| 確認項目 | 結果 | 備考 |
+|---|---|---|
+| Laravel Pint `--test` | **120ファイルPASS** | プロマネ実行ログによる。今回のE2E補強後には再実行していない |
+| PHPStan / Larastan Level 10 | **75/75、エラー0件** | プロマネ実行ログによる。対象FeatureテストのXPath戻り値処理も修正済み |
+| PHPUnit `sail test` | **529件PASS／2,688 assertions** | プロマネ実行ログによる。今回のE2E補強後には再実行していない |
+| Vite build | **PASS** | Tailwindクラス名変更後、およびCodexのE2E補強作業時に成功報告 |
+| TypeScript E2E型チェック | **PASS** | `npm run typecheck:e2e`の成功報告 |
+| Playwright対象2 spec | **26 passed、終了コード0** | setup 1件＋TMDB検索13件＋登録モーダル12件 |
+| Playwright全E2E | **37 passed、終了コード0** | 旧34件からモーダルの3件を追加。Chromium、setup 1件を含む |
+| `git diff --check` | **PASS** | CodexのE2E補強後の報告 |
+
+**レビュー指摘と検証の追加**
+
+- Claude CodeとCodexの独立レビューで、操作案内の状態遷移とカード全面操作のE2E検証不足が指摘された。Codexが`e2e/tmdb-search.spec.ts`と新規`e2e/tmdb-registration-modal.spec.ts`の**2ファイルのみ**を修正し、操作案内の表示・非表示、画像・タイトル・概要・余白への実座標クリック、1カード1Tab停止、フォーカス枠、タッチ有効コンテキスト、ダイアログ外の座標クリックを補強した。
+- フォーカス枠の検証はChromiumの計算済みスタイルによる。実機Safari／Android、スクリーンリーダー等の支援技術によるアクセシビリティ適合を保証するものではない。
+
+**未実装・未確認事項**
+
+- **フロント入力検証**：編集用タイトルの必須・最大長、概要の正式な許容値、カテゴリー未選択エラー、および`aria-invalid`・`aria-describedby`を使った項目別エラー表示は未実装。入力契約を確定してから後続で対応する。フロント検証の独立Issue化は検討段階であり、Issue番号はまだ存在しないものとして扱う。
+- **DB関連・登録**：`CategorySeeder`への正式12件の登録、`tmdb_id`用migration、既存データ保全の回帰テスト、登録API、サーバー側バリデーション、`items`保存、重複防止は未実装である。現行の所管はIssue 228であり、DB詳細設計・DB変更と回帰テスト・登録処理へのIssue分割を検討しているが、起票前に責務を確定扱いしない。
+- **PR／CI**：本書更新時点でIssue 230のPR作成・GitHub Actions実行結果・`develop`へのマージは未確認。ローカルテスト成功だけでCI成功を宣言しない。
+- **関連文書**：`docs/FEATURES.md`、`docs/SCREEN_TRANSITIONS.md`、`docs/DATABASE.md`は、各作業ツリーの最新版で「Issue 230対応予定」等の進捗表記と後続Issueの責務が一致するかをPR前に再確認する。本書だけの修正で他の文書も更新済みとは扱わない。
